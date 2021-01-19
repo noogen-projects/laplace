@@ -24,32 +24,32 @@ body {
     margin-bottom: 15px;
 }
 
-.demo-content {
+.content-container {
     width: 100%;
     max-width: 1200px;
     margin: auto;
 }
 
-.demo-title {
+.title {
     margin-top: 32px;
     border-bottom: 1px solid rgba(0,0,0,.87);
 }
 
-.demo-title > a {
+.title > a {
     top: -74px;
     position: relative;
 }
 
-.demo-item {
+.list-item {
     display: inline-block;
     margin: 8px 16px;
 }
 
-.demo-list, .bordered-list {
+.list, .bordered-list {
     display: inline-block;
 }
 
-.demo-list > ul, .bordered-list > ul, .demo-group-list {
+.list > ul, .bordered-list > ul, .group-list {
     border: 1px solid rgba(0, 0, 0, .1);
 }
 
@@ -57,7 +57,7 @@ body {
     width: 600px;
 }
 
-.demo-list .mdc-list-item__meta {
+.list .mdc-list-item__meta {
     margin-left: 16px;
 }
 
@@ -70,28 +70,28 @@ body {
     border-radius: 18px;
 }
 
-.demo-card {
+.card {
     width: 350px;
 }
 
-.demo-card__primary {
+.card__primary {
     padding: 1rem;
 }
 
-.demo-card__secondary {
+.card__secondary {
     padding: 1rem 1rem 8px;
     color: rgba(0, 0, 0, .54);
 }
 
-.regular .demo-card__secondary {
+.regular .card__secondary {
     padding-top: 0;
 }
 
-.demo-card__title, .demo-card__subtitle {
+.card__title, .card__subtitle {
     margin: 0;
 }
 
-.demo-card__secondary, .demo-card__subtitle {
+.card__secondary, .card__subtitle {
     color: rgba(0, 0, 0, .54);
 }
 
@@ -100,7 +100,7 @@ body {
     align-items: flex-end;
 }
 
-.over-media .demo-card__title, #card-over-media .demo-card__subtitle {
+.over-media .card__title, #card-over-media .card__subtitle {
     color: #fff;
 }
 

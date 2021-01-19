@@ -58,8 +58,8 @@ impl Component for Root {
                 <div class = "app-content">
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust">
-                        <div class = "demo-content">
-                            <h1 class = "demo-title mdc-typography--headline5">{ &self.header }</h1>
+                        <div class = "content-container">
+                            <h1 class = "title mdc-typography--headline5">{ &self.header }</h1>
                         </div>
                     </div>
                 </div>

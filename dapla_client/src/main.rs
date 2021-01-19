@@ -56,8 +56,8 @@ impl Component for Root {
                     ", drawer_id) }</script>
 
                     <div class = "mdc-top-app-bar--fixed-adjust">
-                        <div class = "demo-content">
-                            <h1 class = "demo-title mdc-typography--headline5">{ "Applications" }</h1>
+                        <div class = "content-container">
+                            <h1 class = "title mdc-typography--headline5">{ "Applications" }</h1>
                         </div>
                     </div>
                 </div>
