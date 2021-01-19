@@ -1,0 +1,114 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif;
+    margin: 0;
+}
+
+#root {
+    width: 100%;
+    overflow: auto;
+    display: flex;
+    margin-bottom: 32px;
+}
+
+.mdc-drawer {
+    position: fixed;
+}
+
+.app-content {
+    flex: auto;
+    overflow: auto;
+    position: relative;
+}
+
+.widget-list div {
+    margin-bottom: 15px;
+}
+
+.demo-content {
+    width: 100%;
+    max-width: 1200px;
+    margin: auto;
+}
+
+.demo-title {
+    margin-top: 32px;
+    border-bottom: 1px solid rgba(0,0,0,.87);
+}
+
+.demo-title > a {
+    top: -74px;
+    position: relative;
+}
+
+.demo-item {
+    display: inline-block;
+    margin: 8px 16px;
+}
+
+.demo-list, .bordered-list {
+    display: inline-block;
+}
+
+.demo-list > ul, .bordered-list > ul, .demo-group-list {
+    border: 1px solid rgba(0, 0, 0, .1);
+}
+
+.demo-panel {
+    width: 600px;
+}
+
+.demo-list .mdc-list-item__meta {
+    margin-left: 16px;
+}
+
+.mdc-list--avatar-list .mdc-list-item__graphic {
+    background-color: rgba(0, 0, 0, .3);
+    color: #fff;
+}
+
+.rounded-button, .rounded-button .mdc-button__ripple {
+    border-radius: 18px;
+}
+
+.demo-card {
+    width: 350px;
+}
+
+.demo-card__primary {
+    padding: 1rem;
+}
+
+.demo-card__secondary {
+    padding: 1rem 1rem 8px;
+    color: rgba(0, 0, 0, .54);
+}
+
+.regular .demo-card__secondary {
+    padding-top: 0;
+}
+
+.demo-card__title, .demo-card__subtitle {
+    margin: 0;
+}
+
+.demo-card__secondary, .demo-card__subtitle {
+    color: rgba(0, 0, 0, .54);
+}
+
+.over-media .mdc-card__media-content {
+    display: flex;
+    align-items: flex-end;
+}
+
+.over-media .demo-card__title, #card-over-media .demo-card__subtitle {
+    color: #fff;
+}
+
+.primary-action-horizontal {
+    display: flex;
+    flex-direction: row;
+}
+
+.primary-action-horizontal .mdc-card__media--square {
+    width: 110px;
+}

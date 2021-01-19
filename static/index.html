@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Dapla</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/mdc/material-components-web-9.0.0.min.css">
+    <link rel="stylesheet" href="/static/mdc/materialicons.css">
+    <link rel="stylesheet" href="/static/mdc/fonts/roboto.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class = "mdc-typography">
+    <div id = "root"></div>
+
+    <script src="/static/mdc/material-components-web-9.0.0.min.js"></script>
+    <script type="module">
+        // For more details see https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html
+        import init from '/dapla/static/dapla_client.js';
+        init();
+    </script>
+</body>
+</html>
