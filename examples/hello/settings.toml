@@ -1,0 +1,7 @@
+[application]
+name = "Hello"
+enabled = true
+
+[permissions]
+required = ["fs_read", "fs_write", "http", "websocket", "tcp"]
+allowed = ["http"]
