@@ -1,0 +1,16 @@
+[package]
+name = "dapla_client"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/noogen-projects/dapla"
+description = "The decentralized application platform WASM client"
+
+[dependencies]
+yew = { version = "0.17.4", features = ["web_sys"] }
+yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
+js-sys = "0.3.45"

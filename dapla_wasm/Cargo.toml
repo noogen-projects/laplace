@@ -1,0 +1,14 @@
+[package]
+name = "dapla_wasm"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/noogen-projects/dapla"
+description = "The decentralized application platform WASM utilities"
+
+[dependencies]

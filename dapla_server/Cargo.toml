@@ -1,0 +1,24 @@
+[package]
+name = "dapla_server"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/noogen-projects/dapla"
+description = "The decentralized application platform server"
+
+[dependencies]
+actix-web = "4.0.0-beta.1"
+actix-files = "0.6.0-beta.1"
+serde = { version = "1.0.119", features = ["derive"] }
+thiserror = "1.0.23"
+derive_more = "0.99.11"
+log = "0.4.13"
+env_logger = "0.8.2"
+config = "0.10.1"
+toml = "0.5.8"
+wasmer = "1.0.0"
+dapla_wasm = { path = "../dapla_wasm" }
