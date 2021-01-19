@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "dapla_client",
+    "dapla_common",
     "dapla_server",
     "dapla_wasm",
     "examples/hello/client",

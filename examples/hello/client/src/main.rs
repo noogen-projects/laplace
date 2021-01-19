@@ -13,7 +13,7 @@ use yew_mdc_widgets::{auto_init, MdcWidget, TopAppBar};
 struct Root {
     header: String,
     link: ComponentLink<Self>,
-    task: Option<FetchTask>,
+    fetch_task: Option<FetchTask>,
 }
 
 enum Msg {
@@ -29,7 +29,7 @@ impl Component for Root {
         Self {
             header: "Hello".to_string(),
             link,
-            task: None,
+            fetch_task: None,
         }
     }
 
@@ -70,7 +70,7 @@ impl Component for Root {
     fn rendered(&mut self, _first_render: bool) {
         auto_init();
 
-        if self.task.is_some() {
+        if self.fetch_task.is_some() {
             return;
         }
 
@@ -92,7 +92,7 @@ impl Component for Root {
             )
             .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
             {
-                self.task.replace(task);
+                self.fetch_task.replace(task);
             }
         }
     }

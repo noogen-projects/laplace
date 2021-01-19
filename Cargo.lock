@@ -678,9 +678,20 @@ dependencies = [
 name = "dapla_client"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "dapla_common",
  "js-sys",
+ "serde 1.0.119",
+ "serde_json",
  "yew",
  "yew-mdc-widgets",
+]
+
+[[package]]
+name = "dapla_common"
+version = "0.1.0"
+dependencies = [
+ "serde 1.0.119",
 ]
 
 [[package]]
@@ -690,6 +701,7 @@ dependencies = [
  "actix-files",
  "actix-web",
  "config",
+ "dapla_common",
  "dapla_wasm",
  "derive_more",
  "env_logger",

@@ -21,4 +21,5 @@ env_logger = "0.8.2"
 config = "0.10.1"
 toml = "0.5.8"
 wasmer = "1.0.0"
+dapla_common = { path = "../dapla_common" }
 dapla_wasm = { path = "../dapla_wasm" }

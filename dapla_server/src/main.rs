@@ -1,16 +1,25 @@
 use std::{io, path::PathBuf};
 
 use actix_files::{Files, NamedFile};
-use actix_web::{middleware, web, App, HttpServer};
+use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
 
 use self::{
     daps::{Dap, DapsService},
+    error::ServerError,
     settings::Settings,
 };
 
 mod daps;
 mod error;
 mod settings;
+
+#[get("/daps")]
+async fn get_daps(daps_service: web::Data<DapsService>) -> HttpResponse {
+    daps_service.handle_http(|daps_manager| {
+        let daps: Vec<_> = daps_manager.daps_iter().filter(|dap| !dap.is_main_client()).collect();
+        HttpResponse::Ok().json(daps)
+    })
+}
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -35,7 +44,8 @@ async fn main() -> io::Result<()> {
                     let index_file = static_dir.join(Dap::INDEX_FILE_NAME);
                     async { NamedFile::open(index_file) }
                 }),
-            );
+            )
+            .service(get_daps);
 
         let mut daps_manager = daps_service.lock().expect("Daps manager lock should be acquired");
         daps_manager.load_daps();

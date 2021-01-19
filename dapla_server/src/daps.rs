@@ -5,13 +5,15 @@ use std::{
 
 use actix_files::{Files, NamedFile};
 use actix_web::web;
+pub use dapla_common::dap::access::*;
+use dapla_common::dap::Dap as CommonDap;
 use derive_more::From;
 use log::error;
+use serde::{Deserialize, Serialize};
 use wasmer::{imports, CompileError, Instance, InstantiationError, Module, Store};
 
-pub use self::{access::*, manager::*, service::*, settings::*};
+pub use self::{manager::*, service::*, settings::*};
 
-mod access;
 pub mod handler;
 mod manager;
 mod service;
@@ -33,11 +35,9 @@ pub enum DapError {
 
 pub type DapResult<T> = Result<T, DapError>;
 
-pub struct Dap {
-    name: String,
-    root_dir: PathBuf,
-    settings: DapSettings,
-}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct Dap(CommonDap<PathBuf>);
 
 impl Dap {
     pub const STATIC_DIR_NAME: &'static str = "static";
@@ -45,40 +45,37 @@ impl Dap {
     pub const SETTINGS_FILE_NAME: &'static str = "settings.toml";
 
     pub fn new(name: impl Into<String>, root_dir: impl Into<PathBuf>) -> Self {
-        let mut dap = Self {
-            name: name.into(),
-            root_dir: root_dir.into(),
-            settings: Default::default(),
-        };
+        let mut dap = Self(CommonDap::new(name.into(), root_dir.into(), Default::default()));
         if let Err(err) = dap.reload_settings() {
-            error!("Error when load settings for dap '{}': {:?}", dap.name, err);
+            error!("Error when load settings for dap '{}': {:?}", dap.name(), err);
         }
         dap
     }
 
     pub fn reload_settings(&mut self) -> DapSettingsResult<()> {
-        self.settings = DapSettings::load(self.root_dir.join(Self::SETTINGS_FILE_NAME))?;
+        self.0
+            .set_settings(DapSettings::load(self.root_dir().join(Self::SETTINGS_FILE_NAME))?);
         Ok(())
     }
 
     pub fn enabled(&self) -> bool {
-        self.settings.application.enabled
+        self.0.enabled()
     }
 
-    pub fn display_name(&self) -> &str {
-        &self.settings.application.name
+    pub fn title(&self) -> &str {
+        self.0.title()
     }
 
     pub fn name(&self) -> &str {
-        &self.name
+        self.0.name()
     }
 
     pub fn root_dir(&self) -> &Path {
-        &self.root_dir
+        self.0.root_dir()
     }
 
     pub fn root_uri(&self) -> String {
-        format!("/{}", self.name)
+        format!("/{}", self.name())
     }
 
     pub fn static_uri(&self) -> String {
@@ -86,7 +83,7 @@ impl Dap {
     }
 
     pub fn static_dir(&self) -> PathBuf {
-        self.root_dir.join(Self::STATIC_DIR_NAME)
+        self.root_dir().join(Self::STATIC_DIR_NAME)
     }
 
     pub fn index_file(&self) -> PathBuf {
@@ -94,15 +91,15 @@ impl Dap {
     }
 
     pub fn server_module_file(&self) -> PathBuf {
-        self.root_dir.join(&format!("{}_server.wasm", self.name()))
+        self.root_dir().join(&format!("{}_server.wasm", self.name()))
     }
 
     pub fn is_main_client(&self) -> bool {
-        &self.name == DapsManager::MAIN_CLIENT_APP_NAME
+        self.name() == DapsManager::MAIN_CLIENT_APP_NAME
     }
 
     pub fn http_configure(&self) -> impl FnOnce(&mut web::ServiceConfig) + '_ {
-        let name = self.name.clone();
+        let name = self.name().to_string();
         let index_file = self.index_file();
         let root_uri = self.root_uri();
         let static_uri = self.static_uri();

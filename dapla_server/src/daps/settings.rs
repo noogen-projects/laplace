@@ -1,9 +1,7 @@
 use std::{fs, io, path::PathBuf};
 
+pub use dapla_common::dap::{ApplicationSettings, DapSettings, PermissionsSettings};
 use derive_more::From;
-use serde::Deserialize;
-
-use super::Permission;
 
 #[derive(Debug, From)]
 pub enum DapSettingsError {
@@ -13,29 +11,16 @@ pub enum DapSettingsError {
 
 pub type DapSettingsResult<T> = Result<T, DapSettingsError>;
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct ApplicationSettings {
-    pub name: String,
-    pub enabled: bool,
+pub trait FileSettings {
+    type Settings;
+
+    fn load(path: impl Into<PathBuf>) -> DapSettingsResult<Self::Settings>;
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct PermissionsSettings {
-    pub required: Vec<Permission>,
-    pub allowed: Vec<Permission>,
-}
+impl FileSettings for DapSettings {
+    type Settings = Self;
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct DapSettings {
-    pub application: ApplicationSettings,
-    pub permissions: PermissionsSettings,
-}
-
-impl DapSettings {
-    pub fn load(path: impl Into<PathBuf>) -> DapSettingsResult<Self> {
+    fn load(path: impl Into<PathBuf>) -> DapSettingsResult<Self> {
         let buf = fs::read(path.into())?;
         toml::from_slice(&buf).map_err(Into::into)
     }
