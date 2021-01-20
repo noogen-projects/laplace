@@ -28,6 +28,11 @@ impl<P> Dap<P> {
     }
 
     #[inline]
+    pub fn switch_enabled(&mut self) {
+        self.settings.application.enabled = !self.settings.application.enabled;
+    }
+
+    #[inline]
     pub fn title(&self) -> &str {
         &self.settings.application.title
     }

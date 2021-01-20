@@ -20,10 +20,6 @@ body {
     position: relative;
 }
 
-.widget-list div {
-    margin-bottom: 15px;
-}
-
 .content-container {
     width: 100%;
     max-width: 1200px;
@@ -35,9 +31,25 @@ body {
     border-bottom: 1px solid rgba(0,0,0,.87);
 }
 
-.title > a {
-    top: -74px;
-    position: relative;
+.daps-table {
+    display: table;
+    width: auto;
+}
+
+.daps-table-row {
+    display: table-row;
+    width: auto;
+    height: auto;
+    clear: both;
+}
+
+.daps-table-col {
+    float: left; /* fix for  buggy browsers */
+    display: table-column;
+    vertical-align: middle;
+    line-height: 30px;
+    margin: 5px;
+    padding: 10px;
 }
 
 .list-item {

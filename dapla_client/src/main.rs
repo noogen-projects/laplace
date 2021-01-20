@@ -1,26 +1,47 @@
 use anyhow::Error;
-use dapla_common::dap::{Dap as CommonDap, DapSettings};
+use dapla_common::dap::Dap as CommonDap;
 use yew::{
-    format::Nothing,
+    format::{Nothing, Text},
     html, initialize, run_loop,
     services::{
         fetch::{FetchService, FetchTask, Request, Response},
-        ConsoleService,
+        ConsoleService, Task,
     },
-    utils, App, Component, ComponentLink, Html,
+    utils, App, Callback, Component, ComponentLink, Html,
 };
-use yew_mdc_widgets::{auto_init, Drawer, IconButton, MdcWidget, TopAppBar};
+use yew_mdc_widgets::{auto_init, Drawer, IconButton, MdcWidget, Switch, TopAppBar};
 
 type Dap = CommonDap<String>;
+
+type StringResponse = Response<Result<String, Error>>;
+
+struct Fetcher {
+    tasks: Vec<FetchTask>,
+}
+
+impl Fetcher {
+    fn new() -> Self {
+        Self { tasks: vec![] }
+    }
+
+    fn fetch(&mut self, request: Request<impl Into<Text>>, callback: Callback<StringResponse>) -> Result<(), Error> {
+        let task = FetchService::fetch(request, callback)?;
+        self.tasks.retain(|task| task.is_active());
+        self.tasks.push(task);
+        Ok(())
+    }
+}
 
 struct Root {
     daps: Vec<Dap>,
     link: ComponentLink<Self>,
-    _fetch_task: FetchTask,
+    fetcher: Fetcher,
 }
 
 enum Msg {
-    Fetch(Response<Result<String, Error>>),
+    Fetch(StringResponse),
+    SwitchDap(String),
+    Sent,
 }
 
 impl Component for Root {
@@ -29,13 +50,15 @@ impl Component for Root {
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let daps_list_request = Request::get("/daps").body(Nothing).expect("Request should be built");
-        let _fetch_task =
-            FetchService::fetch(daps_list_request, link.callback(Msg::Fetch)).expect("Fetch daps list error");
+        let mut fetcher = Fetcher::new();
+        fetcher
+            .fetch(daps_list_request, link.callback(Msg::Fetch))
+            .expect("Fetch daps list error");
 
         Self {
             daps: vec![],
             link,
-            _fetch_task,
+            fetcher,
         }
     }
 
@@ -43,8 +66,9 @@ impl Component for Root {
         match msg {
             Msg::Fetch(response) => {
                 if response.status().is_success() {
-                    let json = response.into_body().unwrap_or_else(|_| "[]".to_string());
-                    serde_json::from_str(&json)
+                    let body = response.into_body();
+                    let json = body.as_ref().map(|text| text.as_str()).unwrap_or_else(|_| "[]");
+                    serde_json::from_str(json)
                         .map(|daps| {
                             self.daps = daps;
                             true
@@ -62,6 +86,25 @@ impl Component for Root {
                     false
                 }
             }
+            Msg::SwitchDap(name) => {
+                if let Some(dap) = self.daps.iter_mut().find(|dap| dap.name() == name) {
+                    dap.switch_enabled();
+
+                    let uri = format!("/dap/{}", dap.name());
+                    let body = if dap.enabled() {
+                        "{\"enabled\":true}"
+                    } else {
+                        "{\"enabled\":false}"
+                    };
+                    self.send_post(uri, body);
+
+                    true
+                } else {
+                    ConsoleService::error(&format!("Unknown dap name: {}", name));
+                    false
+                }
+            }
+            Msg::Sent => false,
         }
     }
 
@@ -96,17 +139,13 @@ impl Component for Root {
 
                 <div class = vec!["app-content", Drawer::APP_CONTENT_CLASS]>
                     { top_app_bar }
-                    <script>{ format!(r"
-                        const listEl = document.querySelector('.mdc-drawer .mdc-list');
-                        listEl.addEventListener('click', (event) => {{
-                            document.getElementById('{}').MDCDrawer.open = false;
-                        }});
-                    ", drawer_id) }</script>
 
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
                             <h1 class = "title mdc-typography--headline5">{ "Applications" }</h1>
-                            { self.daps.iter().map(|dap| self.view_dap(dap)).collect::<Html>() }
+                            <div class = "daps-table">
+                                { self.daps.iter().map(|dap| self.view_dap(dap)).collect::<Html>() }
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -120,9 +159,45 @@ impl Component for Root {
 }
 
 impl Root {
+    fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) {
+        match Request::post(uri.as_ref()).body(Ok(body.into())) {
+            Ok(request) => {
+                self.fetcher
+                    .fetch(
+                        request,
+                        self.link.callback(|response: StringResponse| {
+                            if !response.status().is_success() {
+                                ConsoleService::error(&format!(
+                                    "Response status: {:?}, body: {:?}",
+                                    response.status(),
+                                    response.into_body()
+                                ));
+                            }
+                            Msg::Sent
+                        }),
+                    )
+                    .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
+                    .ok();
+            }
+            Err(err) => ConsoleService::error(&format!("Create post request error: {:?}", err)),
+        }
+    }
+
     fn view_dap(&self, dap: &Dap) -> Html {
+        let dap_name = dap.name().to_string();
+        let mut switch = Switch::new().on_click(self.link.callback(move |_| Msg::SwitchDap(dap_name.clone())));
+        if dap.enabled() {
+            switch = switch.on();
+        }
         html! {
-            <h2 class = "mdc-typography--headline6"><a href = dap.name()>{ dap.title() }</a></h2>
+            <div class = "daps-table-row">
+                <div class = "daps-table-col">
+                    <big><a href = dap.name()>{ dap.title() }</a></big>
+                </div>
+                <div class = "daps-table-col">
+                    { switch }
+                </div>
+            </div>
         }
     }
 }
