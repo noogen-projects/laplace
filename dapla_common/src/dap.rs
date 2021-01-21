@@ -28,8 +28,13 @@ impl<P> Dap<P> {
     }
 
     #[inline]
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.settings.application.enabled = enabled;
+    }
+
+    #[inline]
     pub fn switch_enabled(&mut self) {
-        self.settings.application.enabled = !self.settings.application.enabled;
+        self.set_enabled(!self.enabled());
     }
 
     #[inline]
@@ -45,6 +50,11 @@ impl<P> Dap<P> {
     #[inline]
     pub fn root_dir(&self) -> &P {
         &self.root_dir
+    }
+
+    #[inline]
+    pub fn settings(&self) -> &DapSettings {
+        &self.settings
     }
 
     #[inline]

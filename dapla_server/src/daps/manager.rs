@@ -3,7 +3,10 @@ use std::{collections::HashMap, fs, io, path::Path};
 use log::{error, info};
 use wasmer::Instance;
 
-use super::{Dap, DapError, DapResult};
+use crate::{
+    error::{ServerError, ServerResult},
+    Dap,
+};
 
 pub struct DapsManager {
     daps: HashMap<String, Dap>,
@@ -31,13 +34,17 @@ impl DapsManager {
             })
     }
 
-    pub fn load(&mut self, dap_name: impl AsRef<str> + Into<String>) -> DapResult<()> {
+    pub fn load(&mut self, dap_name: impl AsRef<str> + Into<String>) -> ServerResult<()> {
         if let Some(dap) = self.daps.get(dap_name.as_ref()) {
             self.instances.insert(dap_name.into(), dap.instantiate()?);
             Ok(())
         } else {
-            Err(DapError::NotFound(dap_name.into()))
+            Err(ServerError::DapNotFound(dap_name.into()))
         }
+    }
+
+    pub fn unload(&mut self, dap_name: impl AsRef<str>) -> bool {
+        self.instances.remove(dap_name.as_ref()).is_some()
     }
 
     pub fn load_daps(&mut self) {
@@ -54,6 +61,20 @@ impl DapsManager {
         self.instances.contains_key(dap_name.as_ref())
     }
 
+    pub fn dap(&self, dap_name: impl AsRef<str>) -> ServerResult<&Dap> {
+        let dap_name = dap_name.as_ref();
+        self.daps
+            .get(dap_name)
+            .ok_or_else(|| ServerError::DapNotFound(dap_name.to_string()))
+    }
+
+    pub fn dap_mut(&mut self, dap_name: impl AsRef<str>) -> ServerResult<&mut Dap> {
+        let dap_name = dap_name.as_ref();
+        self.daps
+            .get_mut(dap_name)
+            .ok_or_else(|| ServerError::DapNotFound(dap_name.to_string()))
+    }
+
     pub fn daps_iter(&self) -> impl Iterator<Item = &Dap> {
         self.daps.values()
     }
@@ -62,7 +83,10 @@ impl DapsManager {
         self.daps.values_mut()
     }
 
-    pub fn instance(&self, dap_name: impl AsRef<str>) -> Option<&Instance> {
-        self.instances.get(dap_name.as_ref())
+    pub fn instance(&self, dap_name: impl AsRef<str>) -> ServerResult<&Instance> {
+        let dap_name = dap_name.as_ref();
+        self.instances
+            .get(dap_name)
+            .ok_or_else(|| ServerError::DapNotLoaded(dap_name.to_string()))
     }
 }
