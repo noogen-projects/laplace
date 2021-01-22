@@ -22,6 +22,35 @@ impl<P> Dap<P> {
         }
     }
 
+    pub const fn static_dir_name() -> &'static str {
+        "static"
+    }
+
+    pub const fn index_file_name() -> &'static str {
+        "index.html"
+    }
+
+    pub const fn main_name() -> &'static str {
+        "dapla"
+    }
+
+    pub fn main_static_uri() -> String {
+        format!("/{}", Self::static_dir_name())
+    }
+
+    pub fn main_uri(tail: impl AsRef<str>) -> String {
+        format!("/{}/{}", Self::main_name(), tail.as_ref())
+    }
+
+    pub fn main_uri2(first: impl AsRef<str>, second: impl AsRef<str>) -> String {
+        format!("/{}/{}/{}", Self::main_name(), first.as_ref(), second.as_ref())
+    }
+
+    #[inline]
+    pub fn is_main(&self) -> bool {
+        self.name() == Self::main_name()
+    }
+
     #[inline]
     pub fn enabled(&self) -> bool {
         self.settings.application.enabled
@@ -60,5 +89,21 @@ impl<P> Dap<P> {
     #[inline]
     pub fn set_settings(&mut self, settings: DapSettings) {
         self.settings = settings;
+    }
+
+    pub fn root_uri(&self) -> String {
+        format!("/{}", self.name())
+    }
+
+    pub fn static_uri(&self) -> String {
+        format!("{}/{}", self.root_uri(), Self::static_dir_name())
+    }
+
+    pub fn uri(&self, tail: impl AsRef<str>) -> String {
+        format!("/{}/{}", self.name(), tail.as_ref())
+    }
+
+    pub fn uri2(&self, first: impl AsRef<str>, second: impl AsRef<str>) -> String {
+        format!("/{}/{}/{}", self.name(), first.as_ref(), second.as_ref())
     }
 }

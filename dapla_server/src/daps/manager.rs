@@ -14,8 +14,6 @@ pub struct DapsManager {
 }
 
 impl DapsManager {
-    pub const MAIN_CLIENT_APP_NAME: &'static str = "dapla";
-
     pub fn new(daps_path: impl AsRef<Path>) -> io::Result<Self> {
         fs::read_dir(daps_path)?
             .map(|entry| {
@@ -49,7 +47,7 @@ impl DapsManager {
 
     pub fn load_daps(&mut self) {
         for (name, dap) in &self.daps {
-            if !dap.is_main_client() && dap.enabled() && !self.is_loaded(&name) {
+            if !dap.is_main() && dap.enabled() && !self.is_loaded(&name) {
                 info!("Load dap '{}'", name);
                 let instance = dap.instantiate().expect("Dap should be loaded");
                 self.instances.insert(name.into(), instance);

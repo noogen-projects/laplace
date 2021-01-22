@@ -1,7 +1,7 @@
 use std::{io, path::PathBuf};
 
 use actix_files::{Files, NamedFile};
-use actix_web::{get, middleware, post, web, App, HttpResponse, HttpServer};
+use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 
 use self::{
     daps::{Dap, DapUpdateQuery, DapsService},
@@ -12,18 +12,16 @@ mod daps;
 mod error;
 mod settings;
 
-#[get("/daps")]
 async fn get_daps(daps_service: web::Data<DapsService>) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http(|daps_manager| {
-            let daps: Vec<_> = daps_manager.daps_iter().filter(|dap| !dap.is_main_client()).collect();
+            let daps: Vec<_> = daps_manager.daps_iter().filter(|dap| !dap.is_main()).collect();
             Ok(HttpResponse::Ok().json(daps))
         })
         .await
 }
 
-#[post("/dap/{name}")]
 async fn update_dap(
     daps_service: web::Data<DapsService>,
     web::Path(dap_name): web::Path<String>,
@@ -57,7 +55,7 @@ async fn main() -> io::Result<()> {
     let daps_service = DapsService::new(&settings.daps.path)?;
 
     HttpServer::new(move || {
-        let static_dir = PathBuf::new().join(Dap::STATIC_DIR_NAME);
+        let static_dir = PathBuf::new().join(Dap::static_dir_name());
 
         let mut app = App::new()
             .data(daps_service.clone())
@@ -65,16 +63,16 @@ async fn main() -> io::Result<()> {
             .wrap(middleware::NormalizePath::default())
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
-            .service(Files::new(&format!("/{}", Dap::STATIC_DIR_NAME), &static_dir).index_file(Dap::INDEX_FILE_NAME))
+            .service(Files::new(&Dap::main_static_uri(), &static_dir).index_file(Dap::index_file_name()))
             .route(
                 "/",
                 web::get().to(move || {
-                    let index_file = static_dir.join(Dap::INDEX_FILE_NAME);
+                    let index_file = static_dir.join(Dap::index_file_name());
                     async { NamedFile::open(index_file) }
                 }),
             )
-            .service(get_daps)
-            .service(update_dap);
+            .route(&Dap::main_uri("daps"), web::get().to(get_daps))
+            .route(&Dap::main_uri("{name}"), web::post().to(update_dap));
 
         let mut daps_manager = daps_service.lock().expect("Daps manager lock should be acquired");
         daps_manager.load_daps();

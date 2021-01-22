@@ -49,7 +49,9 @@ impl Component for Root {
     type Properties = ();
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let daps_list_request = Request::get("/daps").body(Nothing).expect("Request should be built");
+        let daps_list_request = Request::get(Dap::main_uri("daps"))
+            .body(Nothing)
+            .expect("Request should be built");
         let mut fetcher = Fetcher::new();
         fetcher
             .fetch(daps_list_request, link.callback(Msg::Fetch))
@@ -90,7 +92,7 @@ impl Component for Root {
                 if let Some(dap) = self.daps.iter_mut().find(|dap| dap.name() == name) {
                     dap.switch_enabled();
 
-                    let uri = format!("/dap/{}", dap.name());
+                    let uri = Dap::main_uri2("dap", dap.name());
                     let body = if dap.enabled() {
                         "{\"enabled\":true}"
                     } else {
