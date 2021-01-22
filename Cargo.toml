@@ -10,8 +10,3 @@ members = [
 
 [profile.release]
 lto = true
-
-# https://github.com/Lymia/enumset/issues/17
-[patch.crates-io.enumset_derive]
-git = "https://github.com/ocboogie/enumset"
-branch = "span-fix"

@@ -1,4 +1,7 @@
+#![recursion_limit = "256"]
+
 use anyhow::Error;
+use web_sys::HtmlInputElement;
 use yew::{
     format::Nothing,
     html, initialize, run_loop,
@@ -6,17 +9,22 @@ use yew::{
         console::ConsoleService,
         fetch::{FetchService, FetchTask, Request, Response},
     },
-    utils, App, Component, ComponentLink, Html,
+    App, Component, ComponentLink, Html,
 };
-use yew_mdc_widgets::{auto_init, MdcWidget, TopAppBar};
+use yew_mdc_widgets::{auto_init, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
+
+use crate::utils::select_exist_element;
+
+mod utils;
 
 struct Root {
-    header: String,
     link: ComponentLink<Self>,
     fetch_task: Option<FetchTask>,
+    responses: Vec<String>,
 }
 
 enum Msg {
+    Submit,
     Fetch(String),
     Error,
 }
@@ -27,16 +35,44 @@ impl Component for Root {
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
-            header: "Hello".to_string(),
             link,
             fetch_task: None,
+            responses: Vec::new(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
+            Msg::Submit => {
+                if !self.fetch_task.is_some() {
+                    let uri = select_exist_element::<HtmlInputElement>("#uri > input").value();
+                    if let Ok(request) = Request::get(format!("/hello/{}", uri)).body(Nothing) {
+                        if let Ok(task) = FetchService::fetch(
+                            request,
+                            self.link.callback(|response: Response<Result<String, Error>>| {
+                                if response.status().is_success() {
+                                    Msg::Fetch(response.into_body().unwrap_or_else(|_| String::new()))
+                                } else {
+                                    ConsoleService::error(&format!(
+                                        "Fetch status: {:?}, body: {:?}",
+                                        response.status(),
+                                        response.into_body()
+                                    ));
+                                    Msg::Error
+                                }
+                            }),
+                        )
+                        .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
+                        {
+                            self.fetch_task.replace(task);
+                        }
+                    }
+                }
+                false
+            }
             Msg::Fetch(data) => {
-                self.header = data;
+                self.fetch_task = None;
+                self.responses.push(data);
                 true
             }
             Msg::Error => false,
@@ -53,13 +89,29 @@ impl Component for Root {
             .title("Hello")
             .enable_shadow_when_scroll_window();
 
+        let mut list = List::ul().divider();
+        for uri in self.responses.iter().rev() {
+            list = list.item(ListItem::new().text(uri)).divider();
+        }
+
         html! {
             <>
                 <div class = "app-content">
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
-                            <h1 class = "title mdc-typography--headline5">{ &self.header }</h1>
+                            <h1 class = "title mdc-typography--headline5">{ "Hello" }</h1>
+                            <div class = "mdc-layout-grid">
+                                <div class = "mdc-layout-grid__inner">
+                                    <div class = "mdc-layout-grid__cell mdc-layout-grid__cell--span-4 mdc-layout-grid__cell--align-bottom">
+                                        { TextField::filled().id("uri").class("expand").label("URI") }
+                                    </div>
+                                    <div class = "mdc-layout-grid__cell mdc-layout-grid__cell--span-1 mdc-layout-grid__cell--align-bottom">
+                                        { Button::raised().label("submit").on_click(self.link.callback(|_| Msg::Submit)) }
+                                    </div>
+                                </div>
+                            </div>
+                            { list }
                         </div>
                     </div>
                 </div>
@@ -69,38 +121,12 @@ impl Component for Root {
 
     fn rendered(&mut self, _first_render: bool) {
         auto_init();
-
-        if self.fetch_task.is_some() {
-            return;
-        }
-
-        if let Ok(request) = Request::get("/hello/fetch/test/").body(Nothing) {
-            if let Ok(task) = FetchService::fetch(
-                request,
-                self.link.callback(|response: Response<Result<String, Error>>| {
-                    if response.status().is_success() {
-                        Msg::Fetch(response.into_body().unwrap_or_else(|_| String::new()))
-                    } else {
-                        ConsoleService::error(&format!(
-                            "Fetch status: {:?}, body: {:?}",
-                            response.status(),
-                            response.into_body()
-                        ));
-                        Msg::Error
-                    }
-                }),
-            )
-            .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
-            {
-                self.fetch_task.replace(task);
-            }
-        }
     }
 }
 
 fn main() {
     initialize();
-    if let Ok(Some(root)) = utils::document().query_selector("#root") {
+    if let Ok(Some(root)) = yew::utils::document().query_selector("#root") {
         App::<Root>::new().mount_with_props(root, ());
         run_loop();
     } else {
