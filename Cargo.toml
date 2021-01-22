@@ -4,8 +4,8 @@ members = [
     "dapla_common",
     "dapla_server",
     "dapla_wasm",
-    "examples/hello/client",
-    "examples/hello/server",
+    "examples/echo/client",
+    "examples/echo/server",
 ]
 
 [profile.release]

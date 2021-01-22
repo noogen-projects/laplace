@@ -46,7 +46,7 @@ impl Component for Root {
             Msg::Submit => {
                 if !self.fetch_task.is_some() {
                     let uri = select_exist_element::<HtmlInputElement>("#uri > input").value();
-                    if let Ok(request) = Request::get(format!("/hello/{}", uri)).body(Nothing) {
+                    if let Ok(request) = Request::get(format!("/echo/{}", uri)).body(Nothing) {
                         if let Ok(task) = FetchService::fetch(
                             request,
                             self.link.callback(|response: Response<Result<String, Error>>| {
@@ -86,7 +86,7 @@ impl Component for Root {
     fn view(&self) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
-            .title("Hello")
+            .title("Echo dap")
             .enable_shadow_when_scroll_window();
 
         let mut list = List::ul().divider();
@@ -100,7 +100,7 @@ impl Component for Root {
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
-                            <h1 class = "title mdc-typography--headline5">{ "Hello" }</h1>
+                            <h1 class = "title mdc-typography--headline5">{ "Echo" }</h1>
                             <div class = "mdc-layout-grid">
                                 <div class = "mdc-layout-grid__inner">
                                     <div class = "mdc-layout-grid__cell mdc-layout-grid__cell--span-4 mdc-layout-grid__cell--align-bottom">

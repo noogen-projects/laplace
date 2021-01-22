@@ -1,5 +1,5 @@
 [package]
-name = "hello_server"
+name = "echo_server"
 version = "0.1.0"
 authors = [
     "Alexander Mescheryakov <freecoder.xx@gmail.com>",
@@ -9,7 +9,7 @@ edition = "2018"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/noogen-projects/dapla"
-description = "A Rust library that implements a ..."
+description = "The Echo d-app example"
 
 [lib]
 crate-type = ["cdylib"]

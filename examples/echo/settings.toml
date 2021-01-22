@@ -1,5 +1,5 @@
 [application]
-title = "Hello"
+title = "Echo"
 enabled = true
 
 [permissions]
