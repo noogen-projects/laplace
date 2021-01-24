@@ -3,5 +3,5 @@ title = "Echo"
 enabled = true
 
 [permissions]
-required = ["fs_read", "fs_write", "http", "websocket", "tcp"]
+required = ["file_read", "file_write", "http", "websocket", "tcp"]
 allowed = ["http"]

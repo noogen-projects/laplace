@@ -9,7 +9,7 @@ use yew::{
     },
     utils, App, Callback, Component, ComponentLink, Html,
 };
-use yew_mdc_widgets::{auto_init, Drawer, IconButton, MdcWidget, Switch, TopAppBar};
+use yew_mdc_widgets::{auto_init, Chip, ChipSet, Drawer, IconButton, MdcWidget, Switch, TopAppBar};
 
 type Dap = CommonDap<String>;
 
@@ -187,19 +187,34 @@ impl Root {
 
     fn view_dap(&self, dap: &Dap) -> Html {
         let dap_name = dap.name().to_string();
-        let mut switch = Switch::new().on_click(self.link.callback(move |_| Msg::SwitchDap(dap_name.clone())));
-        if dap.enabled() {
-            switch = switch.on();
-        }
+        let enable_switch = Switch::new()
+            .on_click(self.link.callback(move |_| Msg::SwitchDap(dap_name.clone())))
+            .turn(dap.enabled());
+        let permissions = ChipSet::new()
+            .filter()
+            .chips(dap.required_permissions().map(|permission| {
+                Chip::simple()
+                    .checkmark()
+                    .text(permission.as_str())
+                    .select(dap.is_allowed_permission(permission))
+            }));
+
         html! {
-            <div class = "daps-table-row">
-                <div class = "daps-table-col">
-                    <big><a href = dap.name()>{ dap.title() }</a></big>
+            <>
+                <div class = "daps-table-row">
+                    <div class = "daps-table-col">
+                        <big><a href = dap.name()>{ dap.title() }</a></big>
+                    </div>
+                    <div class = "daps-table-col">
+                        { enable_switch }
+                    </div>
                 </div>
-                <div class = "daps-table-col">
-                    { switch }
+                <div class = "daps-table-row">
+                    <div class = "daps-table-col">
+                        { permissions }
+                    </div>
                 </div>
-            </div>
+            </>
         }
     }
 }

@@ -27,8 +27,10 @@ pub struct Dap(CommonDap);
 impl Dap {
     pub fn new(name: impl Into<String>, root_dir: impl Into<PathBuf>) -> Self {
         let mut dap = Self(CommonDap::new(name.into(), root_dir.into(), Default::default()));
-        if let Err(err) = dap.reload_settings() {
-            error!("Error when load settings for dap '{}': {:?}", dap.name(), err);
+        if !dap.is_main() {
+            if let Err(err) = dap.reload_settings() {
+                error!("Error when load settings for dap '{}': {:?}", dap.name(), err);
+            }
         }
         dap
     }

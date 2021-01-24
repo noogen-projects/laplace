@@ -72,7 +72,7 @@ async fn main() -> io::Result<()> {
                 }),
             )
             .route(&Dap::main_uri("daps"), web::get().to(get_daps))
-            .route(&Dap::main_uri("{name}"), web::post().to(update_dap));
+            .route(&Dap::main_uri("dap/{name}"), web::post().to(update_dap));
 
         let mut daps_manager = daps_service.lock().expect("Daps manager lock should be acquired");
         daps_manager.load_daps();

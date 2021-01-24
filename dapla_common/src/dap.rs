@@ -106,4 +106,16 @@ impl<P> Dap<P> {
     pub fn uri2(&self, first: impl AsRef<str>, second: impl AsRef<str>) -> String {
         format!("/{}/{}/{}", self.name(), first.as_ref(), second.as_ref())
     }
+
+    pub fn required_permissions(&self) -> impl Iterator<Item = &Permission> {
+        self.settings.permissions.required.iter()
+    }
+
+    pub fn allowed_permissions(&self) -> impl Iterator<Item = &Permission> {
+        self.settings.permissions.allowed.iter()
+    }
+
+    pub fn is_allowed_permission(&self, permission: &Permission) -> bool {
+        self.settings.permissions.allowed.contains(permission)
+    }
 }

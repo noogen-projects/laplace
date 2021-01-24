@@ -1,11 +1,38 @@
-use serde::{Deserialize, Serialize};
+use std::{convert::TryFrom, str::FromStr};
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
+use serde::{Deserialize, Serialize};
+use strum::{AsRefStr, EnumString, IntoStaticStr, ParseError};
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, AsRefStr, IntoStaticStr, EnumString)]
+#[serde(try_from = "&str")]
+#[serde(into = "&str")]
 pub enum Permission {
-    FsRead,
-    FsWrite,
+    #[strum(serialize = "file_read")]
+    FileRead,
+
+    #[strum(serialize = "file_write")]
+    FileWrite,
+
+    #[strum(serialize = "http")]
     Http,
+
+    #[strum(serialize = "websocket")]
     Websocket,
+
+    #[strum(serialize = "tcp")]
     Tcp,
+}
+
+impl Permission {
+    pub fn as_str(&self) -> &'static str {
+        self.into()
+    }
+}
+
+impl TryFrom<&str> for Permission {
+    type Error = ParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        FromStr::from_str(value)
+    }
 }
