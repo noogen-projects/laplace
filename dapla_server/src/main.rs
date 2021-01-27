@@ -1,10 +1,10 @@
-use std::{io, path::PathBuf};
+use std::{borrow::Cow, io, ops::Deref, path::PathBuf};
 
 use actix_files::{Files, NamedFile};
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 
 use self::{
-    daps::{Dap, DapUpdateQuery, DapsService},
+    daps::{Dap, DapResponse, DapUpdateRequest, DapsService},
     settings::Settings,
 };
 
@@ -16,25 +16,26 @@ async fn get_daps(daps_service: web::Data<DapsService>) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http(|daps_manager| {
-            let daps: Vec<_> = daps_manager.daps_iter().filter(|dap| !dap.is_main()).collect();
-            Ok(HttpResponse::Ok().json(daps))
+            let daps: Vec<_> = daps_manager
+                .daps_iter()
+                .filter(|dap| !dap.is_main())
+                .map(|dap| Cow::Borrowed(dap.deref()))
+                .collect();
+            Ok(HttpResponse::Ok().json(DapResponse::Daps(daps)))
         })
         .await
 }
 
-async fn update_dap(
-    daps_service: web::Data<DapsService>,
-    web::Path(dap_name): web::Path<String>,
-    body: String,
-) -> HttpResponse {
+async fn update_dap(daps_service: web::Data<DapsService>, body: String) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http(|daps_manager| {
-            let dap = daps_manager.dap_mut(&dap_name)?;
-            let update_query: DapUpdateQuery = serde_json::from_str(&body)?;
+            let request: DapUpdateRequest = serde_json::from_str(&body)?;
+            let update_query = request.into_query();
+            let dap = daps_manager.dap_mut(&update_query.dap_name)?;
 
             let updated = dap.update(update_query)?;
-            if updated {
+            if updated.enabled.is_some() {
                 let dap_name = dap.name().to_string();
                 if dap.enabled() {
                     daps_manager.load(dap_name)?;
@@ -42,7 +43,7 @@ async fn update_dap(
                     daps_manager.unload(dap_name);
                 }
             }
-            Ok(HttpResponse::Ok().json(updated))
+            Ok(HttpResponse::Ok().json(DapResponse::Updated(updated)))
         })
         .await
 }
@@ -72,7 +73,7 @@ async fn main() -> io::Result<()> {
                 }),
             )
             .route(&Dap::main_uri("daps"), web::get().to(get_daps))
-            .route(&Dap::main_uri("dap/{name}"), web::post().to(update_dap));
+            .route(&Dap::main_uri("dap"), web::post().to(update_dap));
 
         let mut daps_manager = daps_service.lock().expect("Daps manager lock should be acquired");
         daps_manager.load_daps();

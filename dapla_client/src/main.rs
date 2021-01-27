@@ -1,5 +1,10 @@
-use anyhow::Error;
-use dapla_common::dap::Dap as CommonDap;
+use std::{convert::TryFrom, result::Result as StdResult};
+
+use anyhow::{anyhow, Context, Error, Result};
+use dapla_common::{
+    api::{Response as CommonDapResponse, UpdateQuery},
+    dap::{Dap as CommonDap, Permission},
+};
 use yew::{
     format::{Nothing, Text},
     html, initialize, run_loop,
@@ -9,11 +14,15 @@ use yew::{
     },
     utils, App, Callback, Component, ComponentLink, Html,
 };
-use yew_mdc_widgets::{auto_init, Chip, ChipSet, Drawer, IconButton, MdcWidget, Switch, TopAppBar};
+use yew_mdc_widgets::{
+    auto_init,
+    utils::dom::{select_exist_element, JsObjectAccess, JsValue},
+    Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
+};
 
 type Dap = CommonDap<String>;
-
-type StringResponse = Response<Result<String, Error>>;
+type DapResponse = CommonDapResponse<'static, String>;
+type StringResponse = Response<Result<String>>;
 
 struct Fetcher {
     tasks: Vec<FetchTask>,
@@ -24,11 +33,37 @@ impl Fetcher {
         Self { tasks: vec![] }
     }
 
-    fn fetch(&mut self, request: Request<impl Into<Text>>, callback: Callback<StringResponse>) -> Result<(), Error> {
+    fn parse(response: StringResponse) -> Result<DapResponse> {
+        let body = response.into_body()?;
+        serde_json::from_str(body.as_str()).map_err(Into::into)
+    }
+
+    fn fetch(&mut self, request: Request<impl Into<Text>>, callback: Callback<StringResponse>) -> Result<()> {
         let task = FetchService::fetch(request, callback)?;
         self.tasks.retain(|task| task.is_active());
         self.tasks.push(task);
         Ok(())
+    }
+}
+
+trait RootMsgError {
+    type Map;
+
+    fn msg_error(self, link: &ComponentLink<Root>);
+    fn msg_error_map(self, link: &ComponentLink<Root>) -> Self::Map;
+}
+
+impl<T> RootMsgError for Result<T> {
+    type Map = StdResult<T, ()>;
+
+    fn msg_error(self, link: &ComponentLink<Root>) {
+        if let Err(err) = self {
+            link.send_message(Msg::Error(err))
+        }
+    }
+
+    fn msg_error_map(self, link: &ComponentLink<Root>) -> Self::Map {
+        self.map_err(|err| link.send_message(Msg::Error(err)))
     }
 }
 
@@ -38,10 +73,41 @@ struct Root {
     fetcher: Fetcher,
 }
 
+#[derive(Debug)]
+struct PermissionUpdate {
+    dap_name: String,
+    permission: Permission,
+    allow: bool,
+}
+
+impl PermissionUpdate {
+    fn try_from_chip_selection_detail(detail: JsValue) -> Result<Self> {
+        let chip_id = detail
+            .get("chipId")
+            .as_string()
+            .ok_or_else(|| anyhow!("Detail chipId param does not exist"))?;
+        let id_data: Vec<_> = chip_id.split("--").collect();
+        if let (Some(dap_name), Some(permission)) = (id_data.get(0), id_data.get(1)) {
+            Ok(Self {
+                dap_name: dap_name.to_string(),
+                permission: Permission::try_from(*permission)?,
+                allow: detail
+                    .get("selected")
+                    .as_bool()
+                    .ok_or_else(|| anyhow!("Detail selected param does not exist"))?,
+            })
+        } else {
+            Err(anyhow!("Wrong data of chipId: {:?}", id_data))
+        }
+    }
+}
+
+#[derive(Debug)]
 enum Msg {
-    Fetch(StringResponse),
+    Fetch(DapResponse),
     SwitchDap(String),
-    Sent,
+    UpdatePermission(PermissionUpdate),
+    Error(Error),
 }
 
 impl Component for Root {
@@ -49,64 +115,98 @@ impl Component for Root {
     type Properties = ();
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let daps_list_request = Request::get(Dap::main_uri("daps"))
-            .body(Nothing)
-            .expect("Request should be built");
-        let mut fetcher = Fetcher::new();
-        fetcher
-            .fetch(daps_list_request, link.callback(Msg::Fetch))
-            .expect("Fetch daps list error");
-
-        Self {
+        let mut root = Self {
             daps: vec![],
             link,
-            fetcher,
-        }
+            fetcher: Fetcher::new(),
+        };
+
+        root.send_get(Dap::main_uri("daps"))
+            .context("Get daps list error")
+            .msg_error(&root.link);
+        root
     }
 
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
-            Msg::Fetch(response) => {
-                if response.status().is_success() {
-                    let body = response.into_body();
-                    let json = body.as_ref().map(|text| text.as_str()).unwrap_or_else(|_| "[]");
-                    serde_json::from_str(json)
-                        .map(|daps| {
-                            self.daps = daps;
-                            true
-                        })
-                        .unwrap_or_else(|err| {
-                            ConsoleService::error(&format!("Response parsing error: {:?}, body: {:?}", err, json));
-                            false
-                        })
-                } else {
-                    ConsoleService::error(&format!(
-                        "Response status: {:?}, body: {:?}",
-                        response.status(),
-                        response.into_body()
-                    ));
-                    false
+            Msg::Fetch(response) => match response {
+                DapResponse::Daps(daps) => {
+                    self.daps = daps.into_iter().map(|dap| dap.into_owned()).collect();
+                    true
                 }
-            }
+                DapResponse::Updated(updated) => {
+                    if let Some(dap) = self.daps.iter_mut().find(|dap| dap.name() == updated.dap_name) {
+                        let mut should_render = false;
+
+                        if let Some(enabled) = updated.enabled {
+                            if dap.enabled() != enabled {
+                                dap.set_enabled(enabled);
+                                should_render = true;
+                            }
+                        }
+
+                        if let Some(permission) = updated.allow_permission {
+                            should_render = dap.allow_permission(permission);
+                        }
+
+                        if let Some(permission) = updated.deny_permission {
+                            should_render = dap.deny_permission(permission);
+                        }
+
+                        should_render
+                    } else {
+                        ConsoleService::error(&format!("Unknown dap name: {}", updated.dap_name));
+                        false
+                    }
+                }
+            },
             Msg::SwitchDap(name) => {
                 if let Some(dap) = self.daps.iter_mut().find(|dap| dap.name() == name) {
                     dap.switch_enabled();
 
-                    let uri = Dap::main_uri2("dap", dap.name());
-                    let body = if dap.enabled() {
-                        "{\"enabled\":true}"
-                    } else {
-                        "{\"enabled\":false}"
-                    };
-                    self.send_post(uri, body);
-
-                    true
+                    let uri = Dap::main_uri("dap");
+                    if let Ok(body) = serde_json::to_string(
+                        &UpdateQuery::new(dap.name().to_string())
+                            .enabled(dap.enabled())
+                            .into_request(),
+                    )
+                    .context("Serialize query error")
+                    .msg_error_map(&self.link)
+                    {
+                        self.send_post(uri, body)
+                            .context("Switch dap error")
+                            .msg_error(&self.link);
+                    }
+                    false
                 } else {
                     ConsoleService::error(&format!("Unknown dap name: {}", name));
                     false
                 }
             }
-            Msg::Sent => false,
+            Msg::UpdatePermission(PermissionUpdate {
+                dap_name,
+                permission,
+                allow,
+            }) => {
+                let uri = Dap::main_uri("dap");
+                if let Ok(body) = serde_json::to_string(
+                    &UpdateQuery::new(dap_name)
+                        .update_permission(permission, allow)
+                        .into_request(),
+                )
+                .context("Serialize query error")
+                .msg_error_map(&self.link)
+                {
+                    self.send_post(uri, body)
+                        .context("Select permission error")
+                        .msg_error(&self.link);
+                }
+                false
+            }
+            Msg::Error(err) => {
+                ConsoleService::error(&format!("{}", err));
+                true
+            }
         }
     }
 
@@ -115,9 +215,8 @@ impl Component for Root {
     }
 
     fn view(&self) -> Html {
-        let drawer_id = "app-drawer";
         let drawer = Drawer::new()
-            .id(drawer_id)
+            .id("app-drawer")
             .title(html! { <h3 tabindex = 0>{ "Settings" }</h3> })
             .modal();
 
@@ -126,13 +225,11 @@ impl Component for Root {
             .title("dapla")
             .navigation_item(IconButton::new().icon("menu"))
             .enable_shadow_when_scroll_window()
-            .add_navigation_event(format!(
-                r"{{
-                    const drawer = document.getElementById('{}').MDCDrawer;
-                    drawer.open = !drawer.open;
-                }}",
-                drawer_id
-            ));
+            .on_navigation(|_| {
+                let drawer = select_exist_element::<Element>("#app-drawer").get("MDCDrawer");
+                let opened = drawer.get("open").as_bool().unwrap_or(false);
+                drawer.set("open", !opened);
+            });
 
         html! {
             <>
@@ -161,42 +258,62 @@ impl Component for Root {
 }
 
 impl Root {
-    fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) {
-        match Request::post(uri.as_ref()).body(Ok(body.into())) {
-            Ok(request) => {
-                self.fetcher
-                    .fetch(
-                        request,
-                        self.link.callback(|response: StringResponse| {
-                            if !response.status().is_success() {
-                                ConsoleService::error(&format!(
-                                    "Response status: {:?}, body: {:?}",
-                                    response.status(),
-                                    response.into_body()
-                                ));
-                            }
-                            Msg::Sent
-                        }),
-                    )
-                    .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
-                    .ok();
+    fn send_get(&mut self, uri: impl AsRef<str>) -> Result<()> {
+        let request = Request::get(uri.as_ref())
+            .body(Nothing)
+            .context("Create get request error")?;
+        self.fetcher
+            .fetch(request, self.fetch_callback(Msg::Fetch))
+            .context("Fetch get response error")
+    }
+
+    fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) -> Result<()> {
+        let request = Request::post(uri.as_ref())
+            .body(Ok(body.into()))
+            .context("Create post request error")?;
+        self.fetcher
+            .fetch(request, self.fetch_callback(Msg::Fetch))
+            .context("Fetch post response error")
+    }
+
+    fn fetch_callback(&self, callback: impl Fn(DapResponse) -> Msg + 'static) -> Callback<StringResponse> {
+        self.link.callback(move |response: StringResponse| {
+            if response.status().is_success() {
+                match Fetcher::parse(response).context("Can't parse response") {
+                    Ok(response) => callback(response),
+                    Err(err) => Msg::Error(err),
+                }
+            } else {
+                Msg::Error(anyhow!(
+                    "Fetch status: {:?}, body: {:?}",
+                    response.status(),
+                    response.into_body()
+                ))
             }
-            Err(err) => ConsoleService::error(&format!("Create post request error: {:?}", err)),
-        }
+        })
     }
 
     fn view_dap(&self, dap: &Dap) -> Html {
         let dap_name = dap.name().to_string();
+
         let enable_switch = Switch::new()
             .on_click(self.link.callback(move |_| Msg::SwitchDap(dap_name.clone())))
             .turn(dap.enabled());
+
         let permissions = ChipSet::new()
+            .id(format!("{}--permissions", dap.name()))
             .filter()
             .chips(dap.required_permissions().map(|permission| {
                 Chip::simple()
+                    .id(format!("{}--{}", dap.name(), permission.as_str()))
                     .checkmark()
                     .text(permission.as_str())
                     .select(dap.is_allowed_permission(permission))
+            }))
+            .on_selection(self.link.callback(|event: CustomEvent| {
+                PermissionUpdate::try_from_chip_selection_detail(event.detail())
+                    .map(Msg::UpdatePermission)
+                    .unwrap_or_else(Msg::Error)
             }));
 
         html! {

@@ -5,16 +5,16 @@ pub use self::{access::*, settings::*};
 pub mod access;
 pub mod settings;
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Dap<P> {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Dap<PathT> {
     name: String,
-    root_dir: P,
+    root_dir: PathT,
     settings: DapSettings,
 }
 
-impl<P> Dap<P> {
+impl<PathT> Dap<PathT> {
     #[inline]
-    pub fn new(name: impl Into<String>, root_dir: impl Into<P>, settings: DapSettings) -> Self {
+    pub fn new(name: impl Into<String>, root_dir: impl Into<PathT>, settings: DapSettings) -> Self {
         Self {
             name: name.into(),
             root_dir: root_dir.into(),
@@ -77,7 +77,7 @@ impl<P> Dap<P> {
     }
 
     #[inline]
-    pub fn root_dir(&self) -> &P {
+    pub fn root_dir(&self) -> &PathT {
         &self.root_dir
     }
 
@@ -107,15 +107,34 @@ impl<P> Dap<P> {
         format!("/{}/{}/{}", self.name(), first.as_ref(), second.as_ref())
     }
 
-    pub fn required_permissions(&self) -> impl Iterator<Item = &Permission> {
-        self.settings.permissions.required.iter()
+    pub fn required_permissions(&self) -> impl Iterator<Item = Permission> + '_ {
+        self.settings.permissions.required.iter().copied()
     }
 
-    pub fn allowed_permissions(&self) -> impl Iterator<Item = &Permission> {
-        self.settings.permissions.allowed.iter()
+    pub fn allowed_permissions(&self) -> impl Iterator<Item = Permission> + '_ {
+        self.settings.permissions.allowed.iter().copied()
     }
 
-    pub fn is_allowed_permission(&self, permission: &Permission) -> bool {
-        self.settings.permissions.allowed.contains(permission)
+    pub fn is_allowed_permission(&self, permission: Permission) -> bool {
+        self.settings.permissions.allowed.contains(&permission)
+    }
+
+    pub fn allow_permission(&mut self, permission: Permission) -> bool {
+        if !self.is_allowed_permission(permission) {
+            self.settings.permissions.allowed.push(permission);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn deny_permission(&mut self, permission: Permission) -> bool {
+        let index = self.allowed_permissions().position(|allowed| allowed == permission);
+        if let Some(index) = index {
+            self.settings.permissions.allowed.remove(index);
+            true
+        } else {
+            false
+        }
     }
 }

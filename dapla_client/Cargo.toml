@@ -14,7 +14,6 @@ description = "The decentralized application platform WASM client"
 anyhow = "1.0.38"
 yew = { version = "0.17.4", features = ["web_sys"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
-js-sys = "0.3.45"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 dapla_common = { path = "../dapla_common" }

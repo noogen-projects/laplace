@@ -1,11 +1,15 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
+    ops::{Deref, DerefMut},
+    path::PathBuf,
 };
 
 use actix_files::Files;
 use actix_web::web;
-pub use dapla_common::dap::access::*;
+pub use dapla_common::{
+    api::{UpdateQuery, UpdateRequest as DapUpdateRequest},
+    dap::access::*,
+};
 use log::error;
 use serde::{Deserialize, Serialize};
 use wasmer::{imports, Instance, Module, Store};
@@ -19,6 +23,8 @@ mod service;
 mod settings;
 
 type CommonDap = dapla_common::dap::Dap<PathBuf>;
+
+pub type DapResponse<'a> = dapla_common::api::Response<'a, PathBuf>;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
@@ -59,10 +65,6 @@ impl Dap {
         CommonDap::main_uri(tail)
     }
 
-    pub fn is_main(&self) -> bool {
-        self.0.is_main()
-    }
-
     pub fn reload_settings(&mut self) -> DapSettingsResult<()> {
         self.0
             .set_settings(DapSettings::load(self.root_dir().join(Self::settings_file_name()))?);
@@ -72,34 +74,6 @@ impl Dap {
     pub fn save_settings(&mut self) -> DapSettingsResult<()> {
         let path = self.root_dir().join(Self::settings_file_name());
         self.0.settings().save(path)
-    }
-
-    pub fn enabled(&self) -> bool {
-        self.0.enabled()
-    }
-
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.0.set_enabled(enabled);
-    }
-
-    pub fn title(&self) -> &str {
-        self.0.title()
-    }
-
-    pub fn name(&self) -> &str {
-        self.0.name()
-    }
-
-    pub fn root_dir(&self) -> &Path {
-        self.0.root_dir()
-    }
-
-    pub fn root_uri(&self) -> String {
-        self.0.root_uri()
-    }
-
-    pub fn static_uri(&self) -> String {
-        self.0.static_uri()
     }
 
     pub fn static_dir(&self) -> PathBuf {
@@ -150,20 +124,42 @@ impl Dap {
         Instance::new(&module, &import_object).map_err(Into::into)
     }
 
-    pub fn update(&mut self, query: DapUpdateQuery) -> DapSettingsResult<bool> {
-        let DapUpdateQuery { enabled } = query;
-        if let Some(enabled) = enabled {
+    pub fn update(&mut self, mut query: UpdateQuery) -> DapSettingsResult<UpdateQuery> {
+        if let Some(enabled) = query.enabled {
             if self.enabled() != enabled {
                 self.set_enabled(enabled);
-                self.save_settings()?;
-                return Ok(true);
+            } else {
+                query.enabled = None;
             }
         }
-        Ok(false)
+
+        if let Some(permission) = query.allow_permission {
+            if !self.allow_permission(permission) {
+                query.allow_permission = None;
+            }
+        }
+
+        if let Some(permission) = query.deny_permission {
+            if !self.deny_permission(permission) {
+                query.deny_permission = None;
+            }
+        }
+
+        self.save_settings()?;
+        Ok(query)
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct DapUpdateQuery {
-    pub enabled: Option<bool>,
+impl Deref for Dap {
+    type Target = CommonDap;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Dap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }

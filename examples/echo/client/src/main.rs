@@ -11,11 +11,7 @@ use yew::{
     },
     App, Component, ComponentLink, Html,
 };
-use yew_mdc_widgets::{auto_init, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
-
-use crate::utils::select_exist_element;
-
-mod utils;
+use yew_mdc_widgets::{auto_init, utils::dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
 
 struct Root {
     link: ComponentLink<Self>,
@@ -45,7 +41,7 @@ impl Component for Root {
         match msg {
             Msg::Submit => {
                 if !self.fetch_task.is_some() {
-                    let uri = select_exist_element::<HtmlInputElement>("#uri > input").value();
+                    let uri = dom::select_exist_element::<HtmlInputElement>("#uri > input").value();
                     if let Ok(request) = Request::get(format!("/echo/{}", uri)).body(Nothing) {
                         if let Ok(task) = FetchService::fetch(
                             request,
