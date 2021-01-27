@@ -6,6 +6,7 @@ use std::{
 };
 
 use actix_web::HttpResponse;
+use dapla_common::dap::Permission;
 use log::error;
 
 use crate::{
@@ -43,6 +44,8 @@ impl DapsService {
             let dap = daps_manager.dap(&dap_name)?;
             if !dap.enabled() {
                 Err(ServerError::DapNotEnabled(dap_name))
+            } else if !dap.is_allowed_permission(Permission::Http) {
+                Err(ServerError::DapPermissionDenied(dap_name, Permission::Http))
             } else if !daps_manager.is_loaded(&dap_name) {
                 Err(ServerError::DapNotLoaded(dap_name))
             } else {

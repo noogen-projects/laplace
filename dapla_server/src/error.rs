@@ -1,6 +1,7 @@
 use std::io;
 
 use actix_web::ResponseError;
+use dapla_common::dap::Permission;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 
@@ -27,6 +28,9 @@ pub enum ServerError {
 
     #[error("Dap '{0}' is not loaded")]
     DapNotLoaded(String),
+
+    #[error("Permission '{}' denied for dap '{0}'", .1.as_str())]
+    DapPermissionDenied(String, Permission),
 
     #[error("Dap export error: {0}")]
     DapExportFail(#[from] ExportError),
