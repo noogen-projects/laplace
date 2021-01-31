@@ -13,6 +13,7 @@ pub use dapla_common::{
 use log::error;
 use serde::{Deserialize, Serialize};
 use wasmer::{imports, Instance, Module, Store};
+use wasmer_wasi::WasiState;
 
 pub use self::{manager::*, service::*, settings::*};
 use crate::error::ServerResult;
@@ -120,8 +121,41 @@ impl Dap {
 
         let store = Store::default();
         let module = Module::new(&store, &wasm)?;
-        let import_object = imports! {};
-        Instance::new(&module, &import_object).map_err(Into::into)
+
+        let is_allow_read = self.is_allowed_permission(Permission::FileRead);
+        let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
+
+        let dir_path = self.root_dir().join("data");
+        if !dir_path.exists() && (is_allow_read || is_allow_write) {
+            fs::create_dir(&dir_path)?;
+        }
+
+        let import_object = if self
+            .required_permissions()
+            .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
+        {
+            let mut wasi_env = WasiState::new(self.name())
+                .preopen(|preopen| {
+                    preopen
+                        .directory(&dir_path)
+                        .alias("/")
+                        .read(is_allow_read)
+                        .write(is_allow_write)
+                        .create(is_allow_write)
+                })?
+                .finalize()?;
+
+            wasi_env.import_object(&module)?
+        } else {
+            imports! {}
+        };
+
+        let instance = Instance::new(&module, &import_object)?;
+        if let Ok(init) = instance.exports.get_function("_initialize") {
+            init.call(&[])?;
+        }
+
+        Ok(instance)
     }
 
     pub fn update(&mut self, mut query: UpdateQuery) -> DapSettingsResult<UpdateQuery> {

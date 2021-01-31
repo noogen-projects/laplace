@@ -6,4 +6,6 @@ flags=${2:+"-Copt-level=s"}
 out_dir=${2:-debug}
 
 RUSTFLAGS=$flags cargo build -p ${app}_server --target wasm32-unknown-unknown $mode
+mkdir -p daps/$app
 cp target/wasm32-unknown-unknown/${out_dir}/${app}_server.wasm daps/$app
+cp examples/$app/settings.toml daps/$app

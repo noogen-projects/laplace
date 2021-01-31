@@ -6,6 +6,8 @@ members = [
     "dapla_wasm",
     "examples/echo/client",
     "examples/echo/server",
+    "examples/notes/client",
+    "examples/notes/server",
 ]
 
 [profile.release]

@@ -1,0 +1,7 @@
+[application]
+title = "Notes"
+enabled = true
+
+[permissions]
+required = ["file_read", "file_write", "http"]
+allowed = ["file_read", "file_write", "http"]

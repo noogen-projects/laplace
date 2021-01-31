@@ -4,6 +4,7 @@ use actix_web::ResponseError;
 use dapla_common::dap::Permission;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
+use wasmer_wasi::{WasiError, WasiStateCreationError};
 
 use crate::daps::DapSettingsError;
 
@@ -46,6 +47,12 @@ pub enum ServerError {
 
     #[error("Dap compile error: {0}")]
     DapCompileFail(#[from] CompileError),
+
+    #[error("Dap WASI state creation error: {0}")]
+    DapWasiCreationFail(#[from] WasiStateCreationError),
+
+    #[error("Dap WASI error: {0}")]
+    DapWasi(#[from] WasiError),
 
     #[error("Dap instantiate error: {0}")]
     DapInstantiateFail(#[from] InstantiationError),

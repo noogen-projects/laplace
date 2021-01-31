@@ -16,11 +16,13 @@ async fn get_daps(daps_service: web::Data<DapsService>) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http(|daps_manager| {
-            let daps: Vec<_> = daps_manager
+            let mut daps: Vec<_> = daps_manager
                 .daps_iter()
                 .filter(|dap| !dap.is_main())
                 .map(|dap| Cow::Borrowed(dap.deref()))
                 .collect();
+            daps.sort_unstable_by(|a, b| a.name().cmp(b.name()));
+
             Ok(HttpResponse::Ok().json(DapResponse::Daps(daps)))
         })
         .await
