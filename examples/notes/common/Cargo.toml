@@ -1,5 +1,5 @@
 [package]
-name = "notes_server"
+name = "notes_common"
 version = "0.1.0"
 authors = [
     "Alexander Mescheryakov <freecoder.xx@gmail.com>",
@@ -12,7 +12,4 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The Notes d-app example"
 
 [dependencies]
-thiserror = "1.0.23"
-serde_json = "1.0.61"
-notes_common = { path = "../common" }
-dapla_wasm = { path = "../../../dapla_wasm" }
+serde = { version = "1.0", features = ["derive"] }

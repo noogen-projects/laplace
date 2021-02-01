@@ -1526,11 +1526,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "notes_common"
+version = "0.1.0"
+dependencies = [
+ "serde 1.0.123",
+]
+
+[[package]]
 name = "notes_server"
 version = "0.1.0"
 dependencies = [
  "dapla_wasm",
+ "notes_common",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]

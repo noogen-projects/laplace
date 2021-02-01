@@ -7,8 +7,9 @@ members = [
     "examples/echo/client",
     "examples/echo/server",
     "examples/notes/client",
+    "examples/notes/common",
     "examples/notes/server",
 ]
 
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
