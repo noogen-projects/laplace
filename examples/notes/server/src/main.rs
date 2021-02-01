@@ -4,6 +4,7 @@ use std::{
     fs::{self, DirEntry, File},
     io::{self, BufRead, BufReader},
     iter,
+    path::Path,
 };
 
 use dapla_wasm::WasmSlice;
@@ -61,11 +62,11 @@ impl RequestOfGet {
     }
 
     fn process(&self) -> Response {
-        println!("Process request");
         match self {
-            Self::Notes => process_notes().map(Response::Notes).unwrap_or_else(Response::from),
-            Self::Note(name) => process_note(name.as_str()),
+            Self::Notes => process_notes().map(Response::Notes),
+            Self::Note(name) => process_note(name.as_str()).map(Response::Note),
         }
+        .unwrap_or_else(Response::from)
     }
 }
 
@@ -75,7 +76,6 @@ fn process_notes() -> Result<Vec<Note>, NoteError> {
     let mut notes = vec![];
 
     for entry in dir_entries()? {
-        println!("Entry: {:?}", entry);
         if let Ok(file_type) = entry.file_type() {
             if file_type.is_file() {
                 let name = entry
@@ -85,8 +85,6 @@ fn process_notes() -> Result<Vec<Note>, NoteError> {
                     .trim_end_matches(".md")
                     .to_string();
 
-                println!("Name: {}, path: {:?}", name, entry.path());
-
                 let file = File::open(entry.path())?;
                 let reader = BufReader::new(file);
 
@@ -95,7 +93,6 @@ fn process_notes() -> Result<Vec<Note>, NoteError> {
 
                 let mut prev_line = String::new();
                 'lines: for line in reader.lines() {
-                    println!("Line: {:?}", line);
                     let line = line?;
                     if line.starts_with("---") && prev_line.is_empty() {
                         break 'lines;
@@ -125,8 +122,13 @@ fn process_notes() -> Result<Vec<Note>, NoteError> {
     Ok(notes)
 }
 
-fn process_note(name: &str) -> Response {
-    Response::Error("Unimplemented".into())
+fn process_note(name: &str) -> Result<Note, NoteError> {
+    let path = Path::new("/").join(format!("{}.md", name));
+    let content = fs::read_to_string(path)?;
+    Ok(Note {
+        name: name.to_string(),
+        content: NoteContent::FullBody(content),
+    })
 }
 
 fn dir_entries() -> io::Result<Vec<DirEntry>> {
