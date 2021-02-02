@@ -6,12 +6,8 @@ use dapla_common::{
     dap::{Dap as CommonDap, Permission},
 };
 use yew::{
-    format::{Nothing, Text},
     html, initialize, run_loop,
-    services::{
-        fetch::{FetchService, FetchTask, Request, Response},
-        ConsoleService, Task,
-    },
+    services::{fetch::Response, ConsoleService},
     utils, App, Callback, Component, ComponentLink, Html,
 };
 use yew_mdc_widgets::{
@@ -20,31 +16,13 @@ use yew_mdc_widgets::{
     Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
 };
 
+use self::fetch::Fetcher;
+
+mod fetch;
+
 type Dap = CommonDap<String>;
 type DapResponse = CommonDapResponse<'static, String>;
 type StringResponse = Response<Result<String>>;
-
-struct Fetcher {
-    tasks: Vec<FetchTask>,
-}
-
-impl Fetcher {
-    fn new() -> Self {
-        Self { tasks: vec![] }
-    }
-
-    fn parse(response: StringResponse) -> Result<DapResponse> {
-        let body = response.into_body()?;
-        serde_json::from_str(body.as_str()).map_err(Into::into)
-    }
-
-    fn fetch(&mut self, request: Request<impl Into<Text>>, callback: Callback<StringResponse>) -> Result<()> {
-        let task = FetchService::fetch(request, callback)?;
-        self.tasks.retain(|task| task.is_active());
-        self.tasks.push(task);
-        Ok(())
-    }
-}
 
 trait RootMsgError {
     type Map;
@@ -258,22 +236,14 @@ impl Component for Root {
 }
 
 impl Root {
-    fn send_get(&mut self, uri: impl AsRef<str>) -> Result<()> {
-        let request = Request::get(uri.as_ref())
-            .body(Nothing)
-            .context("Create get request error")?;
-        self.fetcher
-            .fetch(request, self.fetch_callback(Msg::Fetch))
-            .context("Fetch get response error")
+    pub fn send_get(&mut self, uri: impl AsRef<str>) -> Result<()> {
+        let callback = self.fetch_callback(Msg::Fetch);
+        self.fetcher.send_get(uri, callback)
     }
 
-    fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) -> Result<()> {
-        let request = Request::post(uri.as_ref())
-            .body(Ok(body.into()))
-            .context("Create post request error")?;
-        self.fetcher
-            .fetch(request, self.fetch_callback(Msg::Fetch))
-            .context("Fetch post response error")
+    pub fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) -> Result<()> {
+        let callback = self.fetch_callback(Msg::Fetch);
+        self.fetcher.send_post(uri, body, callback)
     }
 
     fn fetch_callback(&self, callback: impl Fn(DapResponse) -> Msg + 'static) -> Callback<StringResponse> {
