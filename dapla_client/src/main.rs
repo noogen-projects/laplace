@@ -5,24 +5,19 @@ use dapla_common::{
     api::{Response as CommonDapResponse, UpdateQuery},
     dap::{Dap as CommonDap, Permission},
 };
-use yew::{
-    html, initialize, run_loop,
-    services::{fetch::Response, ConsoleService},
-    utils, App, Callback, Component, ComponentLink, Html,
-};
+use yew::{html, initialize, run_loop, services::ConsoleService, utils, App, Component, ComponentLink, Html};
 use yew_mdc_widgets::{
     auto_init,
     utils::dom::{select_exist_element, JsObjectAccess, JsValue},
     Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
 };
 
-use self::fetch::Fetcher;
+use self::fetch::JsonFetcher;
 
 mod fetch;
 
 type Dap = CommonDap<String>;
 type DapResponse = CommonDapResponse<'static, String>;
-type StringResponse = Response<Result<String>>;
 
 trait RootMsgError {
     type Map;
@@ -48,7 +43,7 @@ impl<T> RootMsgError for Result<T> {
 struct Root {
     daps: Vec<Dap>,
     link: ComponentLink<Self>,
-    fetcher: Fetcher,
+    fetcher: JsonFetcher,
 }
 
 #[derive(Debug)]
@@ -96,7 +91,7 @@ impl Component for Root {
         let mut root = Self {
             daps: vec![],
             link,
-            fetcher: Fetcher::new(),
+            fetcher: JsonFetcher::new(),
         };
 
         root.send_get(Dap::main_uri("daps"))
@@ -237,30 +232,13 @@ impl Component for Root {
 
 impl Root {
     pub fn send_get(&mut self, uri: impl AsRef<str>) -> Result<()> {
-        let callback = self.fetch_callback(Msg::Fetch);
+        let callback = JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error);
         self.fetcher.send_get(uri, callback)
     }
 
     pub fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) -> Result<()> {
-        let callback = self.fetch_callback(Msg::Fetch);
+        let callback = JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error);
         self.fetcher.send_post(uri, body, callback)
-    }
-
-    fn fetch_callback(&self, callback: impl Fn(DapResponse) -> Msg + 'static) -> Callback<StringResponse> {
-        self.link.callback(move |response: StringResponse| {
-            if response.status().is_success() {
-                match Fetcher::parse(response).context("Can't parse response") {
-                    Ok(response) => callback(response),
-                    Err(err) => Msg::Error(err),
-                }
-            } else {
-                Msg::Error(anyhow!(
-                    "Fetch status: {:?}, body: {:?}",
-                    response.status(),
-                    response.into_body()
-                ))
-            }
-        })
     }
 
     fn view_dap(&self, dap: &Dap) -> Html {
