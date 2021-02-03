@@ -4,6 +4,7 @@ members = [
     "dapla_common",
     "dapla_server",
     "dapla_wasm",
+    "dapla_yew",
     "examples/echo/client",
     "examples/echo/server",
     "examples/notes/client",
@@ -11,5 +12,5 @@ members = [
     "examples/notes/server",
 ]
 
-#[profile.release]
-#lto = true
+[profile.release]
+lto = true

@@ -711,6 +711,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dapla_common",
+ "dapla_yew",
  "serde 1.0.123",
  "serde_json",
  "yew",
@@ -749,6 +750,16 @@ dependencies = [
 [[package]]
 name = "dapla_wasm"
 version = "0.1.0"
+
+[[package]]
+name = "dapla_yew"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde 1.0.123",
+ "serde_json",
+ "yew",
+]
 
 [[package]]
 name = "darling"

@@ -5,16 +5,13 @@ use dapla_common::{
     api::{Response as CommonDapResponse, UpdateQuery},
     dap::{Dap as CommonDap, Permission},
 };
+use dapla_yew::fetch::JsonFetcher;
 use yew::{html, initialize, run_loop, services::ConsoleService, utils, App, Component, ComponentLink, Html};
 use yew_mdc_widgets::{
     auto_init,
     utils::dom::{select_exist_element, JsObjectAccess, JsValue},
     Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
 };
-
-use self::fetch::JsonFetcher;
-
-mod fetch;
 
 type Dap = CommonDap<String>;
 type DapResponse = CommonDapResponse<'static, String>;
