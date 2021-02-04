@@ -1,28 +1,29 @@
 #![recursion_limit = "256"]
 
-use anyhow::Error;
-use web_sys::HtmlInputElement;
-use yew::{
-    format::Nothing,
-    html, initialize, run_loop,
-    services::{
-        console::ConsoleService,
-        fetch::{FetchService, FetchTask, Request, Response},
-    },
-    App, Component, ComponentLink, Html,
-};
-use yew_mdc_widgets::{auto_init, utils::dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
+use std::iter::FromIterator;
+
+use anyhow::{anyhow, Context, Error};
+use dapla_yew::{JsonFetcher, MsgError, RawHtml};
+use notes_common::{Note, NoteContent, Response};
+use pulldown_cmark::{html as cmark_html, Options, Parser};
+use yew::{html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html};
+use yew_mdc_widgets::{auto_init, Card, CardContent, IconButton, MdcWidget, TopAppBar};
 
 struct Root {
     link: ComponentLink<Self>,
-    fetch_task: Option<FetchTask>,
-    responses: Vec<String>,
+    fetcher: JsonFetcher,
+    notes: Vec<Note>,
 }
 
 enum Msg {
-    Submit,
-    Fetch(String),
-    Error,
+    Fetch(Response),
+    Error(Error),
+}
+
+impl From<Error> for Msg {
+    fn from(err: Error) -> Self {
+        Self::Error(err)
+    }
 }
 
 impl Component for Root {
@@ -30,48 +31,34 @@ impl Component for Root {
     type Properties = ();
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
+        let mut fetcher = JsonFetcher::new();
+        fetcher
+            .send_get("/notes/list", JsonFetcher::callback(&link, Msg::Fetch, Msg::Error))
+            .context("Get notes list error")
+            .msg_error(&link);
+
         Self {
             link,
-            fetch_task: None,
-            responses: Vec::new(),
+            fetcher,
+            notes: Vec::new(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
-            Msg::Submit => {
-                if !self.fetch_task.is_some() {
-                    let uri = dom::select_exist_element::<HtmlInputElement>("#uri > input").value();
-                    if let Ok(request) = Request::get(format!("/notes/{}", uri)).body(Nothing) {
-                        if let Ok(task) = FetchService::fetch(
-                            request,
-                            self.link.callback(|response: Response<Result<String, Error>>| {
-                                if response.status().is_success() {
-                                    Msg::Fetch(response.into_body().unwrap_or_else(|_| String::new()))
-                                } else {
-                                    ConsoleService::error(&format!(
-                                        "Fetch status: {:?}, body: {:?}",
-                                        response.status(),
-                                        response.into_body()
-                                    ));
-                                    Msg::Error
-                                }
-                            }),
-                        )
-                        .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
-                        {
-                            self.fetch_task.replace(task);
-                        }
-                    }
-                }
-                false
-            }
-            Msg::Fetch(data) => {
-                self.fetch_task = None;
-                self.responses.push(data);
+            Msg::Fetch(Response::Notes(notes)) => {
+                self.notes = notes;
                 true
             }
-            Msg::Error => false,
+            Msg::Fetch(Response::Note(_)) => false,
+            Msg::Fetch(Response::Error(err)) => {
+                self.link.send_message(Msg::Error(anyhow!("{}", err)));
+                false
+            }
+            Msg::Error(err) => {
+                ConsoleService::error(&format!("{}", err));
+                true
+            }
         }
     }
 
@@ -82,13 +69,25 @@ impl Component for Root {
     fn view(&self) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
-            .title("Notes dap")
+            .title("Notes dap example")
             .enable_shadow_when_scroll_window();
 
-        let mut list = List::ul().divider();
-        for uri in self.responses.iter().rev() {
-            list = list.item(ListItem::new().text(uri)).divider();
-        }
+        let note_cards: Vec<_> = self
+            .notes
+            .iter()
+            .map(|note| {
+                Card::new(&note.name)
+                    .content(CardContent::primary_action(html! {
+                        <div class = "note-card__content">
+                            { cover(&note.content) }
+                        </div>
+                    }))
+                    .content(CardContent::actions().action_icons(Html::from_iter(vec![
+                        IconButton::new().class(CardContent::ACTION_ICON_CLASSES).icon("edit"),
+                        IconButton::new().class(CardContent::ACTION_ICON_CLASSES).toggle("star", "star_border"),
+                    ])))
+            })
+            .collect();
 
         html! {
             <>
@@ -97,17 +96,12 @@ impl Component for Root {
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
                             <h1 class = "title mdc-typography--headline5">{ "Notes" }</h1>
-                            <div class = "mdc-layout-grid">
+
+                            <div class = "notes mdc-layout-grid">
                                 <div class = "mdc-layout-grid__inner">
-                                    <div class = "mdc-layout-grid__cell mdc-layout-grid__cell--span-4 mdc-layout-grid__cell--align-bottom">
-                                        { TextField::filled().id("uri").class("expand").label("URI") }
-                                    </div>
-                                    <div class = "mdc-layout-grid__cell mdc-layout-grid__cell--span-1 mdc-layout-grid__cell--align-bottom">
-                                        { Button::raised().label("submit").on_click(self.link.callback(|_| Msg::Submit)) }
-                                    </div>
+                                    { for note_cards.into_iter().map(|card| html! { <div class = "mdc-layout-grid__cell">{ card }</div> }) }
                                 </div>
                             </div>
-                            { list }
                         </div>
                     </div>
                 </div>
@@ -118,6 +112,28 @@ impl Component for Root {
     fn rendered(&mut self, _first_render: bool) {
         auto_init();
     }
+}
+
+fn cover(content: &NoteContent) -> Html {
+    let mut html_output = String::new();
+    match content {
+        NoteContent::Preview(preview) => {
+            let parser = new_cmark_parser(preview.as_str());
+            cmark_html::push_html(&mut html_output, parser);
+        }
+        NoteContent::FullBody(body) => {
+            todo!();
+        }
+    }
+    html! { <RawHtml inner_html=html_output /> }
+}
+
+fn new_cmark_parser(source: &str) -> Parser {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+
+    Parser::new_ext(source, options)
 }
 
 fn main() {
