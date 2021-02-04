@@ -1,11 +1,11 @@
-use std::{convert::TryFrom, result::Result as StdResult};
+use std::convert::TryFrom;
 
 use anyhow::{anyhow, Context, Error, Result};
 use dapla_common::{
     api::{Response as CommonDapResponse, UpdateQuery},
     dap::{Dap as CommonDap, Permission},
 };
-use dapla_yew::fetch::JsonFetcher;
+use dapla_yew::{error::MsgError, fetch::JsonFetcher};
 use yew::{html, initialize, run_loop, services::ConsoleService, utils, App, Component, ComponentLink, Html};
 use yew_mdc_widgets::{
     auto_init,
@@ -15,27 +15,6 @@ use yew_mdc_widgets::{
 
 type Dap = CommonDap<String>;
 type DapResponse = CommonDapResponse<'static, String>;
-
-trait RootMsgError {
-    type Map;
-
-    fn msg_error(self, link: &ComponentLink<Root>);
-    fn msg_error_map(self, link: &ComponentLink<Root>) -> Self::Map;
-}
-
-impl<T> RootMsgError for Result<T> {
-    type Map = StdResult<T, ()>;
-
-    fn msg_error(self, link: &ComponentLink<Root>) {
-        if let Err(err) = self {
-            link.send_message(Msg::Error(err))
-        }
-    }
-
-    fn msg_error_map(self, link: &ComponentLink<Root>) -> Self::Map {
-        self.map_err(|err| link.send_message(Msg::Error(err)))
-    }
-}
 
 struct Root {
     daps: Vec<Dap>,
@@ -78,6 +57,12 @@ enum Msg {
     SwitchDap(String),
     UpdatePermission(PermissionUpdate),
     Error(Error),
+}
+
+impl From<Error> for Msg {
+    fn from(err: Error) -> Self {
+        Self::Error(err)
+    }
 }
 
 impl Component for Root {
