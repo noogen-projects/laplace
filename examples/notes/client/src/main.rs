@@ -79,7 +79,7 @@ impl Component for Root {
                 Card::new(&note.name)
                     .content(CardContent::primary_action(html! {
                         <div class = "note-card__content">
-                            { cover(&note.content) }
+                            { to_html(&note.content) }
                         </div>
                     }))
                     .content(CardContent::actions().action_icons(Html::from_iter(vec![
@@ -114,18 +114,13 @@ impl Component for Root {
     }
 }
 
-fn cover(content: &NoteContent) -> Html {
+fn to_html(content: &NoteContent) -> Html {
+    let parser = new_cmark_parser(content.content());
+
     let mut html_output = String::new();
-    match content {
-        NoteContent::Preview(preview) => {
-            let parser = new_cmark_parser(preview.as_str());
-            cmark_html::push_html(&mut html_output, parser);
-        }
-        NoteContent::FullBody(body) => {
-            todo!();
-        }
-    }
-    html! { <RawHtml inner_html=html_output /> }
+    cmark_html::push_html(&mut html_output, parser);
+
+    html! { <RawHtml inner_html = html_output /> }
 }
 
 fn new_cmark_parser(source: &str) -> Parser {
