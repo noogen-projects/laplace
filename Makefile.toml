@@ -1,0 +1,41 @@
+[config]
+default_to_workspace = false
+additional_profiles = ["debug"]
+
+
+[tasks.parse_params]
+script_runner = "@duckscript"
+script = "set_env APP ${1}"
+
+[tasks.parse_params.env]
+RUSTFLAGS = "-Copt-level=s"
+MODE = "release"
+ADDITIONAL = "--release"
+
+[tasks.parse_params.env.debug]
+RUSTFLAGS = ""
+MODE = "debug"
+ADDITIONAL = "--color=auto"
+
+
+[tasks.build_client]
+command = "cargo"
+args = ["build", "-p", "${APP}_client", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
+dependencies = ["parse_params"]
+
+[tasks.deploy_client]
+command = "wasm-bindgen"
+args = [
+    "--target",
+    "web",
+    "--no-typescript",
+    "--out-dir",
+    "daps/${APP}/static",
+    "--out-name",
+    "${APP}_client",
+    "target/wasm32-unknown-unknown/${MODE}/${APP}_client.wasm",
+]
+dependencies = ["parse_params"]
+
+[tasks.client]
+dependencies = ["build_client", "deploy_client"]
