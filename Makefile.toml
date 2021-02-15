@@ -15,13 +15,48 @@ ADDITIONAL = "--release"
 [tasks.parse_params.env.debug]
 RUSTFLAGS = ""
 MODE = "debug"
-ADDITIONAL = "--color=auto"
+ADDITIONAL = "--color=auto" # it's a stub
+
+
+[tasks.create_dap_dir]
+script_runner = "@duckscript"
+script = "mkdir daps/${APP}"
+dependencies = ["parse_params"]
+
+[tasks.copy_static]
+script_runner = "@duckscript"
+script = '''
+rm -r daps/${APP}/static
+cp examples/${APP}/static daps/${APP}/
+'''
+dependencies = ["create_dap_dir"]
+
+[tasks.copy_settings]
+script_runner = "@duckscript"
+script = '''
+rm daps/${APP}/settings.toml
+cp examples/${APP}/settings.toml daps/${APP}/settings.toml
+'''
+dependencies = ["create_dap_dir"]
 
 
 [tasks.build_client]
 command = "cargo"
 args = ["build", "-p", "${APP}_client", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
 dependencies = ["parse_params"]
+
+[tasks.build_server]
+command = "cargo"
+args = ["build", "-p", "${APP}_server", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
+dependencies = ["parse_params"]
+
+[tasks.build_server_wasi]
+env = { RUSTFLAGS = "${RUSTFLAGS} -C lto=no -Z wasi-exec-model=reactor" }
+toolchain = "nightly"
+command = "cargo"
+args = ["build", "-p", "${APP}_server", "--target", "wasm32-wasi", "${ADDITIONAL}"]
+dependencies = ["parse_params"]
+
 
 [tasks.deploy_client]
 command = "wasm-bindgen"
@@ -35,7 +70,30 @@ args = [
     "${APP}_client",
     "target/wasm32-unknown-unknown/${MODE}/${APP}_client.wasm",
 ]
-dependencies = ["parse_params"]
+dependencies = ["copy_static"]
+
+[tasks.deploy_server]
+script_runner = "@duckscript"
+script = '''
+rm daps/${APP}/${APP}_server.wasm
+cp target/wasm32-unknown-unknown/${MODE}/${APP}_server.wasm daps/${APP}/${APP}_server.wasm
+'''
+dependencies = ["copy_settings"]
+
+[tasks.deploy_server_wasi]
+script_runner = "@duckscript"
+script = '''
+rm daps/${APP}/${APP}_server.wasm
+cp target/wasm32-wasi/${MODE}/${APP}_server.wasm daps/${APP}/${APP}_server.wasm
+'''
+dependencies = ["copy_settings"]
+
 
 [tasks.client]
 dependencies = ["build_client", "deploy_client"]
+
+[tasks.server]
+dependencies = ["build_server", "deploy_server"]
+
+[tasks.wasi]
+dependencies = ["build_server_wasi", "deploy_server_wasi"]
