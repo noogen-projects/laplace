@@ -1,0 +1,79 @@
+.expand {
+    width: 100%;
+}
+
+.hidden {
+    display: none;
+}
+
+.notes {
+    background-color: #fcfcfd;
+}
+
+.note-card__content {
+    padding: 1rem;
+    color: rgba(0, 0, 0, .64);
+}
+
+#switch_mode {
+    float: right;
+    top: -10px;
+    left: 10px;
+}
+
+.lew-simple {
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif;
+}
+
+.lew-simple__textarea {
+    position: relative;
+    z-index: 0;
+    overflow: auto;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 10px 10px 0;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #000;
+    vertical-align: top;
+    font: 16px/1.8 Verdana,Geneva,sans-serif;
+    resize: vertical;
+}
+
+.lew-simple__toolbar {
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 5px 0;
+    list-style: none;
+    font-size: 16px;
+}
+
+.lew-simple__toolbar_item {
+    fill: #505357;
+    color: #505357;
+    padding: 0 5px;
+}
+
+.lew-simple__toolbar_item:hover {
+    fill: #0560d5;
+    color: #0560d5;
+}
+
+.lew-simple__tool_button {
+    vertical-align: middle;
+    white-space: nowrap;
+    line-height: normal;
+    border: 0;
+    background-color: transparent;
+    box-shadow: none;
+    padding: 4px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
