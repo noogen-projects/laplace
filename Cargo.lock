@@ -1381,8 +1381,8 @@ checksum = "3576a87f2ba00f6f106fdfcd16db1d698d648a26ad8e0573cad8537c3c362d2a"
 
 [[package]]
 name = "lew"
-version = "0.1.1"
-source = "git+https://github.com/noogen-projects/lew#6d36f3f08aa579b1b57a6a01c1850f354115a16c"
+version = "0.2.0"
+source = "git+https://github.com/noogen-projects/lew#a6990146d13813a26a336bb052cbd6b913c1c45d"
 dependencies = [
  "derive_more",
  "wasm-bindgen",

@@ -1,48 +1,43 @@
 #![recursion_limit = "256"]
 
-use std::{
-    iter::FromIterator,
-    ops::{Deref, DerefMut},
-};
+use std::{iter::FromIterator, ops::Deref};
 
 use anyhow::{anyhow, Context, Error};
 use dapla_yew::{JsonFetcher, MsgError, RawHtml};
 use lew::SimpleEditor;
 use notes_common::{Note, NoteContent, Response};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
-use web_sys::HtmlElement;
-use yew::{html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html};
+use web_sys::{Element, HtmlElement, HtmlTextAreaElement};
+use yew::{
+    html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
+};
 use yew_mdc_widgets::{
     auto_init,
     utils::dom::{self, JsObjectAccess},
     Button, Card, CardContent, CustomEvent, Dialog, IconButton, MdcWidget, TopAppBar,
 };
 
-struct ModifiableNote(Note);
-
-impl From<Note> for ModifiableNote {
-    fn from(note: Note) -> Self {
-        Self(note)
-    }
+struct FullNote {
+    note: Note,
+    is_modified: bool,
 }
 
-impl Deref for ModifiableNote {
-    type Target = Note;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl FullNote {
+    fn initial(note: Note) -> Self {
+        Self {
+            note,
+            is_modified: false,
+        }
     }
-}
 
-impl DerefMut for ModifiableNote {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    fn note_mut(&mut self) -> &mut Note {
+        self.is_modified = true;
+        &mut self.note
     }
-}
 
-enum FullNote {
-    Initial(Note),
-    Modifiable(ModifiableNote),
+    fn is_modified(&self) -> bool {
+        self.is_modified
+    }
 }
 
 impl Deref for FullNote {
@@ -50,8 +45,7 @@ impl Deref for FullNote {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Initial(note) => note,
-            Self::Modifiable(note) => &*note,
+            Self { note, .. } => note,
         }
     }
 }
@@ -75,6 +69,8 @@ enum Msg {
     OpenEditNote(String),
     ViewCurrentNote,
     EditCurrentNote,
+    EditContent(String),
+    Updated,
     Fetch(Response),
     Error(Error),
 }
@@ -108,6 +104,14 @@ impl Component for Root {
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
             Msg::OpenViewNote(name) => {
+                if let Some(index) = self.notes.iter().position(|note| note.name == name) {
+                    if self.notes[index].is_modified() {
+                        self.current_note_index = Some(index);
+                        self.link.send_message(Msg::ViewCurrentNote);
+                        return false;
+                    }
+                }
+
                 self.current_mode = Mode::View;
                 self.fetcher
                     .send_get(
@@ -119,6 +123,14 @@ impl Component for Root {
                 false
             }
             Msg::OpenEditNote(name) => {
+                if let Some(index) = self.notes.iter().position(|note| note.name == name) {
+                    if self.notes[index].is_modified() {
+                        self.current_note_index = Some(index);
+                        self.link.send_message(Msg::EditCurrentNote);
+                        return false;
+                    }
+                }
+
                 self.current_mode = Mode::Edit;
                 self.fetcher
                     .send_get(
@@ -131,46 +143,65 @@ impl Component for Root {
             }
             Msg::ViewCurrentNote => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
-                    let view_element = dom::get_exist_element_by_id::<HtmlElement>("note-dialog__view");
-                    view_element.set_inner_html(&to_view_inner_html(&note.content));
-                    view_element.class_list().remove_1("hidden").ok();
+                    dom::get_exist_element_by_id::<HtmlElement>("note-dialog__view").set_inner_html(
+                        &to_view_inner_html(&note.content.content().expect("Content should be present")),
+                    );
 
-                    let edit_element = dom::get_exist_element_by_id::<HtmlElement>("note-dialog__edit");
-                    if !edit_element.class_list().contains("hidden") {
-                        edit_element.class_list().add_1("hidden").ok();
+                    show_element("note-dialog__view");
+                    hide_element("note-dialog__edit");
+
+                    if note.is_modified() {
+                        show_element("save-note-button");
+                        show_element("discard-note-button");
+                    } else {
+                        hide_element("save-note-button");
+                        hide_element("discard-note-button");
                     }
 
-                    IconButton::set_on_by_id("switch_mode", false);
+                    IconButton::set_on_by_id("edit_mode", false);
                     Dialog::open_existing("note-dialog");
                 }
                 false
             }
             Msg::EditCurrentNote => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
-                    let textarea_element = dom::select_exist_element::<HtmlElement>("#note-dialog__edit > textarea");
-                    textarea_element.set_inner_html(note.content.content());
+                    dom::select_exist_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea")
+                        .set_value(note.content.content().expect("Content should be present"));
 
-                    let edit_element = dom::get_exist_element_by_id::<HtmlElement>("note-dialog__edit");
-                    edit_element.class_list().remove_1("hidden").ok();
+                    show_element("note-dialog__edit");
+                    hide_element("note-dialog__view");
 
-                    let view_element = dom::get_exist_element_by_id::<HtmlElement>("note-dialog__view");
-                    if !view_element.class_list().contains("hidden") {
-                        view_element.class_list().add_1("hidden").ok();
+                    if note.is_modified() {
+                        show_element("save-note-button");
+                        show_element("discard-note-button");
+                    } else {
+                        hide_element("save-note-button");
+                        hide_element("discard-note-button");
                     }
 
-                    IconButton::set_on_by_id("switch_mode", true);
+                    IconButton::set_on_by_id("edit_mode", true);
                     Dialog::open_existing("note-dialog");
                 }
                 false
             }
+            Msg::EditContent(content) => {
+                let index = self.current_note_index.expect("Index should be presented");
+                if !self.notes[index].is_modified() {
+                    show_element("save-note-button");
+                    show_element("discard-note-button");
+                }
+                self.notes[index].note_mut().content = NoteContent::FullBody(content);
+                false
+            }
+            Msg::Updated => true,
             Msg::Fetch(Response::Notes(notes)) => {
-                self.notes = notes.into_iter().map(FullNote::Initial).collect();
+                self.notes = notes.into_iter().map(FullNote::initial).collect();
                 true
             }
             Msg::Fetch(Response::Note(note)) => {
                 for (i, full_note) in self.notes.iter_mut().enumerate() {
                     if full_note.name == note.name {
-                        *full_note = FullNote::Initial(note);
+                        *full_note = FullNote::initial(note);
                         self.current_note_index = Some(i);
                         break;
                     }
@@ -214,7 +245,7 @@ impl Component for Root {
                             let name = note.name.clone();
                             move |_| Msg::OpenViewNote(name.clone())
                         })>
-                            { to_html(&note.content) }
+                            { to_preview_html(&note.content) }
                         </div>
                     }))
                     .content(CardContent::actions().action_icons(Html::from_iter(vec![
@@ -262,7 +293,7 @@ impl Component for Root {
 impl Root {
     fn view_note(&self) -> Html {
         let switch_mode_button = IconButton::new()
-            .id("switch_mode")
+            .id("edit_mode")
             .class(CardContent::ACTION_ICON_CLASSES)
             .toggle("visibility", "edit")
             .on_change(self.link.callback(|event: CustomEvent| {
@@ -279,21 +310,33 @@ impl Root {
                 <>
                     { switch_mode_button }
                     <div id = "note-dialog__view" class = "hidden"></div>
-                    <SimpleEditor id = "note-dialog__edit" class = "lew-simple hidden" placeholder = "Leave a content" cols = 40 />
+                    <SimpleEditor id = "note-dialog__edit" class = "lew-simple hidden" placeholder = "Leave a content"
+                            cols = 40 oninput = self.link.callback(|data: InputData| Msg::EditContent(data.value)) />
                 </>
             })
             .action(
                 Button::new()
-                    .label("Cancel")
+                    .id("save-note-button")
+                    .class("hidden")
+                    .label("Save")
                     .class(Dialog::BUTTON_CLASS)
                     .on_click(|_| Dialog::close_existing("note-dialog")),
             )
+            .action(
+                Button::new()
+                    .id("discard-note-button")
+                    .class("hidden")
+                    .label("Discard")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(|_| Dialog::close_existing("note-dialog")),
+            )
+            .on_closed(self.link.callback(|_| Msg::Updated))
             .into()
     }
 }
 
-fn to_view_inner_html(content: &NoteContent) -> String {
-    let parser = new_cmark_parser(content.content());
+fn to_view_inner_html(content: &str) -> String {
+    let parser = new_cmark_parser(content);
 
     let mut html = String::new();
     cmark_html::push_html(&mut html, parser);
@@ -301,8 +344,9 @@ fn to_view_inner_html(content: &NoteContent) -> String {
     html
 }
 
-fn to_html(content: &NoteContent) -> Html {
-    html! { <RawHtml inner_html = to_view_inner_html(content) /> }
+fn to_preview_html(content: &NoteContent) -> Html {
+    let preview = content.make_preview();
+    html! { <RawHtml inner_html = to_view_inner_html(&preview) /> }
 }
 
 fn new_cmark_parser(source: &str) -> Parser {
@@ -311,6 +355,20 @@ fn new_cmark_parser(source: &str) -> Parser {
     options.insert(Options::ENABLE_TASKLISTS);
 
     Parser::new_ext(source, options)
+}
+
+fn show_element(id: impl AsRef<str>) {
+    dom::get_exist_element_by_id::<Element>(id.as_ref())
+        .class_list()
+        .remove_1("hidden")
+        .ok();
+}
+
+fn hide_element(id: impl AsRef<str>) {
+    let element = dom::get_exist_element_by_id::<Element>(id.as_ref());
+    if !element.class_list().contains("hidden") {
+        element.class_list().add_1("hidden").ok();
+    }
 }
 
 fn main() {

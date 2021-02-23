@@ -3,12 +3,11 @@
 use std::{
     fs::{self, DirEntry, File},
     io::{self, BufRead, BufReader},
-    iter,
     path::Path,
 };
 
 use dapla_wasm::WasmSlice;
-use notes_common::{Note, NoteContent, Response};
+use notes_common::{make_preview, Note, NoteContent, Response};
 use thiserror::Error;
 
 #[no_mangle]
@@ -71,8 +70,6 @@ impl RequestOfGet {
 }
 
 fn process_notes() -> Result<Vec<Note>, NoteError> {
-    const PREVIEW_LIMIT: usize = 300;
-
     let mut notes = vec![];
 
     for entry in dir_entries()? {
@@ -87,30 +84,7 @@ fn process_notes() -> Result<Vec<Note>, NoteError> {
 
                 let file = File::open(entry.path())?;
                 let reader = BufReader::new(file);
-
-                let mut preview = String::new();
-                let mut preview_chars = 0;
-
-                let mut prev_line = String::new();
-                'lines: for line in reader.lines() {
-                    let line = line?;
-                    if line.starts_with("---") && prev_line.is_empty() {
-                        break 'lines;
-                    }
-
-                    for ch in line.chars().chain(iter::once('\n')) {
-                        preview.push(ch);
-                        preview_chars += 1;
-                        if preview_chars >= PREVIEW_LIMIT {
-                            break 'lines;
-                        }
-                    }
-                    prev_line = line;
-                }
-
-                if preview.ends_with("\n\n") {
-                    preview.remove(preview.len() - 1);
-                }
+                let preview = make_preview(reader.lines())?;
 
                 notes.push(Note {
                     name,
