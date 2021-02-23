@@ -7,19 +7,20 @@ use dapla_yew::{JsonFetcher, MsgError, RawHtml};
 use lew::SimpleEditor;
 use notes_common::{Note, NoteContent, Response};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
-use web_sys::{Element, HtmlElement, HtmlTextAreaElement};
+use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
 use yew::{
     html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
 };
 use yew_mdc_widgets::{
     auto_init,
     utils::dom::{self, JsObjectAccess},
-    Button, Card, CardContent, CustomEvent, Dialog, IconButton, MdcWidget, TopAppBar,
+    Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, MdcWidget, TextField, TopAppBar,
 };
 
 struct FullNote {
     note: Note,
     is_modified: bool,
+    is_new: bool,
 }
 
 impl FullNote {
@@ -27,6 +28,15 @@ impl FullNote {
         Self {
             note,
             is_modified: false,
+            is_new: false,
+        }
+    }
+
+    fn new(note: Note) -> Self {
+        Self {
+            note,
+            is_modified: true,
+            is_new: true,
         }
     }
 
@@ -37,6 +47,10 @@ impl FullNote {
 
     fn is_modified(&self) -> bool {
         self.is_modified
+    }
+
+    fn is_new(&self) -> bool {
+        self.is_new
     }
 }
 
@@ -55,26 +69,24 @@ struct Root {
     fetcher: JsonFetcher,
     notes: Vec<FullNote>,
     current_note_index: Option<usize>,
-    current_mode: Mode,
+    current_mode: Option<Mode>,
 }
 
 #[derive(PartialEq, Clone, Copy)]
 enum Mode {
     View,
     Edit,
-    Observe,
 }
 
 enum Msg {
     GetInitialNote(String),
-    OpenViewNote(String),
-    OpenEditNote(String),
-    ViewCurrentNote,
-    EditCurrentNote,
+    OpenNote(String, Mode),
+    OpenCurrentNote(Mode),
     EditContent(String),
     Updated,
     SaveChanges,
     DiscardChanges,
+    NewNote,
     Fetch(Response),
     Error(Error),
 }
@@ -101,7 +113,7 @@ impl Component for Root {
             fetcher,
             notes: Vec::new(),
             current_note_index: None,
-            current_mode: Mode::Observe,
+            current_mode: None,
         }
     }
 
@@ -117,13 +129,13 @@ impl Component for Root {
                     .msg_error(&self.link);
                 false
             }
-            Msg::OpenViewNote(name) => {
-                self.current_mode = Mode::View;
+            Msg::OpenNote(name, mode) => {
+                self.current_mode.replace(mode);
 
                 if let Some(index) = self.notes.iter().position(|note| note.name == name) {
                     if self.notes[index].is_modified() {
                         self.current_note_index = Some(index);
-                        self.link.send_message(Msg::ViewCurrentNote);
+                        self.link.send_message(Msg::OpenCurrentNote(mode));
                         return false;
                     }
                 }
@@ -131,28 +143,23 @@ impl Component for Root {
                 self.link.send_message(Msg::GetInitialNote(name));
                 false
             }
-            Msg::OpenEditNote(name) => {
-                self.current_mode = Mode::Edit;
-
-                if let Some(index) = self.notes.iter().position(|note| note.name == name) {
-                    if self.notes[index].is_modified() {
-                        self.current_note_index = Some(index);
-                        self.link.send_message(Msg::EditCurrentNote);
-                        return false;
-                    }
-                }
-
-                self.link.send_message(Msg::GetInitialNote(name));
-                false
-            }
-            Msg::ViewCurrentNote => {
+            Msg::OpenCurrentNote(mode) => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
-                    dom::get_exist_element_by_id::<HtmlElement>("note-dialog__view").set_inner_html(
-                        &to_view_inner_html(&note.content.content().expect("Content should be present")),
-                    );
-
-                    show_element("note-dialog__view");
-                    hide_element("note-dialog__edit");
+                    match mode {
+                        Mode::View => {
+                            dom::get_exist_element_by_id::<HtmlElement>("note-dialog__view").set_inner_html(
+                                &to_view_inner_html(note.content.content().expect("Content should be present")),
+                            );
+                            show_element("note-dialog__view");
+                            hide_element("note-dialog__edit");
+                        }
+                        Mode::Edit => {
+                            dom::select_exist_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea")
+                                .set_value(note.content.content().expect("Content should be present"));
+                            show_element("note-dialog__edit");
+                            hide_element("note-dialog__view");
+                        }
+                    }
 
                     if note.is_modified() {
                         show_element("save-note-button");
@@ -162,28 +169,7 @@ impl Component for Root {
                         hide_element("discard-note-button");
                     }
 
-                    IconButton::set_on_by_id("edit_mode", false);
-                    Dialog::open_existing("note-dialog");
-                }
-                false
-            }
-            Msg::EditCurrentNote => {
-                if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
-                    dom::select_exist_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea")
-                        .set_value(note.content.content().expect("Content should be present"));
-
-                    show_element("note-dialog__edit");
-                    hide_element("note-dialog__view");
-
-                    if note.is_modified() {
-                        show_element("save-note-button");
-                        show_element("discard-note-button");
-                    } else {
-                        hide_element("save-note-button");
-                        hide_element("discard-note-button");
-                    }
-
-                    IconButton::set_on_by_id("edit_mode", true);
+                    IconButton::set_on_by_id("edit_mode", mode == Mode::Edit);
                     Dialog::open_existing("note-dialog");
                 }
                 false
@@ -216,7 +202,30 @@ impl Component for Root {
             }
             Msg::DiscardChanges => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
-                    self.link.send_message(Msg::GetInitialNote(note.name.clone()));
+                    if note.is_new() {
+                        let index = self.current_note_index.unwrap();
+                        self.notes.remove(index);
+                        Dialog::close_existing("note-dialog");
+                    } else {
+                        self.link.send_message(Msg::GetInitialNote(note.name.clone()));
+                    }
+                }
+                false
+            }
+            Msg::NewNote => {
+                let name = dom::select_exist_element::<HtmlInputElement>("#new-note-name > input").value();
+
+                if !self.notes.iter().any(|note| note.name == name) {
+                    self.notes.push(FullNote::new(Note {
+                        name: name.clone(),
+                        content: NoteContent::FullBody(String::new()),
+                    }));
+                    self.notes.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+                    self.current_note_index = self.notes.iter().position(|note| note.name == name);
+                    self.current_mode.replace(Mode::Edit);
+
+                    Dialog::close_existing("add-note-dialog");
+                    self.link.send_message(Msg::OpenCurrentNote(Mode::Edit));
                 }
                 false
             }
@@ -233,15 +242,11 @@ impl Component for Root {
                     }
                 }
                 match self.current_mode {
-                    Mode::View => {
-                        self.link.send_message(Msg::ViewCurrentNote);
+                    Some(mode) => {
+                        self.link.send_message(Msg::OpenCurrentNote(mode));
                         false
                     }
-                    Mode::Edit => {
-                        self.link.send_message(Msg::EditCurrentNote);
-                        false
-                    }
-                    Mode::Observe => true,
+                    None => true,
                 }
             }
             Msg::Fetch(Response::Error(err)) => {
@@ -265,8 +270,6 @@ impl Component for Root {
             .title("Notes dap example")
             .enable_shadow_when_scroll_window();
 
-        let note_dialog = self.view_note();
-
         let note_cards: Vec<_> = self
             .notes
             .iter()
@@ -275,7 +278,7 @@ impl Component for Root {
                     .content(CardContent::primary_action(html! {
                         <div class = "note-card__content" onclick = self.link.callback({
                             let name = note.name.clone();
-                            move |_| Msg::OpenViewNote(name.clone())
+                            move |_| Msg::OpenNote(name.clone(), Mode::View)
                         })>
                             { to_preview_html(&note.content) }
                         </div>
@@ -286,7 +289,7 @@ impl Component for Root {
                                 .icon("edit")
                                 .on_click(self.link.callback({
                                     let name = note.name.clone();
-                                    move |_| Msg::OpenEditNote(name.clone())
+                                    move |_| Msg::OpenNote(name.clone(), Mode::Edit)
                                 })),
                             IconButton::new()
                                 .class(CardContent::ACTION_ICON_CLASSES)
@@ -294,6 +297,13 @@ impl Component for Root {
                         ])))
             })
             .collect();
+
+        let view_note_dialog = self.view_note_dialog();
+        let add_note_dialog = self.add_note_dialog();
+        let add_note_button = Fab::new()
+            .id("add-note-button")
+            .icon("add")
+            .on_click(|_| Dialog::open_existing("add-note-dialog"));
 
         html! {
             <>
@@ -303,13 +313,16 @@ impl Component for Root {
                         <div class = "content-container">
                             <h1 class = "title mdc-typography--headline5">{ "Notes" }</h1>
 
-                            { note_dialog }
+                            { view_note_dialog }
+                            { add_note_dialog }
 
                             <div class = "notes mdc-layout-grid">
                                 <div class = "mdc-layout-grid__inner">
                                     { for note_cards.into_iter().map(|card| html! { <div class = "mdc-layout-grid__cell">{ card }</div> }) }
                                 </div>
                             </div>
+
+                            { add_note_button }
                         </div>
                     </div>
                 </div>
@@ -323,16 +336,16 @@ impl Component for Root {
 }
 
 impl Root {
-    fn view_note(&self) -> Html {
+    fn view_note_dialog(&self) -> Html {
         let switch_mode_button = IconButton::new()
             .id("edit_mode")
             .class(CardContent::ACTION_ICON_CLASSES)
             .toggle("visibility", "edit")
             .on_change(self.link.callback(|event: CustomEvent| {
                 if event.detail().get("isOn").as_bool().unwrap_or(false) {
-                    Msg::EditCurrentNote
+                    Msg::OpenCurrentNote(Mode::Edit)
                 } else {
-                    Msg::ViewCurrentNote
+                    Msg::OpenCurrentNote(Mode::View)
                 }
             }));
 
@@ -361,6 +374,28 @@ impl Root {
                     .label("Discard")
                     .class(Dialog::BUTTON_CLASS)
                     .on_click(self.link.callback(|_| Msg::DiscardChanges)),
+            )
+            .on_closed(self.link.callback(|_| Msg::Updated))
+            .into()
+    }
+
+    fn add_note_dialog(&self) -> Html {
+        Dialog::new()
+            .id("add-note-dialog")
+            .content_item(TextField::filled().id("new-note-name").label("Note name"))
+            .action(
+                Button::new()
+                    .id("save-note-button")
+                    .label("Add")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(self.link.callback(|_| Msg::NewNote)),
+            )
+            .action(
+                Button::new()
+                    .id("discard-note-button")
+                    .label("Cancel")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(|_| Dialog::close_existing("add-note-dialog")),
             )
             .on_closed(self.link.callback(|_| Msg::Updated))
             .into()
