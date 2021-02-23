@@ -62,15 +62,18 @@ struct Root {
 enum Mode {
     View,
     Edit,
+    Observe,
 }
 
 enum Msg {
+    GetInitialNote(String),
     OpenViewNote(String),
     OpenEditNote(String),
     ViewCurrentNote,
     EditCurrentNote,
     EditContent(String),
     Updated,
+    DiscardChanges,
     Fetch(Response),
     Error(Error),
 }
@@ -97,12 +100,22 @@ impl Component for Root {
             fetcher,
             notes: Vec::new(),
             current_note_index: None,
-            current_mode: Mode::View,
+            current_mode: Mode::Observe,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
+            Msg::GetInitialNote(name) => {
+                self.fetcher
+                    .send_get(
+                        format!("/notes/note/{}", name),
+                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
+                    )
+                    .context("Get note error")
+                    .msg_error(&self.link);
+                false
+            }
             Msg::OpenViewNote(name) => {
                 if let Some(index) = self.notes.iter().position(|note| note.name == name) {
                     if self.notes[index].is_modified() {
@@ -113,13 +126,7 @@ impl Component for Root {
                 }
 
                 self.current_mode = Mode::View;
-                self.fetcher
-                    .send_get(
-                        format!("/notes/note/{}", name),
-                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                    )
-                    .context("Get note error")
-                    .msg_error(&self.link);
+                self.link.send_message(Msg::GetInitialNote(name));
                 false
             }
             Msg::OpenEditNote(name) => {
@@ -132,13 +139,7 @@ impl Component for Root {
                 }
 
                 self.current_mode = Mode::Edit;
-                self.fetcher
-                    .send_get(
-                        format!("/notes/note/{}", name),
-                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                    )
-                    .context("Get note error")
-                    .msg_error(&self.link);
+                self.link.send_message(Msg::GetInitialNote(name));
                 false
             }
             Msg::ViewCurrentNote => {
@@ -194,6 +195,12 @@ impl Component for Root {
                 false
             }
             Msg::Updated => true,
+            Msg::DiscardChanges => {
+                if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
+                    self.link.send_message(Msg::GetInitialNote(note.name.clone()));
+                }
+                false
+            }
             Msg::Fetch(Response::Notes(notes)) => {
                 self.notes = notes.into_iter().map(FullNote::initial).collect();
                 true
@@ -207,10 +214,16 @@ impl Component for Root {
                     }
                 }
                 match self.current_mode {
-                    Mode::View => self.link.send_message(Msg::ViewCurrentNote),
-                    Mode::Edit => self.link.send_message(Msg::EditCurrentNote),
+                    Mode::View => {
+                        self.link.send_message(Msg::ViewCurrentNote);
+                        false
+                    }
+                    Mode::Edit => {
+                        self.link.send_message(Msg::EditCurrentNote);
+                        false
+                    }
+                    Mode::Observe => true,
                 }
-                false
             }
             Msg::Fetch(Response::Error(err)) => {
                 self.link.send_message(Msg::Error(anyhow!("{}", err)));
@@ -328,7 +341,7 @@ impl Root {
                     .class("hidden")
                     .label("Discard")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(|_| Dialog::close_existing("note-dialog")),
+                    .on_click(self.link.callback(|_| Msg::DiscardChanges)),
             )
             .on_closed(self.link.callback(|_| Msg::Updated))
             .into()
