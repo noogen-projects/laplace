@@ -108,10 +108,22 @@ impl Dap {
                 .service(Files::new(&static_uri, static_dir).index_file(Self::index_file_name()));
 
             if !is_main_client {
-                config.service(web::scope(&root_uri).route(
-                    "/*",
-                    web::get().to(move |daps_service, request| handler::get(daps_service, request, name.clone())),
-                ));
+                config.service(
+                    web::scope(&root_uri)
+                        .route(
+                            "/*",
+                            web::get().to({
+                                let name = name.clone();
+                                move |daps_service, request| handler::get(daps_service, request, name.clone())
+                            }),
+                        )
+                        .route(
+                            "/*",
+                            web::post().to(move |daps_service, request, body| {
+                                handler::post(daps_service, request, body, name.clone())
+                            }),
+                        ),
+                );
             }
         }
     }

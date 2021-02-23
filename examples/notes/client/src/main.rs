@@ -73,6 +73,7 @@ enum Msg {
     EditCurrentNote,
     EditContent(String),
     Updated,
+    SaveChanges,
     DiscardChanges,
     Fetch(Response),
     Error(Error),
@@ -117,6 +118,8 @@ impl Component for Root {
                 false
             }
             Msg::OpenViewNote(name) => {
+                self.current_mode = Mode::View;
+
                 if let Some(index) = self.notes.iter().position(|note| note.name == name) {
                     if self.notes[index].is_modified() {
                         self.current_note_index = Some(index);
@@ -125,11 +128,12 @@ impl Component for Root {
                     }
                 }
 
-                self.current_mode = Mode::View;
                 self.link.send_message(Msg::GetInitialNote(name));
                 false
             }
             Msg::OpenEditNote(name) => {
+                self.current_mode = Mode::Edit;
+
                 if let Some(index) = self.notes.iter().position(|note| note.name == name) {
                     if self.notes[index].is_modified() {
                         self.current_note_index = Some(index);
@@ -138,7 +142,6 @@ impl Component for Root {
                     }
                 }
 
-                self.current_mode = Mode::Edit;
                 self.link.send_message(Msg::GetInitialNote(name));
                 false
             }
@@ -195,6 +198,22 @@ impl Component for Root {
                 false
             }
             Msg::Updated => true,
+            Msg::SaveChanges => {
+                if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
+                    if let Some(content) = note.content.content() {
+                        let uri = format!("/notes/note/{}", note.name.clone());
+                        let body = content.to_string();
+                        self.fetcher
+                            .send_post(uri, body, JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
+                            .context("Get note error")
+                            .msg_error(&self.link);
+                    } else {
+                        self.link
+                            .send_message(Msg::Error(anyhow!("Note content does not exist")));
+                    }
+                }
+                false
+            }
             Msg::DiscardChanges => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
                     self.link.send_message(Msg::GetInitialNote(note.name.clone()));
@@ -333,7 +352,7 @@ impl Root {
                     .class("hidden")
                     .label("Save")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(|_| Dialog::close_existing("note-dialog")),
+                    .on_click(self.link.callback(|_| Msg::SaveChanges)),
             )
             .action(
                 Button::new()

@@ -15,7 +15,9 @@ pub extern "C" fn get(uri_ptr: *const u8, uri_len: usize) -> WasmSlice {
     static mut RESULT: String = String::new();
 
     let uri = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(uri_ptr, uri_len)) };
-    let response = get_notes(uri);
+    let response = NotesRequest::parse(uri, None)
+        .map(|request| request.process())
+        .unwrap_or_else(Response::Error);
     let result = serde_json::to_string(&response).unwrap_or_else(Response::json_error_from);
 
     unsafe {
@@ -24,10 +26,21 @@ pub extern "C" fn get(uri_ptr: *const u8, uri_len: usize) -> WasmSlice {
     }
 }
 
-fn get_notes(uri: &str) -> Response {
-    RequestOfGet::parse(uri)
+#[no_mangle]
+pub extern "C" fn post(uri_ptr: *const u8, uri_len: usize, body_ptr: *const u8, body_len: usize) -> WasmSlice {
+    static mut RESULT: String = String::new();
+
+    let uri = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(uri_ptr, uri_len)) };
+    let content = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(body_ptr, body_len)) };
+    let response = NotesRequest::parse(uri, Some(content))
         .map(|request| request.process())
-        .unwrap_or_else(Response::Error)
+        .unwrap_or_else(Response::Error);
+    let result = serde_json::to_string(&response).unwrap_or_else(Response::json_error_from);
+
+    unsafe {
+        RESULT = result;
+        WasmSlice::from(RESULT.as_str())
+    }
 }
 
 #[derive(Debug, Error)]
@@ -45,25 +58,31 @@ impl From<NoteError> for Response {
     }
 }
 
-enum RequestOfGet {
-    Notes,
-    Note(String),
+enum NotesRequest {
+    GetNotes,
+    GetNote(String),
+    UpdateNote(String, String),
 }
 
-impl RequestOfGet {
-    fn parse(uri: &str) -> Result<Self, String> {
+impl NotesRequest {
+    fn parse(uri: &str, content: Option<&str>) -> Result<Self, String> {
         let chunks: Vec<_> = uri.split(|c| c == '/').collect();
         match &chunks[..] {
-            [.., "list"] => Ok(Self::Notes),
-            [.., "note", name] => Ok(Self::Note(name.to_string())),
+            [.., "list"] => Ok(Self::GetNotes),
+            [.., "note", name] => Ok(if let Some(content) = content {
+                Self::UpdateNote(name.to_string(), content.to_string())
+            } else {
+                Self::GetNote(name.to_string())
+            }),
             _ => Err(format!("Cannot parse uri {}, {:?}", uri, chunks)),
         }
     }
 
-    fn process(&self) -> Response {
+    fn process(self) -> Response {
         match self {
-            Self::Notes => process_notes().map(Response::Notes),
-            Self::Note(name) => process_note(name.as_str()).map(Response::Note),
+            Self::GetNotes => process_notes().map(Response::Notes),
+            Self::GetNote(name) => process_note(name.as_str()).map(Response::Note),
+            Self::UpdateNote(name, content) => process_update(name.as_str(), content).map(Response::Note),
         }
         .unwrap_or_else(Response::from)
     }
@@ -103,6 +122,12 @@ fn process_note(name: &str) -> Result<Note, NoteError> {
         name: name.to_string(),
         content: NoteContent::FullBody(content),
     })
+}
+
+fn process_update(name: &str, content: String) -> Result<Note, NoteError> {
+    let path = Path::new("/").join(format!("{}.md", name));
+    fs::write(path, content)?;
+    process_note(name)
 }
 
 fn dir_entries() -> io::Result<Vec<DirEntry>> {
