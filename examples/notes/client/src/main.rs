@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-use std::{iter::FromIterator, ops::Deref};
+use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Error};
 use dapla_yew::{JsonFetcher, MsgError, RawHtml};
@@ -11,10 +11,11 @@ use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
 use yew::{
     html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
 };
+use yew_mdc_widgets::utils::dom::get_exist_element_by_id;
 use yew_mdc_widgets::{
     auto_init,
     utils::dom::{self, JsObjectAccess},
-    Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, MdcWidget, TextField, TopAppBar,
+    Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, ListItem, MdcWidget, Menu, TextField, TopAppBar,
 };
 
 struct FullNote {
@@ -87,6 +88,7 @@ enum Msg {
     SaveChanges,
     DiscardChanges,
     NewNote,
+    DeleteNote(String),
     Fetch(Response),
     Error(Error),
 }
@@ -187,7 +189,7 @@ impl Component for Root {
             Msg::SaveChanges => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
                     if let Some(content) = note.content.content() {
-                        let uri = format!("/notes/note/{}", note.name.clone());
+                        let uri = format!("/notes/note/{}", note.name);
                         let body = content.to_string();
                         self.fetcher
                             .send_post(uri, body, JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
@@ -227,6 +229,14 @@ impl Component for Root {
                     Dialog::close_existing("add-note-dialog");
                     self.link.send_message(Msg::OpenCurrentNote(Mode::Edit));
                 }
+                false
+            }
+            Msg::DeleteNote(name) => {
+                let uri = format!("/notes/delete/{}", name);
+                self.fetcher
+                    .send_post(uri, "", JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
+                    .context("Delete note error")
+                    .msg_error(&self.link);
                 false
             }
             Msg::Fetch(Response::Notes(notes)) => {
@@ -274,6 +284,29 @@ impl Component for Root {
             .notes
             .iter()
             .map(|note| {
+                let note_name = note.name.clone();
+                let menu_id = format!("{}-menu", note_name);
+                let menu = Menu::new()
+                    .id(&menu_id)
+                    .item(ListItem::new().text("Rename").on_click(|_| ()))
+                    .divider()
+                    .item(ListItem::new().text("Delete").on_click(move |_| {
+                        get_exist_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
+                        Dialog::open_existing("confirm-delete-note-dialog");
+                    }));
+
+                let edit_button = IconButton::new()
+                    .class(CardContent::ACTION_ICON_CLASSES)
+                    .icon("edit")
+                    .on_click(self.link.callback({
+                        let name = note.name.clone();
+                        move |_| Msg::OpenNote(name.clone(), Mode::Edit)
+                    }));
+                let menu_button = IconButton::new()
+                    .class(CardContent::ACTION_ICON_CLASSES)
+                    .icon("more_horiz")
+                    .on_click(move |_| Menu::open_existing(&menu_id));
+
                 Card::new(&note.name)
                     .content(CardContent::primary_action(html! {
                         <div class = "note-card__content" onclick = self.link.callback({
@@ -283,23 +316,15 @@ impl Component for Root {
                             { to_preview_html(&note.content) }
                         </div>
                     }))
-                    .content(CardContent::actions().action_icons(Html::from_iter(vec![
-                            IconButton::new()
-                                .class(CardContent::ACTION_ICON_CLASSES)
-                                .icon("edit")
-                                .on_click(self.link.callback({
-                                    let name = note.name.clone();
-                                    move |_| Msg::OpenNote(name.clone(), Mode::Edit)
-                                })),
-                            IconButton::new()
-                                .class(CardContent::ACTION_ICON_CLASSES)
-                                .toggle("star", "star_border"),
-                        ])))
+                    .content(CardContent::actions().action_icons(html! { <>
+                        { edit_button } <div class = Menu::ANCHOR_CLASS>{ menu_button } { menu }</div>
+                    </> }))
             })
             .collect();
 
         let view_note_dialog = self.view_note_dialog();
         let add_note_dialog = self.add_note_dialog();
+        let confirm_delete_note_dialog = self.confirm_delete_note_dialog();
         let add_note_button = Fab::new()
             .id("add-note-button")
             .icon("add")
@@ -315,6 +340,7 @@ impl Component for Root {
 
                             { view_note_dialog }
                             { add_note_dialog }
+                            { confirm_delete_note_dialog }
 
                             <div class = "notes mdc-layout-grid">
                                 <div class = "mdc-layout-grid__inner">
@@ -398,6 +424,32 @@ impl Root {
                     .on_click(|_| Dialog::close_existing("add-note-dialog")),
             )
             .on_closed(self.link.callback(|_| Msg::Updated))
+            .into()
+    }
+
+    fn confirm_delete_note_dialog(&self) -> Html {
+        Dialog::new()
+            .id("confirm-delete-note-dialog")
+            .title(html! { <h2> { "Delete confirmation" } </h2> })
+            .content_item(html! {
+                <span> { "Do you want to delete \"" } <span id = "delete-note_name" /> { "\" note?" } </span>
+            })
+            .action(
+                Button::new()
+                    .label("Yes")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(self.link.callback(|_| {
+                        let name = get_exist_element_by_id::<HtmlElement>("delete-note_name").inner_html();
+                        Dialog::close_existing("confirm-delete-note-dialog");
+                        Msg::DeleteNote(name)
+                    })),
+            )
+            .action(
+                Button::new()
+                    .label("No")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(|_| Dialog::close_existing("confirm-delete-note-dialog")),
+            )
             .into()
     }
 }

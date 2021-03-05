@@ -3,7 +3,7 @@
 }
 
 .content-container {
-    padding-bottom: 2em;
+    padding-bottom: 5em;
 }
 
 .hidden {
@@ -27,7 +27,6 @@
 
 #add-note-button {
     float: right;
-    bottom: 1em;
 }
 
 .lew-simple {

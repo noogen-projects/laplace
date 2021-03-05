@@ -62,6 +62,7 @@ enum NotesRequest {
     GetNotes,
     GetNote(String),
     UpdateNote(String, String),
+    DeleteNote(String),
 }
 
 impl NotesRequest {
@@ -74,6 +75,7 @@ impl NotesRequest {
             } else {
                 Self::GetNote(name.to_string())
             }),
+            [.., "delete", name] => Ok(Self::DeleteNote(name.to_string())),
             _ => Err(format!("Cannot parse uri {}, {:?}", uri, chunks)),
         }
     }
@@ -83,6 +85,7 @@ impl NotesRequest {
             Self::GetNotes => process_notes().map(Response::Notes),
             Self::GetNote(name) => process_note(name.as_str()).map(Response::Note),
             Self::UpdateNote(name, content) => process_update(name.as_str(), content).map(Response::Note),
+            Self::DeleteNote(name) => process_delete(name.as_str()).map(Response::Notes),
         }
         .unwrap_or_else(Response::from)
     }
@@ -128,6 +131,12 @@ fn process_update(name: &str, content: String) -> Result<Note, NoteError> {
     let path = Path::new("/").join(format!("{}.md", name));
     fs::write(path, content)?;
     process_note(name)
+}
+
+fn process_delete(name: &str) -> Result<Vec<Note>, NoteError> {
+    let path = Path::new("/").join(format!("{}.md", name));
+    fs::remove_file(path)?;
+    process_notes()
 }
 
 fn dir_entries() -> io::Result<Vec<DirEntry>> {
