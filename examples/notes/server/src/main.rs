@@ -62,6 +62,7 @@ enum NotesRequest {
     GetNotes,
     GetNote(String),
     UpdateNote(String, String),
+    RenameNote(String, String),
     DeleteNote(String),
 }
 
@@ -75,6 +76,13 @@ impl NotesRequest {
             } else {
                 Self::GetNote(name.to_string())
             }),
+            [.., "rename", name] => {
+                if let Some(content) = content {
+                    Ok(Self::RenameNote(name.to_string(), content.trim().to_string()))
+                } else {
+                    Err(format!("New name for '{}' not specified", name))
+                }
+            }
             [.., "delete", name] => Ok(Self::DeleteNote(name.to_string())),
             _ => Err(format!("Cannot parse uri {}, {:?}", uri, chunks)),
         }
@@ -85,6 +93,7 @@ impl NotesRequest {
             Self::GetNotes => process_notes().map(Response::Notes),
             Self::GetNote(name) => process_note(name.as_str()).map(Response::Note),
             Self::UpdateNote(name, content) => process_update(name.as_str(), content).map(Response::Note),
+            Self::RenameNote(name, new_name) => process_rename(name.as_str(), new_name.as_str()).map(Response::Notes),
             Self::DeleteNote(name) => process_delete(name.as_str()).map(Response::Notes),
         }
         .unwrap_or_else(Response::from)
@@ -136,6 +145,17 @@ fn process_update(name: &str, content: String) -> Result<Note, NoteError> {
 fn process_delete(name: &str) -> Result<Vec<Note>, NoteError> {
     let path = Path::new("/").join(format!("{}.md", name));
     fs::remove_file(path)?;
+    process_notes()
+}
+
+fn process_rename(name: &str, new_name: &str) -> Result<Vec<Note>, NoteError> {
+    let from_path = Path::new("/").join(format!("{}.md", name));
+    let to_path = Path::new("/").join(format!("{}.md", new_name));
+
+    // todo: rename does not work :(
+    fs::copy(&from_path, to_path)?;
+    fs::remove_file(from_path)?;
+
     process_notes()
 }
 

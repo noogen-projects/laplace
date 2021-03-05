@@ -11,7 +11,6 @@ use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
 use yew::{
     html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
 };
-use yew_mdc_widgets::utils::dom::get_exist_element_by_id;
 use yew_mdc_widgets::{
     auto_init,
     utils::dom::{self, JsObjectAccess},
@@ -88,6 +87,7 @@ enum Msg {
     SaveChanges,
     DiscardChanges,
     NewNote,
+    RenameNote(String, String),
     DeleteNote(String),
     Fetch(Response),
     Error(Error),
@@ -231,6 +231,14 @@ impl Component for Root {
                 }
                 false
             }
+            Msg::RenameNote(name, new_name) => {
+                let uri = format!("/notes/rename/{}", name);
+                self.fetcher
+                    .send_post(uri, new_name, JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
+                    .context("Rename note error")
+                    .msg_error(&self.link);
+                false
+            }
             Msg::DeleteNote(name) => {
                 let uri = format!("/notes/delete/{}", name);
                 self.fetcher
@@ -284,15 +292,25 @@ impl Component for Root {
             .notes
             .iter()
             .map(|note| {
-                let note_name = note.name.clone();
-                let menu_id = format!("{}-menu", note_name);
+                let menu_id = format!("{}-menu", note.name);
                 let menu = Menu::new()
                     .id(&menu_id)
-                    .item(ListItem::new().text("Rename").on_click(|_| ()))
+                    .item(ListItem::new().text("Rename").on_click({
+                        let note_name = note.name.clone();
+                        move |_| {
+                            let input = dom::select_exist_element::<HtmlInputElement>("#note-new-name > input");
+                            input.set_value(&note_name);
+                            input.dataset().set("note_name", &note_name).ok();
+                            Dialog::open_existing("rename-note-dialog");
+                        }
+                    }))
                     .divider()
-                    .item(ListItem::new().text("Delete").on_click(move |_| {
-                        get_exist_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
-                        Dialog::open_existing("confirm-delete-note-dialog");
+                    .item(ListItem::new().text("Delete").on_click({
+                        let note_name = note.name.clone();
+                        move |_| {
+                            dom::get_exist_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
+                            Dialog::open_existing("confirm-delete-note-dialog");
+                        }
                     }));
 
                 let edit_button = IconButton::new()
@@ -325,6 +343,7 @@ impl Component for Root {
         let view_note_dialog = self.view_note_dialog();
         let add_note_dialog = self.add_note_dialog();
         let confirm_delete_note_dialog = self.confirm_delete_note_dialog();
+        let rename_note_dialog = self.rename_note_dialog();
         let add_note_button = Fab::new()
             .id("add-note-button")
             .icon("add")
@@ -341,6 +360,7 @@ impl Component for Root {
                             { view_note_dialog }
                             { add_note_dialog }
                             { confirm_delete_note_dialog }
+                            { rename_note_dialog }
 
                             <div class = "notes mdc-layout-grid">
                                 <div class = "mdc-layout-grid__inner">
@@ -439,7 +459,7 @@ impl Root {
                     .label("Yes")
                     .class(Dialog::BUTTON_CLASS)
                     .on_click(self.link.callback(|_| {
-                        let name = get_exist_element_by_id::<HtmlElement>("delete-note_name").inner_html();
+                        let name = dom::get_exist_element_by_id::<HtmlElement>("delete-note_name").inner_html();
                         Dialog::close_existing("confirm-delete-note-dialog");
                         Msg::DeleteNote(name)
                     })),
@@ -449,6 +469,36 @@ impl Root {
                     .label("No")
                     .class(Dialog::BUTTON_CLASS)
                     .on_click(|_| Dialog::close_existing("confirm-delete-note-dialog")),
+            )
+            .into()
+    }
+
+    fn rename_note_dialog(&self) -> Html {
+        Dialog::new()
+            .id("rename-note-dialog")
+            .content_item(TextField::filled().id("note-new-name").label("Note name"))
+            .action(
+                Button::new()
+                    .id("rename-note-button")
+                    .label("Rename")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(self.link.callback(|_| {
+                        let input = dom::select_exist_element::<HtmlInputElement>("#note-new-name > input");
+
+                        if let Some(name) = input.dataset().get("note_name") {
+                            let new_name = input.value();
+                            Dialog::close_existing("rename-note-dialog");
+                            Msg::RenameNote(name, new_name)
+                        } else {
+                            Msg::Error(anyhow!("Old note name not found"))
+                        }
+                    })),
+            )
+            .action(
+                Button::new()
+                    .label("Cancel")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(|_| Dialog::close_existing("rename-note-dialog")),
             )
             .into()
     }
