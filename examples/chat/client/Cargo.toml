@@ -1,0 +1,21 @@
+[package]
+name = "chat_client"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/noogen-projects/dapla"
+description = "The Chat d-app example"
+
+[dependencies]
+anyhow = "1.0.38"
+yew = { version = "0.17.4", features = ["web_sys"] }
+yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
+web-sys = { version = "0.3.46", features = ["Window", "Document", "HtmlElement", "HtmlInputElement"] }
+libp2p-core = "0.27.1"
+bs58 = "0.4.0"
+getrandom = { version = "0.1.16", features = ["wasm-bindgen"] }

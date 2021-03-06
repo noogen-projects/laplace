@@ -1,0 +1,7 @@
+[application]
+title = "Chat"
+enabled = true
+
+[permissions]
+required = ["http"]
+allowed = ["http"]

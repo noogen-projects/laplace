@@ -5,6 +5,8 @@ members = [
     "dapla_server",
     "dapla_wasm",
     "dapla_yew",
+    "examples/chat/client",
+    "examples/chat/server",
     "examples/echo/client",
     "examples/echo/server",
     "examples/notes/client",

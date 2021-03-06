@@ -1,0 +1,22 @@
+.expand {
+    width: 100%;
+}
+
+.sign-in-form {
+    max-width: 470px;
+    margin: auto;
+}
+
+.sign-in-form .mdc-list-item {
+    cursor: default;
+    padding: 10px;
+}
+
+.sign-in-actions {
+    position: fixed;
+    right: 0;
+}
+
+.sign-in-actions > .mdc-button {
+    margin-left: 10px;
+}

@@ -1,0 +1,18 @@
+[package]
+name = "chat_server"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/noogen-projects/dapla"
+description = "The Chat d-app example"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dapla_wasm = { path = "../../../dapla_wasm" }
