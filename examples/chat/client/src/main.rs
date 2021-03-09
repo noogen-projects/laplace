@@ -1,19 +1,44 @@
 #![recursion_limit = "256"]
 
-use anyhow::Error;
-use libp2p_core::identity::ed25519::Keypair;
+use anyhow::{anyhow, Context, Error};
+use dapla_yew::{JsonFetcher, MsgError, RawHtml};
+use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use web_sys::HtmlElement;
 use yew::{
     html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
 };
 use yew_mdc_widgets::{auto_init, utils::dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
 
+struct Keys {
+    keypair: Keypair,
+    public_key: String,
+    secret_key: String,
+}
+
+struct ChatState {
+    keys: Keys,
+    peer_id: PeerId,
+}
+
+enum State {
+    SignIn,
+    Chat(ChatState),
+}
+
 struct Root {
     link: ComponentLink<Self>,
+    state: State,
 }
 
 enum Msg {
     SignIn,
+    Error(Error),
+}
+
+impl From<Error> for Msg {
+    fn from(err: Error) -> Self {
+        Self::Error(err)
+    }
 }
 
 impl Component for Root {
@@ -21,12 +46,47 @@ impl Component for Root {
     type Properties = ();
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        Self { link }
+        Self {
+            link,
+            state: State::SignIn,
+        }
     }
 
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
-            Msg::SignIn => false,
+            Msg::SignIn => {
+                let public_key = TextField::value("public-key");
+                let secret_key = TextField::value("secret-key");
+
+                if let Ok(keypair) = (|| {
+                    let mut bytes = bs58::decode(&secret_key)
+                        .into_vec()
+                        .context("Decode secret key error")?;
+                    bytes.extend_from_slice(
+                        &bs58::decode(&public_key)
+                            .into_vec()
+                            .context("Decode public key error")?,
+                    );
+                    Keypair::decode(&mut bytes).context("Decode keypair error")
+                })()
+                .msg_error_map(&self.link)
+                {
+                    let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
+                    self.state = State::Chat(ChatState {
+                        keys: Keys {
+                            keypair,
+                            public_key,
+                            secret_key,
+                        },
+                        peer_id,
+                    });
+                }
+                true
+            }
+            Msg::Error(err) => {
+                ConsoleService::error(&format!("{}", err));
+                true
+            }
         }
     }
 
@@ -35,10 +95,15 @@ impl Component for Root {
     }
 
     fn view(&self) -> Html {
-        let top_app_bar = TopAppBar::new()
+        let mut top_app_bar = TopAppBar::new()
             .id("top-app-bar")
             .title("Chat dap")
             .enable_shadow_when_scroll_window();
+
+        let content = match &self.state {
+            State::SignIn => self.view_sign_in(),
+            State::Chat(state) => self.view_chat(state),
+        };
 
         html! {
             <>
@@ -46,7 +111,7 @@ impl Component for Root {
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
-                            { self.view_sign_in() }
+                            { content }
                         </div>
                     </div>
                 </div>
@@ -85,7 +150,7 @@ impl Root {
 
         let sign_in_form = List::simple_ul().items(vec![
             ListItem::simple().child(html! {
-                <span class = "mdc-typography--overline">{ "Enter or generate keypair" }</span>
+                <span class = "mdc-typography--overline">{ "Enter or generate a keypair" }</span>
             }),
             ListItem::simple().child(
                 TextField::outlined()
@@ -135,6 +200,16 @@ impl Root {
             <div class = "sign-in-form">
                 { sign_in_form }
             </div>
+        }
+    }
+
+    fn view_chat(&self, state: &ChatState) -> Html {
+        html! {
+            <>
+                <div>{ "Peer ID: " } { &state.peer_id }</div>
+                <div>{ "Public: " } { &state.keys.public_key }</div>
+                <div>{ "Secret: " } { &state.keys.secret_key }</div>
+            </>
         }
     }
 }

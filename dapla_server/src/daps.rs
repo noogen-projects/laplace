@@ -153,6 +153,7 @@ impl Dap {
                         .alias("/")
                         .read(is_allow_read)
                         .write(is_allow_write)
+                        // todo: why this works always as true?
                         .create(is_allow_write)
                 })?
                 .finalize()?;
