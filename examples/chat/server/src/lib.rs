@@ -1,13 +1,13 @@
 use dapla_wasm::WasmSlice;
+pub use dapla_wasm::{alloc, dealloc};
 
 #[no_mangle]
-pub fn get(uri_ptr: *const u8, uri_len: usize) -> WasmSlice {
-    static mut RESULT: String = String::new();
+pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
+    WasmSlice::from(do_get(uri.into_string()))
+}
 
-    let uri = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(uri_ptr, uri_len)) };
-    unsafe {
-        RESULT = String::from("Echo ");
-        RESULT.push_str(uri);
-        WasmSlice::from(RESULT.as_str())
-    }
+fn do_get(uri: String) -> String {
+    let mut response = String::from("Echo ");
+    response.push_str(&uri);
+    response
 }

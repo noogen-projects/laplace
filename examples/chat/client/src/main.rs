@@ -95,7 +95,7 @@ impl Component for Root {
     }
 
     fn view(&self) -> Html {
-        let mut top_app_bar = TopAppBar::new()
+        let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
             .title("Chat dap")
             .enable_shadow_when_scroll_window();

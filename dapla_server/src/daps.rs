@@ -15,10 +15,11 @@ use serde::{Deserialize, Serialize};
 use wasmer::{imports, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
-pub use self::{manager::*, service::*, settings::*};
+pub use self::{instance::*, manager::*, service::*, settings::*};
 use crate::error::ServerResult;
 
 pub mod handler;
+mod instance;
 mod manager;
 mod service;
 mod settings;

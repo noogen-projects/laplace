@@ -7,40 +7,32 @@ use std::{
 };
 
 use dapla_wasm::WasmSlice;
+pub use dapla_wasm::{alloc, dealloc};
 use notes_common::{make_preview, Note, NoteContent, Response};
 use thiserror::Error;
 
 #[no_mangle]
-pub extern "C" fn get(uri_ptr: *const u8, uri_len: usize) -> WasmSlice {
-    static mut RESULT: String = String::new();
+pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
+    WasmSlice::from(do_get(uri.into_string()))
+}
 
-    let uri = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(uri_ptr, uri_len)) };
-    let response = NotesRequest::parse(uri, None)
+fn do_get(uri: String) -> String {
+    let response = NotesRequest::parse(&uri, None)
         .map(|request| request.process())
         .unwrap_or_else(Response::Error);
-    let result = serde_json::to_string(&response).unwrap_or_else(Response::json_error_from);
-
-    unsafe {
-        RESULT = result;
-        WasmSlice::from(RESULT.as_str())
-    }
+    serde_json::to_string(&response).unwrap_or_else(Response::json_error_from)
 }
 
 #[no_mangle]
-pub extern "C" fn post(uri_ptr: *const u8, uri_len: usize, body_ptr: *const u8, body_len: usize) -> WasmSlice {
-    static mut RESULT: String = String::new();
+pub unsafe extern "C" fn post(uri: WasmSlice, body: WasmSlice) -> WasmSlice {
+    WasmSlice::from(do_post(uri.into_string(), body.into_string()))
+}
 
-    let uri = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(uri_ptr, uri_len)) };
-    let content = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(body_ptr, body_len)) };
-    let response = NotesRequest::parse(uri, Some(content))
+fn do_post(uri: String, body: String) -> String {
+    let response = NotesRequest::parse(&uri, Some(&body))
         .map(|request| request.process())
         .unwrap_or_else(Response::Error);
-    let result = serde_json::to_string(&response).unwrap_or_else(Response::json_error_from);
-
-    unsafe {
-        RESULT = result;
-        WasmSlice::from(RESULT.as_str())
-    }
+    serde_json::to_string(&response).unwrap_or_else(Response::json_error_from)
 }
 
 #[derive(Debug, Error)]
@@ -138,12 +130,14 @@ fn process_note(name: &str) -> Result<Note, NoteError> {
 
 fn process_update(name: &str, content: String) -> Result<Note, NoteError> {
     let path = Path::new("/").join(format!("{}.md", name));
+
     fs::write(path, content)?;
     process_note(name)
 }
 
 fn process_delete(name: &str) -> Result<Vec<Note>, NoteError> {
     let path = Path::new("/").join(format!("{}.md", name));
+
     fs::remove_file(path)?;
     process_notes()
 }
@@ -152,10 +146,7 @@ fn process_rename(name: &str, new_name: &str) -> Result<Vec<Note>, NoteError> {
     let from_path = Path::new("/").join(format!("{}.md", name));
     let to_path = Path::new("/").join(format!("{}.md", new_name));
 
-    // todo: rename does not work :(
-    fs::copy(&from_path, to_path)?;
-    fs::remove_file(from_path)?;
-
+    fs::rename(from_path, to_path)?;
     process_notes()
 }
 

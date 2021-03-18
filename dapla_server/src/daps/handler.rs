@@ -1,9 +1,12 @@
 use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
 use dapla_wasm::WasmSlice;
-use wasmer::{Array, WasmPtr};
+use wasmer::{Array, Instance, Memory, WasmPtr};
 
-use crate::{daps::DapsService, error::ServerError};
+use crate::{
+    daps::{DapInstance, DapsService},
+    error::{ServerError, ServerResult},
+};
 
 pub async fn index_file(daps_service: web::Data<DapsService>, request: HttpRequest, dap_name: String) -> HttpResponse {
     daps_service
@@ -23,19 +26,16 @@ pub async fn get(daps_service: web::Data<DapsService>, request: HttpRequest, dap
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
             let instance = daps_manager.instance(&dap_name)?;
             let uri = request.path();
-
             let memory = instance.exports.get_memory("memory")?;
-            for (byte, cell) in uri.bytes().zip(memory.view::<u8>()[0..uri.len()].iter()) {
-                cell.set(byte);
-            }
+            let get_fn = instance.exports.get_function("get")?.native::<u64, u64>()?;
 
-            let fn_get = instance.exports.get_function("get")?.native::<(u32, u32), u64>()?;
-            let result = WasmSlice::from(fn_get.call(0, uri.len() as _)?);
+            let uri_arg = unsafe {
+                let uri_offset = instance.copy_to(&memory, uri.as_ptr(), uri.len())?;
+                WasmSlice::from((uri_offset, uri.len() as _))
+            };
 
-            WasmPtr::<u8, Array>::new(result.ptr())
-                .get_utf8_string(memory, result.len())
-                .ok_or(ServerError::ResultNotParsed)
-                .map(|response| HttpResponse::Ok().body(response))
+            let response = WasmSlice::from(get_fn.call(uri_arg.into())?);
+            to_string_response(response, &instance, &memory)
         })
         .await
 }
@@ -51,28 +51,38 @@ pub async fn post(
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
             let instance = daps_manager.instance(&dap_name)?;
             let uri = request.path();
-
             let memory = instance.exports.get_memory("memory")?;
-            for (byte, cell) in uri.bytes().zip(memory.view::<u8>()[0..uri.len()].iter()) {
-                cell.set(byte);
-            }
-            for (byte, cell) in body
-                .bytes()
-                .zip(memory.view::<u8>()[uri.len()..(uri.len() + body.len())].iter())
-            {
-                cell.set(byte);
-            }
+            let post_fn = instance.exports.get_function("post")?.native::<(u64, u64), u64>()?;
 
-            let fn_post = instance
-                .exports
-                .get_function("post")?
-                .native::<(u32, u32, u32, u32), u64>()?;
-            let result = WasmSlice::from(fn_post.call(0, uri.len() as _, uri.len() as _, body.len() as _)?);
+            let uri_arg = unsafe {
+                let uri_offset = instance.copy_to(&memory, uri.as_ptr(), uri.len())?;
+                WasmSlice::from((uri_offset, uri.len() as _))
+            };
+            let body_arg = unsafe {
+                let body_offset = instance.copy_to(&memory, body.as_ptr(), body.len())?;
+                WasmSlice::from((body_offset, body.len() as _))
+            };
 
-            WasmPtr::<u8, Array>::new(result.ptr())
-                .get_utf8_string(memory, result.len())
-                .ok_or(ServerError::ResultNotParsed)
-                .map(|response| HttpResponse::Ok().body(response))
+            let response = WasmSlice::from(post_fn.call(uri_arg.into(), body_arg.into())?);
+            to_string_response(response, &instance, &memory)
         })
         .await
+}
+
+fn to_string_response(response: WasmSlice, instance: &Instance, memory: &Memory) -> ServerResult<HttpResponse> {
+    if response.len() as u64 <= memory.data_size() - response.ptr() as u64 {
+        let data = unsafe { instance.move_from(memory, response.ptr(), response.len() as _)? };
+
+        String::from_utf8(data)
+            .map_err(|_| ServerError::ResultNotParsed)
+            .map(|response| HttpResponse::Ok().body(response))
+    } else {
+        log::error!(
+            "Response ptr = {}, len = {}, but memory data size = {}",
+            response.ptr(),
+            response.len(),
+            memory.data_size()
+        );
+        Err(ServerError::WrongResultLength)
+    }
 }

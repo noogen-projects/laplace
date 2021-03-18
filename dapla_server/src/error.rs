@@ -6,7 +6,7 @@ use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 use wasmer_wasi::{WasiError, WasiStateCreationError};
 
-use crate::daps::DapSettingsError;
+use crate::daps::{DapInstanceError, DapSettingsError};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -57,8 +57,14 @@ pub enum ServerError {
     #[error("Dap instantiate error: {0}")]
     DapInstantiateFail(#[from] InstantiationError),
 
+    #[error("Wasm result value has wrong data length")]
+    WrongResultLength,
+
     #[error("Wasm result value cannot be parsed")]
     ResultNotParsed,
+
+    #[error("Dap instance operation error: {0}")]
+    DapInstanceFail(#[from] DapInstanceError),
 }
 
 impl ResponseError for ServerError {}
