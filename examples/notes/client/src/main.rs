@@ -350,29 +350,27 @@ impl Component for Root {
             .on_click(|_| Dialog::open_existing("add-note-dialog"));
 
         html! {
-            <>
-                <div class = "app-content">
-                    { top_app_bar }
-                    <div class = "mdc-top-app-bar--fixed-adjust">
-                        <div class = "content-container">
-                            <h1 class = "title mdc-typography--headline5">{ "Notes" }</h1>
+            <div class = "app-content">
+                { top_app_bar }
+                <div class = "mdc-top-app-bar--fixed-adjust">
+                    <div class = "content-container">
+                        <h1 class = "title mdc-typography--headline5">{ "Notes" }</h1>
 
-                            { view_note_dialog }
-                            { add_note_dialog }
-                            { confirm_delete_note_dialog }
-                            { rename_note_dialog }
+                        { view_note_dialog }
+                        { add_note_dialog }
+                        { confirm_delete_note_dialog }
+                        { rename_note_dialog }
 
-                            <div class = "notes mdc-layout-grid">
-                                <div class = "mdc-layout-grid__inner">
-                                    { for note_cards.into_iter().map(|card| html! { <div class = "mdc-layout-grid__cell">{ card }</div> }) }
-                                </div>
+                        <div class = "notes mdc-layout-grid">
+                            <div class = "mdc-layout-grid__inner">
+                                { for note_cards.into_iter().map(|card| html! { <div class = "mdc-layout-grid__cell">{ card }</div> }) }
                             </div>
-
-                            { add_note_button }
                         </div>
+
+                        { add_note_button }
                     </div>
                 </div>
-            </>
+            </div>
         }
     }
 
