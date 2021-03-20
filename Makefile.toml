@@ -27,7 +27,9 @@ dependencies = ["parse_params"]
 script_runner = "@duckscript"
 script = '''
 rm -r daps/${APP}/static
-cp examples/${APP}/static daps/${APP}/
+if not eq ${APP} "dapla"
+    cp examples/${APP}/static daps/${APP}/
+end
 '''
 dependencies = ["create_dap_dir"]
 
