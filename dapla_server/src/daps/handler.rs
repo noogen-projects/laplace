@@ -1,7 +1,7 @@
 use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
 use dapla_wasm::WasmSlice;
-use wasmer::{Array, Instance, Memory, WasmPtr};
+use wasmer::{Instance, Memory};
 
 use crate::{
     daps::{DapInstance, DapsService},

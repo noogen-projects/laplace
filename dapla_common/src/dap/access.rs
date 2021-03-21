@@ -21,6 +21,9 @@ pub enum Permission {
 
     #[strum(serialize = "tcp")]
     Tcp,
+
+    #[strum(serialize = "database")]
+    Database,
 }
 
 impl Permission {

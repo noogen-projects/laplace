@@ -3533,9 +3533,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.62"
+version = "1.0.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea1c6153794552ea7cf7cf63b1231a25de00ec90db326ba6264440fa08e31486"
+checksum = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
 dependencies = [
  "itoa",
  "ryu",
@@ -3996,6 +3996,35 @@ name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
+
+[[package]]
+name = "todo_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dapla_yew",
+ "strum",
+ "todo_common",
+ "web-sys",
+ "yew",
+]
+
+[[package]]
+name = "todo_common"
+version = "0.1.0"
+dependencies = [
+ "serde 1.0.123",
+]
+
+[[package]]
+name = "todo_server"
+version = "0.1.0"
+dependencies = [
+ "dapla_wasm",
+ "serde_json",
+ "thiserror",
+ "todo_common",
+]
 
 [[package]]
 name = "tokio"

@@ -1,0 +1,7 @@
+[application]
+title = "Todo"
+enabled = true
+
+[permissions]
+required = ["database", "http"]
+allowed = ["database", "http"]

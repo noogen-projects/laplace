@@ -12,6 +12,9 @@ members = [
     "examples/notes/client",
     "examples/notes/common",
     "examples/notes/server",
+    "examples/todo/client",
+    "examples/todo/common",
+    "examples/todo/server",
 ]
 
 [profile.release]

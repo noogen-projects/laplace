@@ -1,5 +1,5 @@
 [package]
-name = "notes_server"
+name = "todo_server"
 version = "0.1.0"
 authors = [
     "Alexander Mescheryakov <freecoder.xx@gmail.com>",
@@ -9,10 +9,13 @@ edition = "2018"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/noogen-projects/dapla"
-description = "The Notes d-app example"
+description = "The Todo d-app example"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 thiserror = "1.0.23"
 serde_json = "1.0"
-notes_common = { path = "../common" }
+todo_common = { path = "../common" }
 dapla_wasm = { path = "../../../dapla_wasm" }
