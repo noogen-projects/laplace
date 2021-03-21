@@ -3,19 +3,30 @@ default_to_workspace = false
 additional_profiles = ["debug"]
 
 
-[tasks.parse_params]
-script_runner = "@duckscript"
-script = "set_env APP ${1}"
-
-[tasks.parse_params.env]
-RUSTFLAGS = "-Copt-level=s"
+[tasks.choose_profile.env]
 MODE = "release"
 ADDITIONAL = "--release"
 
-[tasks.parse_params.env.debug]
-RUSTFLAGS = ""
+[tasks.choose_profile.env.debug]
 MODE = "debug"
 ADDITIONAL = "--color=auto" # it's a stub
+
+[tasks.parse_params]
+script_runner = "@duckscript"
+script = '''
+if not is_empty ${1}
+    set_env APP ${1}
+end
+'''
+
+[tasks.wasm_build_prepare]
+dependencies = ["choose_profile", "parse_params"]
+
+[tasks.wasm_build_prepare.env]
+RUSTFLAGS = "-Copt-level=s"
+
+[tasks.wasm_build_prepare.env.debug]
+RUSTFLAGS = ""
 
 
 [tasks.create_dap_dir]
@@ -45,19 +56,19 @@ dependencies = ["create_dap_dir"]
 [tasks.build_client]
 command = "cargo"
 args = ["build", "-p", "${APP}_client", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
-dependencies = ["parse_params"]
+dependencies = ["wasm_build_prepare"]
 
 [tasks.build_server]
 command = "cargo"
 args = ["build", "-p", "${APP}_server", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
-dependencies = ["parse_params"]
+dependencies = ["wasm_build_prepare"]
 
 [tasks.build_server_wasi]
 env = { RUSTFLAGS = "${RUSTFLAGS} -C lto=no -Z wasi-exec-model=reactor" }
 toolchain = "nightly"
 command = "cargo"
 args = ["build", "-p", "${APP}_server", "--target", "wasm32-wasi", "${ADDITIONAL}"]
-dependencies = ["parse_params"]
+dependencies = ["wasm_build_prepare"]
 
 
 [tasks.deploy_client]
@@ -72,7 +83,7 @@ args = [
     "${APP}_client",
     "target/wasm32-unknown-unknown/${MODE}/${APP}_client.wasm",
 ]
-dependencies = ["copy_static"]
+dependencies = ["choose_profile", "copy_static"]
 
 [tasks.deploy_server]
 script_runner = "@duckscript"
@@ -80,7 +91,7 @@ script = '''
 rm daps/${APP}/${APP}_server.wasm
 cp target/wasm32-unknown-unknown/${MODE}/${APP}_server.wasm daps/${APP}/${APP}_server.wasm
 '''
-dependencies = ["copy_settings"]
+dependencies = ["choose_profile", "copy_settings"]
 
 [tasks.deploy_server_wasi]
 script_runner = "@duckscript"
@@ -88,7 +99,7 @@ script = '''
 rm daps/${APP}/${APP}_server.wasm
 cp target/wasm32-wasi/${MODE}/${APP}_server.wasm daps/${APP}/${APP}_server.wasm
 '''
-dependencies = ["copy_settings"]
+dependencies = ["choose_profile", "copy_settings"]
 
 
 [tasks.client]
@@ -99,3 +110,56 @@ dependencies = ["build_server", "deploy_server"]
 
 [tasks.wasi]
 dependencies = ["build_server_wasi", "deploy_server_wasi"]
+
+
+[tasks.chat]
+env = { "APP" = "chat" }
+run_task = [
+    { name = ["client", "server"] },
+]
+
+[tasks.echo]
+env = { "APP" = "echo" }
+run_task = [
+    { name = ["client", "server"] },
+]
+
+[tasks.notes]
+env = { "APP" = "notes" }
+run_task = [
+    { name = ["client", "wasi"] },
+]
+
+[tasks.todo]
+env = { "APP" = "todo" }
+run_task = [
+    { name = ["client", "server"] },
+]
+
+[tasks.examples]
+dependencies = ["chat", "echo", "notes", "todo"]
+
+
+[tasks.dapla_server]
+command = "cargo"
+args = ["build", "-p", "dapla_server", "${ADDITIONAL}"]
+dependencies = ["choose_profile"]
+
+[tasks.dapla]
+env = { APP = "dapla" }
+run_task = "client"
+dependencies = ["dapla_server"]
+
+[tasks.run_dapla]
+command = "cargo"
+args = ["run", "-p", "dapla_server", "${ADDITIONAL}"]
+dependencies = ["choose_profile"]
+
+
+[tasks.all]
+dependencies = ["dapla", "examples"]
+
+[tasks.run]
+env = { RUSTFLAGS = "" }
+run_task = "run_dapla"
+dependencies = ["all"]
