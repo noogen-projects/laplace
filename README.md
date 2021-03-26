@@ -11,6 +11,7 @@ To install Rust and its toolchains/targets via [rustup](https://rustup.rs/), run
 
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
 rustup toolchain install stable nightly
 rustup target add wasm32-unknown-unknown
 rustup target add wasm32-wasi --toolchain nightly
