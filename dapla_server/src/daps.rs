@@ -1,24 +1,34 @@
 use std::{
+    convert::TryFrom,
     fs,
     ops::{Deref, DerefMut},
     path::PathBuf,
+    sync::{Arc, Mutex},
 };
 
 use actix_files::Files;
 use actix_web::web;
+use arc_swap::ArcSwapOption;
+use borsh::BorshDeserialize;
 pub use dapla_common::{
     api::{UpdateQuery, UpdateRequest as DapUpdateRequest},
     dap::access::*,
 };
 use log::error;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use wasmer::{imports, Instance, Module, Store};
+use wasmer::{import_namespace, Function, ImportObject, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
 pub use self::{instance::*, manager::*, service::*, settings::*};
-use crate::error::ServerResult;
+use crate::error::ServerError;
+use crate::{
+    daps::import::database::{self, DatabaseEnv},
+    error::ServerResult,
+};
 
 pub mod handler;
+mod import;
 mod instance;
 mod manager;
 mod service;
@@ -137,13 +147,14 @@ impl Dap {
 
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
+        let is_allow_db_access = self.is_allowed_permission(Permission::Database);
 
         let dir_path = self.root_dir().join("data");
         if !dir_path.exists() && (is_allow_read || is_allow_write) {
             fs::create_dir(&dir_path)?;
         }
 
-        let import_object = if self
+        let mut import_object = if self
             .required_permissions()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
@@ -161,12 +172,59 @@ impl Dap {
 
             wasi_env.import_object(&module)?
         } else {
-            imports! {}
+            ImportObject::new()
         };
 
+        let shared_instance = Arc::new(ArcSwapOption::from(None));
+        if is_allow_db_access {
+            let connection = Arc::new(Mutex::new(Connection::open(&self.settings().database.path)?));
+
+            let execute_native = Function::new_native_with_env(
+                &store,
+                DatabaseEnv {
+                    instance: shared_instance.clone(),
+                    connection: connection.clone(),
+                },
+                database::execute,
+            );
+            let query_native = Function::new_native_with_env(
+                &store,
+                DatabaseEnv {
+                    instance: shared_instance.clone(),
+                    connection: connection.clone(),
+                },
+                database::query,
+            );
+            let query_row_native = Function::new_native_with_env(
+                &store,
+                DatabaseEnv {
+                    instance: shared_instance.clone(),
+                    connection,
+                },
+                database::query_row,
+            );
+            import_object.register(
+                "env",
+                import_namespace!({
+                    "db_execute" => execute_native,
+                    "db_query" => query_native,
+                    "db_query_row" => query_row_native,
+                }),
+            );
+        }
+
         let instance = Instance::new(&module, &import_object)?;
-        if let Ok(init) = instance.exports.get_function("_initialize") {
-            init.call(&[])?;
+        shared_instance.store(Some(Arc::new(instance.clone())));
+
+        if let Ok(initialize) = instance.exports.get_function("_initialize") {
+            initialize.call(&[])?;
+        }
+
+        if let Ok(init) = instance.exports.get_function("init") {
+            let slice = init.native::<(), u64>()?.call()?;
+            let instance = ExpectedInstance::try_from(&instance)?;
+            let bytes = unsafe { instance.wasm_slice_to_vec(slice)? };
+            Result::<(), String>::try_from_slice(&bytes)?.map_err(ServerError::DapInitError)?;
         }
 
         Ok(instance)

@@ -13,7 +13,7 @@ use thiserror::Error;
 
 #[no_mangle]
 pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_get(uri.into_string()))
+    WasmSlice::from(do_get(uri.into_string_in_wasm()))
 }
 
 fn do_get(uri: String) -> String {
@@ -25,7 +25,7 @@ fn do_get(uri: String) -> String {
 
 #[no_mangle]
 pub unsafe extern "C" fn post(uri: WasmSlice, body: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_post(uri.into_string(), body.into_string()))
+    WasmSlice::from(do_post(uri.into_string_in_wasm(), body.into_string_in_wasm()))
 }
 
 fn do_post(uri: String, body: String) -> String {

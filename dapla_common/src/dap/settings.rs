@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use super::Permission;
@@ -18,7 +20,14 @@ pub struct PermissionsSettings {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
+pub struct DatabaseSettings {
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct DapSettings {
     pub application: ApplicationSettings,
     pub permissions: PermissionsSettings,
+    pub database: DatabaseSettings,
 }

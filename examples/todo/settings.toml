@@ -5,3 +5,6 @@ enabled = true
 [permissions]
 required = ["database", "http"]
 allowed = ["database", "http"]
+
+[database]
+path = "daps/todo/todos.db"

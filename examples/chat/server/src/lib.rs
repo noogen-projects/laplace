@@ -3,7 +3,7 @@ pub use dapla_wasm::{alloc, dealloc};
 
 #[no_mangle]
 pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_get(uri.into_string()))
+    WasmSlice::from(do_get(uri.into_string_in_wasm()))
 }
 
 fn do_get(uri: String) -> String {

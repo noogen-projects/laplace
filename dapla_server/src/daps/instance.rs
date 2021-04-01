@@ -1,5 +1,6 @@
-use std::{ptr::copy_nonoverlapping, slice};
+use std::{convert::TryFrom, ops::Deref, ptr::copy_nonoverlapping, slice, string::FromUtf8Error};
 
+use dapla_wasm::WasmSlice;
 use thiserror::Error;
 use wasmer::{Instance, Memory};
 
@@ -10,19 +11,23 @@ pub enum DapInstanceError {
 
     #[error("Execution abort: {0}")]
     RuntimeError(#[from] wasmer::RuntimeError),
+
+    #[error("Can't deserialize string: {0:?}")]
+    DeserializeStringError(#[from] FromUtf8Error),
+
+    #[error("Incorrect WASM slice length")]
+    WrongBufferLength,
 }
 
 pub type DapInstanceResult<T> = Result<T, DapInstanceError>;
 
-pub trait DapInstance {
-    unsafe fn alloc(&self, size: u32) -> DapInstanceResult<u32>;
+pub trait Allocation {
+    fn alloc(&self, size: u32) -> DapInstanceResult<u32>;
     unsafe fn dealloc(&self, offset: u32, size: u32) -> DapInstanceResult<()>;
-    unsafe fn copy_to(&self, memory: &Memory, src: *const u8, size: usize) -> DapInstanceResult<u32>;
-    unsafe fn move_from(&self, memory: &Memory, offset: u32, size: usize) -> DapInstanceResult<Vec<u8>>;
 }
 
-impl DapInstance for Instance {
-    unsafe fn alloc(&self, size: u32) -> DapInstanceResult<u32> {
+impl Allocation for Instance {
+    fn alloc(&self, size: u32) -> DapInstanceResult<u32> {
         let alloc_fn = self.exports.get_function("alloc")?.native::<u32, u32>()?;
         alloc_fn.call(size).map_err(Into::into)
     }
@@ -32,23 +37,88 @@ impl DapInstance for Instance {
         let dealloc_fn = self.exports.get_function("dealloc")?.native::<(u32, u32), ()>()?;
         dealloc_fn.call(offset, size).map_err(Into::into)
     }
+}
 
-    unsafe fn copy_to(&self, memory: &Memory, src: *const u8, size: usize) -> DapInstanceResult<u32> {
+#[derive(Clone)]
+pub struct ExpectedInstance {
+    instance: Instance,
+    memory: Memory,
+}
+
+impl ExpectedInstance {
+    pub fn copy_to_memory(&self, src: *const u8, size: usize) -> DapInstanceResult<u32> {
         let offset = self.alloc(size as _)?;
-        copy_nonoverlapping(src, memory.data_ptr().offset(offset as _), size);
-        Ok(offset)
+        if size as u64 <= self.memory.data_size() - offset as u64 {
+            unsafe {
+                copy_nonoverlapping(src, self.memory.data_ptr().offset(offset as _), size);
+            }
+            Ok(offset)
+        } else {
+            log::error!(
+                "Destination offset = {} and buffer len = {}, but memory data size = {}",
+                offset,
+                size,
+                self.memory.data_size()
+            );
+            Err(DapInstanceError::WrongBufferLength)
+        }
     }
 
-    unsafe fn move_from(&self, memory: &Memory, offset: u32, size: usize) -> DapInstanceResult<Vec<u8>> {
+    pub unsafe fn move_from_memory(&self, offset: u32, size: usize) -> DapInstanceResult<Vec<u8>> {
         log::trace!(
             "Move from memory: data_ptr = {}, data_size = {}, offset = {}, size = {}",
-            memory.data_ptr() as usize,
-            memory.data_size(),
+            self.memory.data_ptr() as usize,
+            self.memory.data_size(),
             offset,
             size
         );
-        let data = slice::from_raw_parts(memory.data_ptr().offset(offset as _), size).into();
+        let data = slice::from_raw_parts(self.memory.data_ptr().offset(offset as _), size).into();
         self.dealloc(offset, size as _)?;
         Ok(data)
+    }
+
+    pub unsafe fn wasm_slice_to_vec(&self, slice: impl Into<WasmSlice>) -> DapInstanceResult<Vec<u8>> {
+        let slice = slice.into();
+        if slice.len() as u64 <= self.memory.data_size() - slice.ptr() as u64 {
+            Ok(self.move_from_memory(slice.ptr(), slice.len() as _)?)
+        } else {
+            log::error!(
+                "WASM slice ptr = {}, len = {}, but memory data size = {}",
+                slice.ptr(),
+                slice.len(),
+                self.memory.data_size()
+            );
+            Err(DapInstanceError::WrongBufferLength)
+        }
+    }
+
+    pub unsafe fn wasm_slice_to_string(&self, slice: impl Into<WasmSlice>) -> DapInstanceResult<String> {
+        let data = self.wasm_slice_to_vec(slice)?;
+        String::from_utf8(data).map_err(Into::into)
+    }
+
+    pub fn bytes_to_wasm_slice(&self, bytes: impl AsRef<[u8]>) -> DapInstanceResult<WasmSlice> {
+        let bytes = bytes.as_ref();
+        let offset = self.copy_to_memory(bytes.as_ptr(), bytes.len())?;
+        Ok(WasmSlice::from((offset, bytes.len() as _)))
+    }
+}
+
+impl Deref for ExpectedInstance {
+    type Target = Instance;
+
+    fn deref(&self) -> &Self::Target {
+        &self.instance
+    }
+}
+
+impl TryFrom<&Instance> for ExpectedInstance {
+    type Error = wasmer::ExportError;
+
+    fn try_from(instance: &Instance) -> Result<Self, Self::Error> {
+        let instance = instance.clone();
+        let memory = instance.exports.get_memory("memory")?.clone();
+
+        Ok(Self { instance, memory })
     }
 }

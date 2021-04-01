@@ -2,6 +2,7 @@ use std::io;
 
 use actix_web::ResponseError;
 use dapla_common::dap::Permission;
+use rusqlite::Error as SqlError;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 use wasmer_wasi::{WasiError, WasiStateCreationError};
@@ -65,6 +66,12 @@ pub enum ServerError {
 
     #[error("Dap instance operation error: {0}")]
     DapInstanceFail(#[from] DapInstanceError),
+
+    #[error("Dap database operation error: {0:?}")]
+    DapDatabaseError(#[from] SqlError),
+
+    #[error("Dap initialization error: {0:?}")]
+    DapInitError(String),
 }
 
 impl ResponseError for ServerError {}

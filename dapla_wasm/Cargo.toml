@@ -12,3 +12,4 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The decentralized application platform WASM utilities"
 
 [dependencies]
+borsh = "0.9.0"

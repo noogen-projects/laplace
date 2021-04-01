@@ -184,7 +184,7 @@ impl Component for Root {
                 let task = &self.state.list[idx];
                 self.fetcher
                     .send_post(
-                        format!("/todo/update/{}", idx),
+                        format!("/todo/update/{}", idx + 1),
                         format!(
                             r#"{{"description":"{}","completed":{}}}"#,
                             task.description, task.completed
@@ -199,7 +199,7 @@ impl Component for Root {
                 let idx = self.state.remove(idx);
                 self.fetcher
                     .send_post(
-                        format!("/todo/delete/{}", idx),
+                        format!("/todo/delete/{}", idx + 1),
                         "",
                         JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
                     )
