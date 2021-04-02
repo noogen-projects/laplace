@@ -12,7 +12,7 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The Notes d-app example"
 
 [dependencies]
-thiserror = "1.0.23"
+thiserror = "1.0"
 serde_json = "1.0"
 notes_common = { path = "../common" }
 dapla_wasm = { path = "../../../dapla_wasm" }

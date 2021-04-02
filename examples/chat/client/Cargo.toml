@@ -12,11 +12,11 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The Chat d-app example"
 
 [dependencies]
-anyhow = "1.0.38"
-libp2p-core = "0.27.1"
-bs58 = "0.4.0"
-getrandom = { version = "0.1.16", features = ["wasm-bindgen"] }
-yew = { version = "0.17.4", features = ["web_sys"] }
+anyhow = "1.0"
+libp2p-core = "0.28"
+bs58 = "0.4"
+getrandom = { version = "0.1", features = ["wasm-bindgen"] }
+yew = { version = "0.17", features = ["web_sys"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
-web-sys = { version = "0.3.46", features = ["Window", "Document", "HtmlElement", "HtmlInputElement"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "HtmlElement", "HtmlInputElement"] }
 dapla_yew = { path = "../../../dapla_yew" }

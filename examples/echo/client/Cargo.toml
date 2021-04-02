@@ -12,7 +12,7 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The Echo d-app example"
 
 [dependencies]
-anyhow = "1.0.38"
-yew = { version = "0.17.4", features = ["web_sys"] }
+anyhow = "1.0"
+yew = { version = "0.17", features = ["web_sys"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
-web-sys = { version = "0.3.46", features = ["Window", "Document", "HtmlInputElement"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement"] }

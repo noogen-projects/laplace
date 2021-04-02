@@ -12,9 +12,9 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The Todo d-app example"
 
 [dependencies]
-anyhow = "1.0.38"
+anyhow = "1.0"
 strum = { version = "0.20", features = ["derive"] }
-yew = { version = "0.17.4", features = ["web_sys"] }
-web-sys = { version = "0.3.46", features = ["HtmlInputElement"] }
+yew = { version = "0.17", features = ["web_sys"] }
+web-sys = { version = "0.3", features = ["HtmlInputElement"] }
 todo_common = { path = "../common" }
 dapla_yew = { path = "../../../dapla_yew" }

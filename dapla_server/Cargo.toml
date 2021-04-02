@@ -15,18 +15,18 @@ actix-web = "=4.0.0-beta.1"
 actix-files = "=0.6.0-beta.1"
 actix-rt = "=2.0.0-beta.2"
 actix-service = "=2.0.0-beta.3"
-arc-swap = "1.2.0"
-borsh = "0.9.0"
-libp2p = { version = "0.35.1", features = ["tcp-tokio", "mdns"] }
+arc-swap = "1.2"
+borsh = "0.9"
+libp2p = { version = "0.36", features = ["tcp-tokio", "mdns"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-thiserror = "1.0.24"
-log = "0.4.14"
-env_logger = "0.8.3"
-config = "0.10.1"
-toml = "0.5.8"
-wasmer = "1.0.2"
-wasmer-wasi = "1.0.2"
-rusqlite = { version = "0.24.2", features = ["bundled"] }
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.8"
+config = "0.11"
+toml = "0.5"
+wasmer = "1.0"
+wasmer-wasi = "1.0"
+rusqlite = { version = "0.24", features = ["bundled"] }
 dapla_common = { path = "../dapla_common" }
 dapla_wasm = { path = "../dapla_wasm" }

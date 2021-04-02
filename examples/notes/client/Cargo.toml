@@ -12,11 +12,11 @@ repository = "https://github.com/noogen-projects/dapla"
 description = "The Notes d-app example"
 
 [dependencies]
-anyhow = "1.0.38"
-yew = { version = "0.17.4", features = ["web_sys"] }
+anyhow = "1.0"
+yew = { version = "0.17", features = ["web_sys"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
 lew = { git = "https://github.com/noogen-projects/lew" }
-web-sys = { version = "0.3.46", features = ["Window", "Document", "HtmlInputElement", "HtmlElement", "HtmlTextAreaElement", "DomStringMap"] }
-pulldown-cmark = "0.8.0"
+web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement", "HtmlElement", "HtmlTextAreaElement", "DomStringMap"] }
+pulldown-cmark = "0.8"
 notes_common = { path = "../common" }
 dapla_yew = { path = "../../../dapla_yew" }
