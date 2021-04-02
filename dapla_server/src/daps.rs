@@ -21,10 +21,9 @@ use wasmer::{import_namespace, Function, ImportObject, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
 pub use self::{instance::*, manager::*, service::*, settings::*};
-use crate::error::ServerError;
 use crate::{
     daps::import::database::{self, DatabaseEnv},
-    error::ServerResult,
+    error::{ServerError, ServerResult},
 };
 
 pub mod handler;
