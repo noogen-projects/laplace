@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf};
+use std::io;
 
 pub use actix_files;
 use actix_files::{Files, NamedFile};
@@ -61,9 +61,10 @@ pub mod handler {
 
 pub async fn run(settings: Settings) -> io::Result<()> {
     let daps_service = DapsService::new(&settings.daps.path)?;
+    let web_root = settings.http.web_root.clone();
 
     HttpServer::new(move || {
-        let static_dir = PathBuf::new().join(Dap::static_dir_name());
+        let static_dir = web_root.join(Dap::static_dir_name());
 
         let mut app = App::new()
             .data(daps_service.clone())

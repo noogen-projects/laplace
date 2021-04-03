@@ -9,6 +9,7 @@ use serde::{de::Error, Deserialize, Deserializer};
 pub struct HttpSettings {
     pub host: String,
     pub port: u16,
+    pub web_root: PathBuf,
 }
 
 impl Default for HttpSettings {
@@ -16,6 +17,7 @@ impl Default for HttpSettings {
         Self {
             host: "localhost".into(),
             port: 8080,
+            web_root: PathBuf::new(),
         }
     }
 }

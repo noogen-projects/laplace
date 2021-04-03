@@ -1233,6 +1233,7 @@ dependencies = [
  "actix-files",
  "actix-rt",
  "actix-service",
+ "actix-utils",
  "actix-web",
  "arc-swap",
  "borsh",
