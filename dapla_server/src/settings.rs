@@ -1,4 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use config::{Config, ConfigError, Environment, File};
 use log::Level;
@@ -64,14 +67,13 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new() -> Result<Self, ConfigError> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let mut settings = Config::new();
         settings
-            // Add in `./settings.toml`
-            .merge(File::with_name("settings"))?
+            .merge(File::from(path.as_ref()))?
             // Add in settings from the environment (with a prefix of DAPLA)
-            // Eg.. `DAPLA_HTTP_PORT=8090 dapla_server` would set the `http.port` key
-            .merge(Environment::with_prefix("DAPLA").separator("_"))?;
+            // Eg.. `DAPLA_HTTP.PORT=8090 dapla_server` would set the `http.port` key
+            .merge(Environment::with_prefix("DAPLA").separator("."))?;
         settings.try_into()
     }
 }

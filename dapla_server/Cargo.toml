@@ -17,6 +17,7 @@ actix-rt = "=2.0.0-beta.2"
 actix-service = "=2.0.0-beta.3"
 actix-utils = "=3.0.0-beta.1"
 arc-swap = "1.2"
+clap = "3.0.0-beta.2"
 borsh = "0.9"
 libp2p = { version = "0.36", features = ["tcp-tokio", "mdns"] }
 serde = { version = "1.0", features = ["derive"] }
