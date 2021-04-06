@@ -50,8 +50,7 @@ impl TodoState {
             .iter_mut()
             .enumerate()
             .filter(|(_, task)| filter.fit(task))
-            .skip(idx)
-            .next()
+            .nth(idx)
             .map(|(idx, _)| idx)
             .unwrap()
     }
