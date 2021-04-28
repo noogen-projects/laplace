@@ -10,9 +10,7 @@ pub async fn index_file(daps_service: web::Data<DapsService>, request: HttpReque
         .into_inner()
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
             let dap = daps_manager.dap(&dap_name)?;
-            NamedFile::open(dap.index_file())?
-                .into_response(&request)
-                .map_err(Into::into)
+            Ok(NamedFile::open(dap.index_file())?.into_response(&request))
         })
         .await
 }

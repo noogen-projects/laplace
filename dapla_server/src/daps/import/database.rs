@@ -7,7 +7,7 @@ use std::{
 use arc_swap::ArcSwapOption;
 use borsh::ser::BorshSerialize;
 use dapla_wasm::database::{Row, Value};
-use rusqlite::{types::ValueRef, Connection, OptionalExtension, NO_PARAMS};
+use rusqlite::{types::ValueRef, Connection, OptionalExtension};
 use wasmer::{Instance, WasmerEnv};
 
 use crate::daps::ExpectedInstance;
@@ -53,7 +53,7 @@ pub fn query_row(env: &DatabaseEnv, sql_query_slice: u64) -> u64 {
 }
 
 pub fn do_execute(connection: &Connection, sql: String) -> Result<u64, String> {
-    let updated_rows = connection.execute(&sql, NO_PARAMS).map_err(|err| format!("{}", err))?;
+    let updated_rows = connection.execute(&sql, []).map_err(|err| format!("{}", err))?;
     Ok(updated_rows as _)
 }
 
@@ -62,9 +62,9 @@ pub fn do_query(connection: &Connection, sql: String) -> Result<Vec<Row>, String
         .prepare(&sql)
         .and_then(|mut stmt| {
             let mut rows = Vec::new();
-            let mut provider = stmt.query(NO_PARAMS)?;
+            let mut provider = stmt.query([])?;
             while let Some(row) = provider.next()? {
-                rows.push(to_row(row));
+                rows.push(to_row(row)?);
             }
             Ok(rows)
         })
@@ -73,7 +73,7 @@ pub fn do_query(connection: &Connection, sql: String) -> Result<Vec<Row>, String
 
 pub fn do_query_row(connection: &Connection, sql: String) -> Result<Option<Row>, String> {
     connection
-        .query_row(&sql, NO_PARAMS, |row| Ok(to_row(row)))
+        .query_row(&sql, [], |row| to_row(row))
         .optional()
         .map_err(|err| format!("{:?}", err))
 }
@@ -103,13 +103,12 @@ fn run<T: BorshSerialize>(
         .into()
 }
 
-fn to_row(source: &rusqlite::Row<'_>) -> Row {
-    Row::new(
-        (0..source.column_count())
-            .into_iter()
-            .map(|idx| to_value(source.get_raw(idx)))
-            .collect(),
-    )
+fn to_row(source: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
+    (0..source.column_count())
+        .into_iter()
+        .map(|idx| source.get_ref(idx).map(to_value))
+        .collect::<Result<_, _>>()
+        .map(Row::new)
 }
 
 fn to_value(source: ValueRef<'_>) -> Value {
