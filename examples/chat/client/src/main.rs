@@ -6,8 +6,20 @@ use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use web_sys::HtmlElement;
 use yew::{
     html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
+    MouseEvent,
 };
 use yew_mdc_widgets::{auto_init, utils::dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
+
+enum Screen {
+    SignIn,
+    Chat(ChatState),
+}
+
+struct ChatState {
+    keys: Keys,
+    peer_id: PeerId,
+    resize_data: ResizeData,
+}
 
 struct Keys {
     keypair: Keypair,
@@ -15,23 +27,22 @@ struct Keys {
     secret_key: String,
 }
 
-struct ChatState {
-    keys: Keys,
-    peer_id: PeerId,
-}
-
-enum State {
-    SignIn,
-    Chat(ChatState),
+#[derive(Default)]
+struct ResizeData {
+    start_cursor_screen_x: i32,
+    start_width: i32,
+    tracking: bool,
 }
 
 struct Root {
     link: ComponentLink<Self>,
-    state: State,
+    screen: Screen,
 }
 
 enum Msg {
     SignIn,
+    ChatScreenMouseMove(MouseEvent),
+    ToggleChatScreenSplitHandle(MouseEvent),
     Error(Error),
 }
 
@@ -48,7 +59,7 @@ impl Component for Root {
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
             link,
-            state: State::SignIn,
+            screen: Screen::SignIn,
         }
     }
 
@@ -72,16 +83,56 @@ impl Component for Root {
                 .msg_error_map(&self.link)
                 {
                     let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
-                    self.state = State::Chat(ChatState {
+                    self.screen = Screen::Chat(ChatState {
                         keys: Keys {
                             keypair,
                             public_key,
                             secret_key,
                         },
                         peer_id,
+                        resize_data: ResizeData::default(),
                     });
                 }
                 true
+            }
+            Msg::ChatScreenMouseMove(event) => {
+                if let Screen::Chat(ChatState {
+                    ref mut resize_data, ..
+                }) = self.screen
+                {
+                    if resize_data.tracking {
+                        if event.buttons() == 1 {
+                            let delta_x = event.screen_x() - resize_data.start_cursor_screen_x;
+                            let container = select_exist_html_element(".chat-screen");
+                            let width =
+                                100.max((resize_data.start_width + delta_x).min(container.client_width() - 400));
+                            set_exist_element_style(".chat-sidebar", "width", &format!("{}px", width));
+                        } else {
+                            resize_data.tracking = false;
+                            remove_class_from_exist_html_element(".chat-sidebar", "resize-cursor");
+                            remove_class_from_exist_html_element(".chat-main", "resize-cursor");
+                        }
+                    }
+                }
+                false
+            }
+            Msg::ToggleChatScreenSplitHandle(event) => {
+                if let Screen::Chat(ChatState {
+                    ref mut resize_data, ..
+                }) = self.screen
+                {
+                    if event.button() == 0 {
+                        let sidebar = select_exist_html_element(".chat-sidebar");
+                        *resize_data = ResizeData {
+                            start_cursor_screen_x: event.screen_x(),
+                            start_width: sidebar.client_width(),
+                            tracking: true,
+                        };
+                        add_class_to_exist_html_element(".chat-sidebar", "resize-cursor");
+                        add_class_to_exist_html_element(".chat-main", "resize-cursor");
+                    }
+                }
+                false
             }
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
@@ -95,24 +146,19 @@ impl Component for Root {
     }
 
     fn view(&self) -> Html {
-        let top_app_bar = TopAppBar::new()
-            .id("top-app-bar")
-            .title("Chat dap")
-            .enable_shadow_when_scroll_window();
+        let top_app_bar = TopAppBar::new().id("top-app-bar").title("Chat dap");
 
-        let content = match &self.state {
-            State::SignIn => self.view_sign_in(),
-            State::Chat(state) => self.view_chat(state),
+        let content = match &self.screen {
+            Screen::SignIn => self.view_sign_in(),
+            Screen::Chat(state) => self.view_chat(state),
         };
 
         html! {
             <>
                 <div class = "app-content">
                     { top_app_bar }
-                    <div class = "mdc-top-app-bar--fixed-adjust">
-                        <div class = "content-container">
-                            { content }
-                        </div>
+                    <div class = "mdc-top-app-bar--fixed-adjust content-container">
+                        { content }
                     </div>
                 </div>
             </>
@@ -204,14 +250,91 @@ impl Root {
     }
 
     fn view_chat(&self, state: &ChatState) -> Html {
-        html! {
+        let channels = List::nav()
+            .divider()
+            .item(
+                ListItem::link("#added")
+                    .icon("done")
+                    .text("Added")
+                    .attr("tabindex", "0"),
+            )
+            .divider()
+            .item(ListItem::link("#modified").icon("edit").text("Modified"))
+            .divider()
+            .item(ListItem::link("#viewed").icon("visibility").text("Viewed"))
+            .divider()
+            .markup_only();
+
+        let main_content = html! {
             <>
                 <div>{ "Peer ID: " } { &state.peer_id }</div>
                 <div>{ "Public: " } { &state.keys.public_key }</div>
                 <div>{ "Secret: " } { &state.keys.secret_key }</div>
             </>
+        };
+
+        html! {
+            <div class = "chat-screen" onmousemove = self.link.callback(|event| Msg::ChatScreenMouseMove(event))>
+                <aside class = "chat-sidebar">
+                    <div class = "chat-flex-container scrollable-content">
+                        { channels }
+                    </div>
+                </aside>
+                <div class = "chat-screen-split-handle resize-cursor" onmousedown = self.link.callback(|event| {
+                    Msg::ToggleChatScreenSplitHandle(event)
+                })></div>
+                <div class = "chat-main">
+                    <div class = "chat-flex-container scrollable-content">
+                        <div class = "chat-main-content">
+                            { main_content }
+                        </div>
+                    </div>
+                </div>
+            </div>
         }
     }
+}
+
+pub fn select_exist_html_element(selector: &str) -> HtmlElement {
+    dom::select_exist_element::<HtmlElement>(selector)
+}
+
+pub fn set_element_style(element: impl AsRef<HtmlElement>, property: &str, value: &str) {
+    element
+        .as_ref()
+        .style()
+        .set_property(property, value)
+        .unwrap_or_else(|err| panic!("Can't set style \"{}:{}\": {:?}", property, value, err));
+}
+
+pub fn set_exist_element_style(selector: &str, property: &str, value: &str) {
+    set_element_style(select_exist_html_element(selector), property, value);
+}
+
+pub fn add_class_to_html_element(element: impl AsRef<HtmlElement>, class: &str) {
+    let class_name = element.as_ref().class_name();
+    let mut exist_classes: Vec<_> = class_name.split_whitespace().collect();
+    if !exist_classes.contains(&class) {
+        exist_classes.push(class);
+        element.as_ref().set_class_name(&exist_classes.join(" "));
+    }
+}
+
+pub fn remove_class_from_html_element(element: impl AsRef<HtmlElement>, class: &str) {
+    let class_name = element.as_ref().class_name();
+    let mut exist_classes: Vec<_> = class_name.split_whitespace().collect();
+    if let Some(index) = exist_classes.iter().position(|item| *item == class) {
+        exist_classes.remove(index);
+        element.as_ref().set_class_name(&exist_classes.join(" "));
+    }
+}
+
+pub fn add_class_to_exist_html_element(selector: &str, class: &str) {
+    add_class_to_html_element(select_exist_html_element(selector), class);
+}
+
+pub fn remove_class_from_exist_html_element(selector: &str, class: &str) {
+    remove_class_from_html_element(select_exist_html_element(selector), class);
 }
 
 fn main() {

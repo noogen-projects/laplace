@@ -15,8 +15,8 @@ description = "The Chat d-app example"
 anyhow = "1.0"
 libp2p-core = "0.28"
 bs58 = "0.4"
-getrandom = { version = "0.2", features = ["wasm-bindgen"] }
+getrandom = { version = "0.1", features = ["wasm-bindgen"] }
 yew = { version = "0.17", features = ["web_sys"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
-web-sys = { version = "0.3", features = ["Window", "Document", "HtmlElement", "HtmlInputElement"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "HtmlElement", "HtmlInputElement", "CssStyleDeclaration"] }
 dapla_yew = { path = "../../../dapla_yew" }

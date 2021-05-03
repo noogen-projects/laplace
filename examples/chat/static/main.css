@@ -1,9 +1,13 @@
+#root {
+    margin-bottom: 0;
+}
+
 .expand {
     width: 100%;
 }
 
 .sign-in-form {
-    max-width: 470px;
+    width: 470px;
     margin: auto;
 }
 
@@ -19,4 +23,67 @@
 
 .sign-in-actions > .mdc-button {
     margin-left: 10px;
+}
+
+.content-container {
+    margin: 0;
+    /*padding-top: 64px;*/
+    max-width: 100%;
+    display: flex;
+}
+
+.scrollable-content {
+    overflow-y: auto;
+}
+
+.chat-screen {
+    display: flex;
+    width: 100%;
+}
+
+.chat-sidebar {
+    position: relative;
+    flex: 0 0 auto;
+    width: 400px;
+}
+
+.chat-flex-container {
+    width: inherit;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 64px);
+}
+
+.chat-screen-split-handle {
+    flex: 0 0 auto;
+
+    position: relative;
+    box-sizing: border-box;
+    width: 4px;
+    height: 100%;
+    border-left-width: 1px;
+    border-left-style: solid;
+    border-left-color: #f7f7f7;
+    border-right-width: 1px;
+    border-right-style: solid;
+    border-right-color: #f7f7f7;
+
+    -webkit-touch-callout: none;
+    user-select: none;
+}
+
+.resize-cursor {
+    cursor: ew-resize;
+}
+
+.chat-main {
+    position: relative;
+    width: 100%;
+}
+
+.chat-main-content {
+    background-color: #f7f7f7;
+    padding: 0 20px 20px;
+    overflow: auto;
+    height: 100%;
 }
