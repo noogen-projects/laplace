@@ -1,4 +1,4 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 use anyhow::{anyhow, Context, Error};
 use dapla_yew::{JsonFetcher, MsgError, RawHtml};
@@ -42,7 +42,8 @@ struct Root {
 enum Msg {
     SignIn,
     ChatScreenMouseMove(MouseEvent),
-    ToggleChatScreenSplitHandle(MouseEvent),
+    ToggleChatSidebarSplitHandle(MouseEvent),
+    ToggleChatEditorSplitHandle(MouseEvent),
     Error(Error),
 }
 
@@ -116,7 +117,7 @@ impl Component for Root {
                 }
                 false
             }
-            Msg::ToggleChatScreenSplitHandle(event) => {
+            Msg::ToggleChatSidebarSplitHandle(event) => {
                 if let Screen::Chat(ChatState {
                     ref mut resize_data, ..
                 }) = self.screen
@@ -134,6 +135,7 @@ impl Component for Root {
                 }
                 false
             }
+            Msg::ToggleChatEditorSplitHandle(event) => false,
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
@@ -265,12 +267,18 @@ impl Root {
             .divider()
             .markup_only();
 
-        let main_content = html! {
+        let messages = html! {
             <>
                 <div>{ "Peer ID: " } { &state.peer_id }</div>
                 <div>{ "Public: " } { &state.keys.public_key }</div>
                 <div>{ "Secret: " } { &state.keys.secret_key }</div>
             </>
+        };
+
+        let editor = html! {
+            <label class = "mdc-text-field mdc-text-field--textarea mdc-text-field--no-label">
+                <textarea class = "mdc-text-field__input" rows = "3" aria-label = "Label"></textarea>
+            </label>
         };
 
         html! {
@@ -280,13 +288,19 @@ impl Root {
                         { channels }
                     </div>
                 </aside>
-                <div class = "chat-screen-split-handle resize-cursor" onmousedown = self.link.callback(|event| {
-                    Msg::ToggleChatScreenSplitHandle(event)
+                <div class = "chat-sidebar-split-handle resize-hor-cursor" onmousedown = self.link.callback(|event| {
+                    Msg::ToggleChatSidebarSplitHandle(event)
                 })></div>
                 <div class = "chat-main">
-                    <div class = "chat-flex-container scrollable-content">
-                        <div class = "chat-main-content">
-                            { main_content }
+                    <div class = "chat-flex-container">
+                        <div class = "chat-messages">
+                            { messages }
+                        </div>
+                        <div class = "chat-editor-split-handle resize-ver-cursor" onmousedown = self.link.callback(|event| {
+                            Msg::ToggleChatEditorSplitHandle(event)
+                        })></div>
+                        <div class = "chat-editor">
+                            { editor }
                         </div>
                     </div>
                 </div>
