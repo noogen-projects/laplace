@@ -8,7 +8,11 @@ use yew::{
     html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
     MouseEvent,
 };
-use yew_mdc_widgets::{auto_init, utils::dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
+use yew_mdc_widgets::{
+    auto_init,
+    utils::dom::{self, JsObjectAccess},
+    Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
+};
 
 enum Screen {
     SignIn,
@@ -180,16 +184,55 @@ impl Component for Root {
     }
 
     fn view(&self) -> Html {
-        let top_app_bar = TopAppBar::new().id("top-app-bar").title("Chat dap");
+        let drawer = Drawer::new()
+            .id("chat-drawer")
+            .title(html! { <h3 contenteditable = "true">{ "User" }</h3> })
+            .content(
+                List::ul()
+                    .divider()
+                    .item(
+                        ListItem::new()
+                            .icon("vpn_key")
+                            .text("Keys")
+                            .attr("tabindex", "0")
+                            .on_click(|_| Dialog::open_existing("keys-dialog")),
+                    )
+                    .markup_only(),
+            )
+            .modal();
+
+        let mut top_app_bar = TopAppBar::new()
+            .id("top-app-bar")
+            .title("Chat dap")
+            .navigation_item(IconButton::new().icon("menu"))
+            .on_navigation(|_| {
+                let drawer = dom::select_exist_element::<Element>("#chat-drawer").get("MDCDrawer");
+                let opened = drawer.get("open").as_bool().unwrap_or(false);
+                drawer.set("open", !opened);
+            });
+
+        let mut keys_dialog = Dialog::new().id("keys-dialog");
 
         let content = match &self.screen {
             Screen::SignIn => self.view_sign_in(),
-            Screen::Chat(state) => self.view_chat(state),
+            Screen::Chat(state) => {
+                top_app_bar = top_app_bar.title(format!("Peer ID: {}", state.peer_id.to_base58()));
+                keys_dialog = keys_dialog.title(html! { <h2> { "Keys" } </h2> }).content(
+                    List::ul()
+                        .item(html! { <div><strong>{ "Public: " }</strong> { &state.keys.public_key }</div> })
+                        .item(html! { <div><strong>{ "Secret: " }</strong> { &state.keys.secret_key }</div> }),
+                );
+                self.view_chat(state)
+            }
         };
 
         html! {
             <>
-                <div class = "app-content">
+                { drawer }
+                <div class = "mdc-drawer-scrim"></div>
+                { keys_dialog }
+
+                <div class = ("app-content", Drawer::APP_CONTENT_CLASS)>
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust content-container">
                         { content }
@@ -301,9 +344,7 @@ impl Root {
 
         let messages = html! {
             <>
-                <div>{ "Peer ID: " } { &state.peer_id }</div>
-                <div>{ "Public: " } { &state.keys.public_key }</div>
-                <div>{ "Secret: " } { &state.keys.secret_key }</div>
+                <div></div>
             </>
         };
 
