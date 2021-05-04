@@ -28,10 +28,16 @@ struct Keys {
 }
 
 #[derive(Default)]
-struct ResizeData {
-    start_cursor_screen_x: i32,
-    start_width: i32,
+struct ResizeDir {
+    start_cursor_screen_pos: i32,
+    start_size: i32,
     tracking: bool,
+}
+
+#[derive(Default)]
+struct ResizeData {
+    width: ResizeDir,
+    height: ResizeDir,
 }
 
 struct Root {
@@ -101,18 +107,23 @@ impl Component for Root {
                     ref mut resize_data, ..
                 }) = self.screen
                 {
-                    if resize_data.tracking {
-                        if event.buttons() == 1 {
-                            let delta_x = event.screen_x() - resize_data.start_cursor_screen_x;
-                            let container = select_exist_html_element(".chat-screen");
-                            let width =
-                                100.max((resize_data.start_width + delta_x).min(container.client_width() - 400));
-                            set_exist_element_style(".chat-sidebar", "width", &format!("{}px", width));
-                        } else {
-                            resize_data.tracking = false;
-                            remove_class_from_exist_html_element(".chat-sidebar", "resize-cursor");
-                            remove_class_from_exist_html_element(".chat-main", "resize-cursor");
-                        }
+                    if resize_data.width.tracking && event.buttons() == 1 {
+                        let delta_x = event.screen_x() - resize_data.width.start_cursor_screen_pos;
+                        let container = select_exist_html_element(".chat-screen");
+                        let width =
+                            100.max((resize_data.width.start_size + delta_x).min(container.client_width() - 400));
+                        set_exist_element_style(".chat-sidebar", "width", &format!("{}px", width));
+                    } else if resize_data.height.tracking && event.buttons() == 1 {
+                        let delta_y = event.screen_y() - resize_data.height.start_cursor_screen_pos;
+                        let container = select_exist_html_element(".chat-screen");
+                        let height =
+                            72.max((resize_data.height.start_size - delta_y).min(container.client_height() - 100));
+                        set_exist_element_style(".chat-editor textarea", "height", &format!("{}px", height));
+                    } else {
+                        resize_data.width.tracking = false;
+                        resize_data.height.tracking = false;
+                        remove_class_from_exist_html_element(".chat-screen", "resize-hor-cursor");
+                        remove_class_from_exist_html_element(".chat-screen", "resize-ver-cursor");
                     }
                 }
                 false
@@ -125,17 +136,38 @@ impl Component for Root {
                     if event.button() == 0 {
                         let sidebar = select_exist_html_element(".chat-sidebar");
                         *resize_data = ResizeData {
-                            start_cursor_screen_x: event.screen_x(),
-                            start_width: sidebar.client_width(),
-                            tracking: true,
+                            width: ResizeDir {
+                                start_cursor_screen_pos: event.screen_x(),
+                                start_size: sidebar.client_width(),
+                                tracking: true,
+                            },
+                            ..Default::default()
                         };
-                        add_class_to_exist_html_element(".chat-sidebar", "resize-cursor");
-                        add_class_to_exist_html_element(".chat-main", "resize-cursor");
+                        add_class_to_exist_html_element(".chat-screen", "resize-hor-cursor");
                     }
                 }
                 false
             }
-            Msg::ToggleChatEditorSplitHandle(event) => false,
+            Msg::ToggleChatEditorSplitHandle(event) => {
+                if let Screen::Chat(ChatState {
+                    ref mut resize_data, ..
+                }) = self.screen
+                {
+                    if event.button() == 0 {
+                        let editor = select_exist_html_element(".chat-editor textarea");
+                        *resize_data = ResizeData {
+                            height: ResizeDir {
+                                start_cursor_screen_pos: event.screen_y(),
+                                start_size: editor.client_height(),
+                                tracking: true,
+                            },
+                            ..Default::default()
+                        };
+                        add_class_to_exist_html_element(".chat-screen", "resize-ver-cursor");
+                    }
+                }
+                false
+            }
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
