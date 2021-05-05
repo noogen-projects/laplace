@@ -4876,7 +4876,7 @@ dependencies = [
 [[package]]
 name = "yew-mdc-widgets"
 version = "0.1.0"
-source = "git+https://github.com/noogen-projects/yew-mdc-widgets#c7ff821941cbb7c0ed21e4266eb255236e8c362c"
+source = "git+https://github.com/noogen-projects/yew-mdc-widgets#b5a994f96f7887c382745f119cc9bee6a591e062"
 dependencies = [
  "const_format",
  "gloo",

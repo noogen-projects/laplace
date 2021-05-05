@@ -9,7 +9,7 @@ use yew::{
     MouseEvent,
 };
 use yew_mdc_widgets::{
-    auto_init,
+    auto_init, drawer,
     utils::dom::{self, JsObjectAccess},
     Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
 };
@@ -184,44 +184,66 @@ impl Component for Root {
     }
 
     fn view(&self) -> Html {
-        let drawer = Drawer::new()
-            .id("chat-drawer")
-            .title(html! { <h3 contenteditable = "true">{ "User" }</h3> })
-            .content(
-                List::ul()
-                    .divider()
-                    .item(
-                        ListItem::new()
-                            .icon("vpn_key")
-                            .text("Keys")
-                            .attr("tabindex", "0")
-                            .on_click(|_| Dialog::open_existing("keys-dialog")),
-                    )
-                    .markup_only(),
-            )
-            .modal();
-
-        let mut top_app_bar = TopAppBar::new()
+        let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
             .title("Chat dap")
             .navigation_item(IconButton::new().icon("menu"))
             .on_navigation(|_| {
-                let drawer = dom::select_exist_element::<Element>("#chat-drawer").get("MDCDrawer");
+                let drawer = dom::select_exist_element::<Element>("#chat-drawer").get(drawer::mdc::TYPE_NAME);
                 let opened = drawer.get("open").as_bool().unwrap_or(false);
                 drawer.set("open", !opened);
             });
-
-        let mut keys_dialog = Dialog::new().id("keys-dialog");
+        let mut drawer = Drawer::new()
+            .modal()
+            .id("chat-drawer")
+            .title(html! { <h2 tabindex = 0>{ "Settings" }</h2> });
+        let mut dialogs = html! {};
 
         let content = match &self.screen {
             Screen::SignIn => self.view_sign_in(),
             Screen::Chat(state) => {
-                top_app_bar = top_app_bar.title(format!("Peer ID: {}", state.peer_id.to_base58()));
-                keys_dialog = keys_dialog.title(html! { <h2> { "Keys" } </h2> }).content(
-                    List::ul()
-                        .item(html! { <div><strong>{ "Public: " }</strong> { &state.keys.public_key }</div> })
-                        .item(html! { <div><strong>{ "Secret: " }</strong> { &state.keys.secret_key }</div> }),
-                );
+                drawer = drawer
+                    .title(html! { <h3 contenteditable = "true">{ "User" }</h3> })
+                    .content(
+                        List::ul()
+                            .divider()
+                            .item(
+                                ListItem::new()
+                                    .icon("perm_identity")
+                                    .text("Peer")
+                                    .attr("tabindex", "0")
+                                    .on_click(|_| Dialog::open_existing("peer-dialog")),
+                            )
+                            .item(
+                                ListItem::new()
+                                    .icon("vpn_key")
+                                    .text("Keys")
+                                    .on_click(|_| Dialog::open_existing("keys-dialog")),
+                            )
+                            .markup_only(),
+                    );
+
+                let peer_dialog = Dialog::new()
+                    .id("peer-dialog")
+                    .title(html! { <h2 tabindex = 0> { "Peer" } </h2> })
+                    .content(html! { <div><strong>{ "ID: " }</strong> { state.peer_id.to_base58() }</div>});
+
+                let keys_dialog = Dialog::new()
+                    .id("keys-dialog")
+                    .title(html! { <h2 tabindex = 0> { "Keys" } </h2> })
+                    .content(
+                        List::ul()
+                            .item(html! { <div><strong>{ "Public: " }</strong> { &state.keys.public_key }</div> })
+                            .item(html! { <div><strong>{ "Secret: " }</strong> { &state.keys.secret_key }</div> }),
+                    );
+
+                dialogs = html! {
+                    <>
+                        { peer_dialog }
+                        { keys_dialog }
+                    </>
+                };
+
                 self.view_chat(state)
             }
         };
@@ -230,7 +252,7 @@ impl Component for Root {
             <>
                 { drawer }
                 <div class = "mdc-drawer-scrim"></div>
-                { keys_dialog }
+                { dialogs }
 
                 <div class = ("app-content", Drawer::APP_CONTENT_CLASS)>
                     { top_app_bar }
