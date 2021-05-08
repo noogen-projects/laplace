@@ -6,6 +6,7 @@ members = [
     "dapla_wasm",
     "dapla_yew",
     "examples/chat/client",
+    "examples/chat/common",
     "examples/chat/server",
     "examples/echo/client",
     "examples/echo/server",

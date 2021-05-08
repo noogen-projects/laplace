@@ -121,6 +121,15 @@ impl Dap {
                 config.service(
                     web::scope(&root_uri)
                         .route(
+                            "/ws",
+                            web::get().to({
+                                let name = name.clone();
+                                move |daps_service, request, stream| {
+                                    handler::ws_start(daps_service, request, stream, name.clone())
+                                }
+                            }),
+                        )
+                        .route(
                             "/*",
                             web::get().to({
                                 let name = name.clone();

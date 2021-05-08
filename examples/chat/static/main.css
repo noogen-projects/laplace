@@ -6,12 +6,12 @@
     width: 100%;
 }
 
-.sign-in-form {
+.keys-form {
     width: 470px;
     margin: auto;
 }
 
-.sign-in-form .mdc-list-item {
+.keys-form .mdc-list-item {
     cursor: default;
     padding: 10px;
 }
@@ -27,7 +27,6 @@
 
 .content-container {
     margin: 0;
-    /*padding-top: 64px;*/
     max-width: 100%;
     display: flex;
 }
@@ -92,6 +91,11 @@
 
 .resize-ver-cursor {
     cursor: row-resize;
+}
+
+.centered-hor {
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .chat-main {

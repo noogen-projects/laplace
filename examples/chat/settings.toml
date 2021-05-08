@@ -3,5 +3,5 @@ title = "Chat"
 enabled = true
 
 [permissions]
-required = ["http"]
-allowed = ["http"]
+required = ["http", "websocket"]
+allowed = ["http", "websocket"]

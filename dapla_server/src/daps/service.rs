@@ -54,6 +54,22 @@ impl DapsService {
         })
         .await
     }
+
+    pub async fn handle_ws_dap(
+        self: Arc<Self>,
+        dap_name: String,
+        handler: impl FnOnce(&mut DapsManager, String) -> ServerResult<HttpResponse>,
+    ) -> HttpResponse {
+        self.handle_http_dap(dap_name, move |daps_manager, dap_name| {
+            let dap = daps_manager.dap(&dap_name)?;
+            if !dap.is_allowed_permission(Permission::Websocket) {
+                Err(ServerError::DapPermissionDenied(dap_name, Permission::Websocket))
+            } else {
+                handler(daps_manager, dap_name)
+            }
+        })
+        .await
+    }
 }
 
 impl Deref for DapsService {

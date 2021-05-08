@@ -11,13 +11,14 @@ use yew::{
 
 pub type StringResponse = Response<Result<String>>;
 
+#[derive(Default)]
 pub struct JsonFetcher {
     tasks: Vec<FetchTask>,
 }
 
 impl JsonFetcher {
     pub fn new() -> Self {
-        Self { tasks: vec![] }
+        Self::default()
     }
 
     pub fn parse<R>(response: StringResponse) -> Result<R>

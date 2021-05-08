@@ -2,8 +2,12 @@ use std::convert::TryFrom;
 
 use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web_actors::ws;
 
-use crate::daps::{DapsService, ExpectedInstance};
+use crate::{
+    daps::{DapsService, ExpectedInstance},
+    ws::WebSocketService,
+};
 
 pub async fn index_file(daps_service: web::Data<DapsService>, request: HttpRequest, dap_name: String) -> HttpResponse {
     daps_service
@@ -53,6 +57,20 @@ pub async fn post(
             let body = unsafe { instance.wasm_slice_to_string(slice)? };
 
             Ok(HttpResponse::Ok().body(body))
+        })
+        .await
+}
+
+pub async fn ws_start(
+    daps_service: web::Data<DapsService>,
+    request: HttpRequest,
+    stream: web::Payload,
+    dap_name: String,
+) -> HttpResponse {
+    daps_service
+        .into_inner()
+        .handle_ws_dap(dap_name, move |daps_manager, dap_name| {
+            ws::start(WebSocketService::new(), &request, stream).map_err(Into::into)
         })
         .await
 }

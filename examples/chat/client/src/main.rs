@@ -1,12 +1,19 @@
 #![recursion_limit = "512"]
 
 use anyhow::{anyhow, Context, Error};
-use dapla_yew::{JsonFetcher, MsgError, RawHtml};
+use chat_common::WsRequest;
+use dapla_yew::{MsgError, RawHtml};
 use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
-use web_sys::HtmlElement;
+use pulldown_cmark::{html as cmark_html, Options, Parser};
+use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
 use yew::{
-    html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
-    MouseEvent,
+    format::Json,
+    html, initialize, run_loop,
+    services::{
+        console::ConsoleService,
+        websocket::{WebSocketService, WebSocketStatus, WebSocketTask},
+    },
+    App, Component, ComponentLink, Html, InputData, KeyboardEvent, MouseEvent,
 };
 use yew_mdc_widgets::{
     auto_init, drawer,
@@ -23,6 +30,9 @@ struct ChatState {
     keys: Keys,
     peer_id: PeerId,
     resize_data: ResizeData,
+    ws: WebSocketTask,
+    channels: Vec<Channel>,
+    active_channel_idx: usize,
 }
 
 struct Keys {
@@ -44,9 +54,26 @@ struct ResizeData {
     height: ResizeDir,
 }
 
+struct Message {
+    is_mine: bool,
+    body: String,
+}
+
+struct Channel {
+    correspondent_id: String,
+    correspondent_name: String,
+    thread: Vec<Message>,
+}
+
 struct Root {
     link: ComponentLink<Self>,
     screen: Screen,
+}
+
+enum WsAction {
+    SendData(String),
+    ReceiveData(String),
+    Lost,
 }
 
 enum Msg {
@@ -54,7 +81,17 @@ enum Msg {
     ChatScreenMouseMove(MouseEvent),
     ToggleChatSidebarSplitHandle(MouseEvent),
     ToggleChatEditorSplitHandle(MouseEvent),
+    AddPeer(String),
+    SwitchChannel(usize),
+    Ws(WsAction),
     Error(Error),
+    None,
+}
+
+impl From<WsAction> for Msg {
+    fn from(action: WsAction) -> Self {
+        Self::Ws(action)
+    }
 }
 
 impl From<Error> for Msg {
@@ -93,7 +130,20 @@ impl Component for Root {
                 })()
                 .msg_error_map(&self.link)
                 {
+                    let callback = self.link.callback(|Json(response)| match response {
+                        Ok(data) => Msg::Ws(WsAction::ReceiveData(data)),
+                        Err(err) => Msg::Error(err),
+                    });
+                    let notification = self.link.batch_callback(|status| match status {
+                        WebSocketStatus::Opened => vec![],
+                        WebSocketStatus::Closed | WebSocketStatus::Error => vec![WsAction::Lost.into()],
+                    });
+                    let location = dom::document().location().expect("Location should be existing");
+                    let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
+                    let ws = WebSocketService::connect(&url, callback, notification)
+                        .unwrap_or_else(|err| panic!("WS should be created for URL {}: {:?}", url, err));
                     let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
+
                     self.screen = Screen::Chat(ChatState {
                         keys: Keys {
                             keypair,
@@ -102,6 +152,9 @@ impl Component for Root {
                         },
                         peer_id,
                         resize_data: ResizeData::default(),
+                        ws,
+                        channels: Default::default(),
+                        active_channel_idx: 0,
                     });
                 }
                 true
@@ -172,10 +225,54 @@ impl Component for Root {
                 }
                 false
             }
+            Msg::AddPeer(peer_id) => {
+                if let Screen::Chat(state) = &mut self.screen {
+                    state.channels.push(Channel {
+                        correspondent_id: peer_id,
+                        correspondent_name: "".to_string(),
+                        thread: vec![],
+                    });
+                    true
+                } else {
+                    false
+                }
+            }
+            Msg::SwitchChannel(idx) => {
+                if let Screen::Chat(state) = &mut self.screen {
+                    if state.active_channel_idx != idx {
+                        state.active_channel_idx = idx;
+                        return true;
+                    }
+                }
+                false
+            }
+            Msg::Ws(action) => match action {
+                WsAction::SendData(request) => {
+                    if let Screen::Chat(state) = &mut self.screen {
+                        if let Some(channel) = state.channels.get_mut(state.active_channel_idx) {
+                            channel.thread.push(Message {
+                                is_mine: true,
+                                body: request.clone(),
+                            });
+                            state.ws.send(Json(&WsRequest::SendMessage {
+                                peer_id: channel.correspondent_id.clone(),
+                                msg: request,
+                            }));
+                        }
+                    }
+                    true
+                }
+                WsAction::ReceiveData(response) => {
+                    ConsoleService::log(&response);
+                    false
+                }
+                WsAction::Lost => true,
+            },
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
             }
+            Msg::None => false,
         }
     }
 
@@ -342,37 +439,52 @@ impl Root {
         ]);
 
         html! {
-            <div class = "sign-in-form">
+            <div class = "keys-form">
                 { sign_in_form }
             </div>
         }
     }
 
     fn view_chat(&self, state: &ChatState) -> Html {
-        let channels = List::nav()
-            .divider()
-            .item(
-                ListItem::link("#added")
-                    .icon("done")
-                    .text("Added")
-                    .attr("tabindex", "0"),
-            )
-            .divider()
-            .item(ListItem::link("#modified").icon("edit").text("Modified"))
-            .divider()
-            .item(ListItem::link("#viewed").icon("visibility").text("Viewed"))
-            .divider()
-            .markup_only();
+        let mut channels = List::nav().two_line().divider();
+        let mut messages = html! {};
+        for (idx, channel) in state.channels.iter().enumerate() {
+            let mut item = ListItem::link(format!("#{}", channel.correspondent_id))
+                .icon("person")
+                .text(&channel.correspondent_name)
+                .text(&channel.correspondent_id)
+                .on_click(self.link.callback(move |_| Msg::SwitchChannel(idx)));
 
-        let messages = html! {
-            <>
-                <div></div>
-            </>
-        };
+            if idx == state.active_channel_idx {
+                item = item.selected(true).attr("tabindex", "0");
+                messages = html! {
+                    { for channel.thread.iter().map(|msg| html! { <div><RawHtml inner_html = to_view_inner_html(&msg.body) /></div> }) }
+                };
+            }
+            channels = channels.item(item).divider()
+        }
+        channels = channels.markup_only();
 
+        let add_peer_dialog = self.view_add_peer_dialog();
+        let add_peer_button = IconButton::new()
+            .icon("add")
+            .class("centered-hor")
+            .on_click(|_| Dialog::open_existing("add-peer-dialog"));
+
+        let sender = self.link.callback(|event: KeyboardEvent| {
+            if event.key() == "Enter" && event.ctrl_key() {
+                let editor = dom::get_exist_element_by_id::<HtmlTextAreaElement>("editor");
+                let message = editor.value();
+                editor.set_value("");
+
+                Msg::Ws(WsAction::SendData(message))
+            } else {
+                Msg::None
+            }
+        });
         let editor = html! {
             <label class = "mdc-text-field mdc-text-field--textarea mdc-text-field--no-label">
-                <textarea class = "mdc-text-field__input" rows = "3" aria-label = "Label"></textarea>
+                <textarea id = "editor" class = "mdc-text-field__input" rows = "3" aria-label = "Label" onkeypress = sender></textarea>
             </label>
         };
 
@@ -381,6 +493,8 @@ impl Root {
                 <aside class = "chat-sidebar">
                     <div class = "chat-flex-container scrollable-content">
                         { channels }
+                        { add_peer_button }
+                        { add_peer_dialog }
                     </div>
                 </aside>
                 <div class = "chat-sidebar-split-handle resize-hor-cursor" onmousedown = self.link.callback(|event| {
@@ -388,7 +502,7 @@ impl Root {
                 })></div>
                 <div class = "chat-main">
                     <div class = "chat-flex-container">
-                        <div class = "chat-messages">
+                        <div id = "messages" class = "chat-messages">
                             { messages }
                         </div>
                         <div class = "chat-editor-split-handle resize-ver-cursor" onmousedown = self.link.callback(|event| {
@@ -402,6 +516,52 @@ impl Root {
             </div>
         }
     }
+
+    fn view_add_peer_dialog(&self) -> Html {
+        Dialog::new()
+            .id("add-peer-dialog")
+            .content_item(
+                TextField::outlined()
+                    .id("new-peer-id")
+                    .class("keys-form")
+                    .label("Peer ID"),
+            )
+            .action(
+                Button::new()
+                    .id("add-peer-button")
+                    .label("Add")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(self.link.callback(|_| {
+                        let id = dom::select_exist_element::<HtmlInputElement>("#new-peer-id > input").value();
+                        Dialog::close_existing("add-peer-dialog");
+                        Msg::AddPeer(id)
+                    })),
+            )
+            .action(
+                Button::new()
+                    .label("Cancel")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(|_| Dialog::close_existing("add-peer-dialog")),
+            )
+            .into()
+    }
+}
+
+fn to_view_inner_html(content: &str) -> String {
+    let parser = new_cmark_parser(content);
+
+    let mut html = String::new();
+    cmark_html::push_html(&mut html, parser);
+
+    html
+}
+
+fn new_cmark_parser(source: &str) -> Parser {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+
+    Parser::new_ext(source, options)
 }
 
 pub fn select_exist_html_element(selector: &str) -> HtmlElement {
