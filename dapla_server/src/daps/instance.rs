@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, ops::Deref, ptr::copy_nonoverlapping, slice, string::FromUtf8Error};
+use std::{convert::TryFrom, ops::Deref, ptr::copy_nonoverlapping, slice, string::FromUtf8Error, sync::Arc};
 
 use dapla_wasm::WasmSlice;
 use thiserror::Error;
@@ -112,13 +112,28 @@ impl Deref for ExpectedInstance {
     }
 }
 
+impl TryFrom<Instance> for ExpectedInstance {
+    type Error = wasmer::ExportError;
+
+    fn try_from(instance: Instance) -> Result<Self, Self::Error> {
+        let memory = instance.exports.get_memory("memory")?.clone();
+
+        Ok(Self { instance, memory })
+    }
+}
+
 impl TryFrom<&Instance> for ExpectedInstance {
     type Error = wasmer::ExportError;
 
     fn try_from(instance: &Instance) -> Result<Self, Self::Error> {
-        let instance = instance.clone();
-        let memory = instance.exports.get_memory("memory")?.clone();
+        Self::try_from(instance.clone())
+    }
+}
 
-        Ok(Self { instance, memory })
+impl TryFrom<Arc<Instance>> for ExpectedInstance {
+    type Error = wasmer::ExportError;
+
+    fn try_from(instance: Arc<Instance>) -> Result<Self, Self::Error> {
+        Self::try_from(&*instance)
     }
 }

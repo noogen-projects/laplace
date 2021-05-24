@@ -10,7 +10,6 @@ use crate::{
 
 pub struct DapsManager {
     daps: HashMap<String, Dap>,
-    instances: HashMap<String, Instance>,
 }
 
 impl DapsManager {
@@ -26,37 +25,38 @@ impl DapsManager {
                 })
             })
             .collect::<io::Result<_>>()
-            .map(|daps| Self {
-                daps,
-                instances: Default::default(),
-            })
+            .map(|daps| Self { daps })
     }
 
-    pub fn load(&mut self, dap_name: impl AsRef<str> + Into<String>) -> ServerResult<()> {
-        if let Some(dap) = self.daps.get(dap_name.as_ref()) {
-            self.instances.insert(dap_name.into(), dap.instantiate()?);
-            Ok(())
-        } else {
-            Err(ServerError::DapNotFound(dap_name.into()))
-        }
+    pub fn load(&mut self, dap_name: impl AsRef<str>) -> ServerResult<()> {
+        let dap_name = dap_name.as_ref();
+        self.daps
+            .get_mut(dap_name)
+            .ok_or_else(|| ServerError::DapNotFound(dap_name.to_string()))?
+            .instantiate()
     }
 
     pub fn unload(&mut self, dap_name: impl AsRef<str>) -> bool {
-        self.instances.remove(dap_name.as_ref()).is_some()
+        self.daps
+            .get_mut(dap_name.as_ref())
+            .map(|dap| dap.instance.take().is_some())
+            .unwrap_or(false)
     }
 
     pub fn load_daps(&mut self) {
-        for (name, dap) in &self.daps {
-            if !dap.is_main() && dap.enabled() && !self.is_loaded(&name) {
+        for (name, dap) in &mut self.daps {
+            if !dap.is_main() && dap.enabled() && !dap.is_loaded() {
                 info!("Load dap '{}'", name);
-                let instance = dap.instantiate().expect("Dap should be loaded");
-                self.instances.insert(name.into(), instance);
+                dap.instantiate().expect("Dap should be loaded");
             }
         }
     }
 
     pub fn is_loaded(&self, dap_name: impl AsRef<str>) -> bool {
-        self.instances.contains_key(dap_name.as_ref())
+        self.daps
+            .get(dap_name.as_ref())
+            .map(|dap| dap.is_loaded())
+            .unwrap_or(false)
     }
 
     pub fn dap(&self, dap_name: impl AsRef<str>) -> ServerResult<&Dap> {
@@ -81,10 +81,11 @@ impl DapsManager {
         self.daps.values_mut()
     }
 
-    pub fn instance(&self, dap_name: impl AsRef<str>) -> ServerResult<&Instance> {
+    pub fn instance(&self, dap_name: impl AsRef<str>) -> ServerResult<Instance> {
         let dap_name = dap_name.as_ref();
-        self.instances
+        self.daps
             .get(dap_name)
+            .and_then(|dap| dap.instance.clone())
             .ok_or_else(|| ServerError::DapNotLoaded(dap_name.to_string()))
     }
 }

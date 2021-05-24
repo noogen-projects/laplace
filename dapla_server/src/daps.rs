@@ -16,7 +16,6 @@ pub use dapla_common::{
 };
 use log::error;
 use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
 use wasmer::{import_namespace, Function, ImportObject, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
@@ -37,13 +36,18 @@ type CommonDap = dapla_common::dap::Dap<PathBuf>;
 
 pub type DapResponse<'a> = dapla_common::api::Response<'a, PathBuf>;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct Dap(CommonDap);
+#[derive(Debug, Clone)]
+pub struct Dap {
+    dap: CommonDap,
+    instance: Option<Instance>,
+}
 
 impl Dap {
     pub fn new(name: impl Into<String>, root_dir: impl Into<PathBuf>) -> Self {
-        let mut dap = Self(CommonDap::new(name.into(), root_dir.into(), Default::default()));
+        let mut dap = Self {
+            dap: CommonDap::new(name.into(), root_dir.into(), Default::default()),
+            instance: None,
+        };
         if !dap.is_main() {
             if let Err(err) = dap.reload_settings() {
                 error!("Error when load settings for dap '{}': {:?}", dap.name(), err);
@@ -77,14 +81,14 @@ impl Dap {
     }
 
     pub fn reload_settings(&mut self) -> DapSettingsResult<()> {
-        self.0
+        self.dap
             .set_settings(DapSettings::load(self.root_dir().join(Self::settings_file_name()))?);
         Ok(())
     }
 
     pub fn save_settings(&mut self) -> DapSettingsResult<()> {
         let path = self.root_dir().join(Self::settings_file_name());
-        self.0.settings().save(path)
+        self.settings().save(path)
     }
 
     pub fn static_dir(&self) -> PathBuf {
@@ -97,6 +101,10 @@ impl Dap {
 
     pub fn server_module_file(&self) -> PathBuf {
         self.root_dir().join(&format!("{}_server.wasm", self.name()))
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.instance.is_some()
     }
 
     pub fn http_configure(&self) -> impl FnOnce(&mut web::ServiceConfig) + '_ {
@@ -147,7 +155,7 @@ impl Dap {
         }
     }
 
-    pub fn instantiate(&self) -> ServerResult<Instance> {
+    pub fn instantiate(&mut self) -> ServerResult<()> {
         let wasm = fs::read(self.server_module_file())?;
 
         let store = Store::default();
@@ -235,7 +243,8 @@ impl Dap {
             Result::<(), String>::try_from_slice(&bytes)?.map_err(ServerError::DapInitError)?;
         }
 
-        Ok(instance)
+        self.instance.replace(instance);
+        Ok(())
     }
 
     pub fn update(&mut self, mut query: UpdateQuery) -> DapSettingsResult<UpdateQuery> {
@@ -268,12 +277,12 @@ impl Deref for Dap {
     type Target = CommonDap;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.dap
     }
 }
 
 impl DerefMut for Dap {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.dap
     }
 }

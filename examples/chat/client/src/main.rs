@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 
 use anyhow::{anyhow, Context, Error};
-use chat_common::WsRequest;
+use chat_common::{WsMessage, WsResponse};
 use dapla_yew::{MsgError, RawHtml};
 use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
@@ -72,7 +72,7 @@ struct Root {
 
 enum WsAction {
     SendData(String),
-    ReceiveData(String),
+    ReceiveData(WsResponse),
     Lost,
 }
 
@@ -254,7 +254,7 @@ impl Component for Root {
                                 is_mine: true,
                                 body: request.clone(),
                             });
-                            state.ws.send(Json(&WsRequest::SendMessage {
+                            state.ws.send(Json(&WsMessage::Text {
                                 peer_id: channel.correspondent_id.clone(),
                                 msg: request,
                             }));
@@ -263,7 +263,24 @@ impl Component for Root {
                     true
                 }
                 WsAction::ReceiveData(response) => {
-                    ConsoleService::log(&response);
+                    match response {
+                        WsResponse::Success(WsMessage::Text { peer_id, msg }) => {
+                            if let Screen::Chat(state) = &mut self.screen {
+                                if let Some(channel) = state
+                                    .channels
+                                    .iter_mut()
+                                    .find(|channel| channel.correspondent_id == peer_id)
+                                {
+                                    channel.thread.push(Message {
+                                        is_mine: false,
+                                        body: msg,
+                                    });
+                                    return true;
+                                }
+                            }
+                        }
+                        msg => self.link.send_message(Msg::Error(anyhow!("{:?}", msg))),
+                    }
                     false
                 }
                 WsAction::Lost => true,

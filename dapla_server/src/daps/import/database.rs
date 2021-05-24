@@ -22,7 +22,7 @@ impl<T: Borrow<DatabaseEnv>> From<T> for ExpectedDatabaseEnv {
     fn from(env: T) -> Self {
         let env = env.borrow();
         let instance =
-            ExpectedInstance::try_from(&*env.instance.load_full().expect("Dap instance should be initialized"))
+            ExpectedInstance::try_from(env.instance.load_full().expect("Dap instance should be initialized"))
                 .expect("Memory should be presented");
 
         Self {

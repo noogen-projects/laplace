@@ -30,9 +30,9 @@ pub async fn get(daps_service: web::Data<DapsService>, request: HttpRequest, dap
             let uri_arg = instance.bytes_to_wasm_slice(&uri)?;
 
             let slice = get_fn.call(uri_arg.into())?;
-            let body = unsafe { instance.wasm_slice_to_string(slice)? };
+            let response_body = unsafe { instance.wasm_slice_to_string(slice)? };
 
-            Ok(HttpResponse::Ok().body(body))
+            Ok(HttpResponse::Ok().body(response_body))
         })
         .await
 }
@@ -54,9 +54,9 @@ pub async fn post(
             let body_arg = instance.bytes_to_wasm_slice(&body)?;
 
             let slice = post_fn.call(uri_arg.into(), body_arg.into())?;
-            let body = unsafe { instance.wasm_slice_to_string(slice)? };
+            let response_body = unsafe { instance.wasm_slice_to_string(slice)? };
 
-            Ok(HttpResponse::Ok().body(body))
+            Ok(HttpResponse::Ok().body(response_body))
         })
         .await
 }
@@ -70,7 +70,8 @@ pub async fn ws_start(
     daps_service
         .into_inner()
         .handle_ws_dap(dap_name, move |daps_manager, dap_name| {
-            ws::start(WebSocketService::new(), &request, stream).map_err(Into::into)
+            let dap_instance = ExpectedInstance::try_from(daps_manager.instance(&dap_name)?)?;
+            ws::start(WebSocketService::new(dap_instance), &request, stream).map_err(Into::into)
         })
         .await
 }

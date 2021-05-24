@@ -2,12 +2,31 @@ use std::time::{Duration, Instant};
 
 use actix::{Actor, ActorContext, AsyncContext, Running, StreamHandler};
 use actix_web_actors::ws;
+use derive_more::From;
 use log::{debug, error};
+use wasmer::{ExportError, RuntimeError};
+
+use crate::daps::{DapInstanceError, ExpectedInstance};
+
+#[derive(Debug, From)]
+enum WsError {
+    Export(ExportError),
+    Runtime(RuntimeError),
+    Instance(DapInstanceError),
+}
+
+impl WsError {
+    fn to_json_string(&self) -> String {
+        format!(r#"{{"Error":"{:?}"}}"#, self)
+    }
+}
 
 pub struct WebSocketService {
     /// Client must send ping at least once per SETTINGS.ws.client_timeout_sec seconds,
     /// otherwise we drop connection.
     hb: Instant,
+
+    dap_instance: ExpectedInstance,
 }
 
 impl WebSocketService {
@@ -17,8 +36,11 @@ impl WebSocketService {
     /// How long before lack of client response causes a timeout
     const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 
-    pub fn new() -> Self {
-        Self { hb: Instant::now() }
+    pub fn new(dap_instance: ExpectedInstance) -> Self {
+        Self {
+            hb: Instant::now(),
+            dap_instance,
+        }
     }
 
     /// helper method that sends ping to client every second.
@@ -42,8 +64,18 @@ impl WebSocketService {
         });
     }
 
-    fn handle_message(&self, msg: &str) -> String {
-        msg.to_string()
+    fn handle_message(&self, msg: &str) -> Result<String, WsError> {
+        let ws_text_fn = self
+            .dap_instance
+            .exports
+            .get_function("ws_text")?
+            .native::<u64, u64>()?;
+        let msg_arg = self.dap_instance.bytes_to_wasm_slice(msg)?;
+
+        let response_slice = ws_text_fn.call(msg_arg.into())?;
+        let response = unsafe { self.dap_instance.wasm_slice_to_string(response_slice)? };
+
+        Ok(response)
     }
 }
 
@@ -81,11 +113,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
             ws::Message::Pong(_) => {
                 self.hb = Instant::now();
             }
-            ws::Message::Text(text) => ctx.text(
-                serde_json::to_string(&self.handle_message(&text))
-                    .as_deref()
-                    .unwrap_or(r#""To json error""#),
-            ),
+            ws::Message::Text(text) => {
+                let response = self.handle_message(&text).unwrap_or_else(|err| err.to_json_string());
+                ctx.text(response);
+            }
             ws::Message::Binary(bin) => ctx.binary(bin),
             ws::Message::Close(reason) => {
                 ctx.close(reason);

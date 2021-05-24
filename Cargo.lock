@@ -905,7 +905,9 @@ dependencies = [
 name = "chat_server"
 version = "0.1.0"
 dependencies = [
+ "chat_common",
  "dapla_wasm",
+ "serde_json",
 ]
 
 [[package]]
@@ -1256,6 +1258,7 @@ dependencies = [
  "config",
  "dapla_common",
  "dapla_wasm",
+ "derive_more",
  "env_logger",
  "libp2p",
  "log",
