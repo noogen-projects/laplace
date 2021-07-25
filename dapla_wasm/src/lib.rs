@@ -1,6 +1,7 @@
-pub use self::slice::*;
+pub use self::{route::*, slice::*};
 
 pub mod database;
+pub mod route;
 pub mod slice;
 
 #[no_mangle]

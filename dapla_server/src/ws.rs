@@ -1,7 +1,12 @@
-use std::time::{Duration, Instant};
+use std::{
+    io,
+    time::{Duration, Instant},
+};
 
 use actix::{Actor, ActorContext, AsyncContext, Running, StreamHandler};
 use actix_web_actors::ws;
+use borsh::BorshDeserialize;
+use dapla_wasm::{route, Route};
 use derive_more::From;
 use log::{debug, error};
 use wasmer::{ExportError, RuntimeError};
@@ -13,6 +18,7 @@ enum WsError {
     Export(ExportError),
     Runtime(RuntimeError),
     Instance(DapInstanceError),
+    Io(io::Error),
 }
 
 impl WsError {
@@ -64,18 +70,19 @@ impl WebSocketService {
         });
     }
 
-    fn handle_message(&self, msg: &str) -> Result<String, WsError> {
-        let ws_text_fn = self
+    fn handle_message(&self, msg: &str) -> Result<Vec<Route>, WsError> {
+        let route_ws_fn = self
             .dap_instance
             .exports
-            .get_function("ws_text")?
+            .get_function("route_ws")?
             .native::<u64, u64>()?;
         let msg_arg = self.dap_instance.bytes_to_wasm_slice(msg)?;
 
-        let response_slice = ws_text_fn.call(msg_arg.into())?;
-        let response = unsafe { self.dap_instance.wasm_slice_to_string(response_slice)? };
+        let response_slice = route_ws_fn.call(msg_arg.into())?;
+        let bytes = unsafe { self.dap_instance.wasm_slice_to_vec(response_slice)? };
+        let routes = BorshDeserialize::try_from_slice(&bytes)?;
 
-        Ok(response)
+        Ok(routes)
     }
 }
 
@@ -113,10 +120,24 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
             ws::Message::Pong(_) => {
                 self.hb = Instant::now();
             }
-            ws::Message::Text(text) => {
-                let response = self.handle_message(&text).unwrap_or_else(|err| err.to_json_string());
-                ctx.text(response);
-            }
+            ws::Message::Text(text) => match self.handle_message(&text) {
+                Ok(routes) => {
+                    for route in routes {
+                        match route {
+                            Route::Http(http) => {
+                                error!("Http routing is not supported for WS: {:?}", http);
+                            }
+                            Route::Websocket(route::Websocket::Text(msg)) => ctx.text(msg),
+                            Route::P2p(p2p) => {
+                                todo!()
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    ctx.text(err.to_json_string());
+                }
+            },
             ws::Message::Binary(bin) => ctx.binary(bin),
             ws::Message::Close(reason) => {
                 ctx.close(reason);

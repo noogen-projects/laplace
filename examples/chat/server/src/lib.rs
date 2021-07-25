@@ -1,6 +1,7 @@
+use borsh::BorshSerialize;
 use chat_common::{WsMessage, WsResponse};
-use dapla_wasm::WasmSlice;
 pub use dapla_wasm::{alloc, dealloc};
+use dapla_wasm::{route, Route, WasmSlice};
 
 #[no_mangle]
 pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
@@ -8,11 +9,14 @@ pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn ws_text(msg: WasmSlice) -> WasmSlice {
+pub unsafe extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
     let response = do_ws_text(msg.into_string_in_wasm())
         .map(WsResponse::Success)
         .unwrap_or_else(WsResponse::Error);
-    WasmSlice::from(serde_json::to_string(&response).unwrap_or_else(WsResponse::make_error_json_string))
+    let message = serde_json::to_string(&response).unwrap_or_else(WsResponse::make_error_json_string);
+
+    let routes = vec![Route::Websocket(route::Websocket::Text(message))];
+    WasmSlice::from(routes.try_to_vec().expect("Routes should be serializable"))
 }
 
 fn do_get(uri: String) -> String {
