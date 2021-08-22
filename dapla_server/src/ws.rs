@@ -3,15 +3,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use actix::{Actor, ActorContext, AsyncContext, Running, StreamHandler};
+use actix::{Actor, ActorContext, AsyncContext, Handler, Running, StreamHandler, WrapFuture};
 use actix_web_actors::ws;
-use borsh::BorshDeserialize;
-use dapla_wasm::{route, Route};
 use derive_more::From;
 use log::{debug, error};
 use wasmer::{ExportError, RuntimeError};
 
-use crate::daps::{DapInstanceError, ExpectedInstance};
+use crate::daps::{service, DapInstanceError};
+
+pub use dapla_wasm::route::websocket::Message;
 
 #[derive(Debug, From)]
 enum WsError {
@@ -27,12 +27,19 @@ impl WsError {
     }
 }
 
+pub struct ActixMessage(pub Message);
+
+impl actix::Message for ActixMessage {
+    type Result = ();
+}
+
+#[derive(Debug)]
 pub struct WebSocketService {
     /// Client must send ping at least once per SETTINGS.ws.client_timeout_sec seconds,
     /// otherwise we drop connection.
     hb: Instant,
 
-    dap_instance: ExpectedInstance,
+    dap_service_sender: service::Sender,
 }
 
 impl WebSocketService {
@@ -42,10 +49,10 @@ impl WebSocketService {
     /// How long before lack of client response causes a timeout
     const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 
-    pub fn new(dap_instance: ExpectedInstance) -> Self {
+    pub fn new(dap_service_sender: service::Sender) -> Self {
         Self {
             hb: Instant::now(),
-            dap_instance,
+            dap_service_sender,
         }
     }
 
@@ -69,21 +76,6 @@ impl WebSocketService {
             ctx.ping(b"");
         });
     }
-
-    fn handle_message(&self, msg: &str) -> Result<Vec<Route>, WsError> {
-        let route_ws_fn = self
-            .dap_instance
-            .exports
-            .get_function("route_ws")?
-            .native::<u64, u64>()?;
-        let msg_arg = self.dap_instance.bytes_to_wasm_slice(msg)?;
-
-        let response_slice = route_ws_fn.call(msg_arg.into())?;
-        let bytes = unsafe { self.dap_instance.wasm_slice_to_vec(response_slice)? };
-        let routes = BorshDeserialize::try_from_slice(&bytes)?;
-
-        Ok(routes)
-    }
 }
 
 impl Actor for WebSocketService {
@@ -96,6 +88,16 @@ impl Actor for WebSocketService {
 
     fn stopping(&mut self, _: &mut Self::Context) -> Running {
         Running::Stop
+    }
+}
+
+impl Handler<ActixMessage> for WebSocketService {
+    type Result = ();
+
+    fn handle(&mut self, msg: ActixMessage, ctx: &mut Self::Context) -> Self::Result {
+        match msg.0 {
+            Message::Text(text) => ctx.text(text),
+        }
     }
 }
 
@@ -120,24 +122,18 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
             ws::Message::Pong(_) => {
                 self.hb = Instant::now();
             }
-            ws::Message::Text(text) => match self.handle_message(&text) {
-                Ok(routes) => {
-                    for route in routes {
-                        match route {
-                            Route::Http(http) => {
-                                error!("Http routing is not supported for WS: {:?}", http);
-                            }
-                            Route::Websocket(route::Websocket::Text(msg)) => ctx.text(msg),
-                            Route::P2p(p2p) => {
-                                todo!()
-                            }
-                        }
+            ws::Message::Text(text) => {
+                let dap_service_sender = self.dap_service_sender.clone();
+                let fut = async move {
+                    if let Err(err) = dap_service_sender
+                        .send(service::Message::WebSocket(Message::Text(text.to_string())))
+                        .await
+                    {
+                        log::error!("Error occurs when send to dap service: {:?}", err);
                     }
-                }
-                Err(err) => {
-                    ctx.text(err.to_json_string());
-                }
-            },
+                };
+                ctx.wait(fut.into_actor(self));
+            }
             ws::Message::Binary(bin) => ctx.binary(bin),
             ws::Message::Close(reason) => {
                 ctx.close(reason);

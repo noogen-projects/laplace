@@ -1,15 +1,17 @@
-use std::{collections::HashMap, fs, io, path::Path};
+use std::{collections::HashMap, convert::TryFrom, fs, io, path::Path};
 
 use log::{error, info};
 use wasmer::Instance;
 
 use crate::{
+    daps::{service, ExpectedInstance},
     error::{ServerError, ServerResult},
     Dap,
 };
 
 pub struct DapsManager {
     daps: HashMap<String, Dap>,
+    service_senders: HashMap<String, service::Sender>,
 }
 
 impl DapsManager {
@@ -25,7 +27,10 @@ impl DapsManager {
                 })
             })
             .collect::<io::Result<_>>()
-            .map(|daps| Self { daps })
+            .map(|daps| Self {
+                daps,
+                service_senders: Default::default(),
+            })
     }
 
     pub fn load(&mut self, dap_name: impl AsRef<str>) -> ServerResult<()> {
@@ -87,5 +92,27 @@ impl DapsManager {
             .get(dap_name)
             .and_then(|dap| dap.instance.clone())
             .ok_or_else(|| ServerError::DapNotLoaded(dap_name.to_string()))
+    }
+
+    pub fn service_sender(&mut self, dap_name: impl AsRef<str>) -> ServerResult<service::Sender> {
+        let dap_name = dap_name.as_ref();
+        if let Some(sender) = self.service_senders.get(dap_name) {
+            Ok(sender.clone())
+        } else {
+            let dap = self
+                .daps
+                .get(dap_name)
+                .ok_or_else(|| ServerError::DapNotFound(dap_name.to_string()))?;
+            let instance = dap
+                .instance
+                .clone()
+                .ok_or_else(|| ServerError::DapNotLoaded(dap_name.to_string()))?;
+
+            let (service, sender) = service::DapService::new(ExpectedInstance::try_from(instance)?);
+            actix::spawn(service.run());
+
+            self.service_senders.insert(dap_name.to_string(), sender.clone());
+            Ok(sender)
+        }
     }
 }

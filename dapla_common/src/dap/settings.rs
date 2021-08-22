@@ -26,8 +26,22 @@ pub struct DatabaseSettings {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
+pub struct NetworkSettings {
+    pub gossipsub: GossipsubSettings,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct GossipsubSettings {
+    pub addr: String,
+    pub dial_ports: Vec<u16>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct DapSettings {
     pub application: ApplicationSettings,
     pub permissions: PermissionsSettings,
     pub database: DatabaseSettings,
+    pub network: NetworkSettings,
 }

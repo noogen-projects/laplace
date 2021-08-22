@@ -63,7 +63,7 @@ pub struct Row {
 
 impl Row {
     pub fn new(values: Vec<Value>) -> Self {
-        Self { values: values.into() }
+        Self { values }
     }
 
     pub fn into_values(self) -> Vec<Value> {

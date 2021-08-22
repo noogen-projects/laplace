@@ -1,81 +1,144 @@
-use std::{
-    io,
-    ops::Deref,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::io;
 
-use actix_web::HttpResponse;
-use dapla_common::dap::Permission;
-use log::error;
+use actix::Addr;
+use async_std::channel;
+use borsh::{BorshDeserialize, BorshSerialize};
+use dapla_wasm::{Route, WasmSlice};
+use derive_more::From;
+use wasmer::NativeFunc;
 
-use crate::{
-    daps::DapsManager,
-    error::{ServerError, ServerResult},
-};
+use crate::{daps::ExpectedInstance, gossipsub, ws};
 
-#[derive(Clone)]
-pub struct DapsService(Arc<Mutex<DapsManager>>);
-
-impl DapsService {
-    pub fn new(daps_path: impl AsRef<Path>) -> io::Result<Self> {
-        DapsManager::new(daps_path).map(|manager| Self(Arc::new(Mutex::new(manager))))
-    }
-
-    pub async fn handle_http(
-        self: Arc<Self>,
-        handler: impl FnOnce(&mut DapsManager) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.lock()
-            .map_err(|err| {
-                error!("Daps service lock should be asquired: {:?}", err);
-                ServerError::DapsServiceNotLock
-            })
-            .and_then(|mut daps_manager| handler(&mut daps_manager))
-            .into()
-    }
-
-    pub async fn handle_http_dap(
-        self: Arc<Self>,
-        dap_name: String,
-        handler: impl FnOnce(&mut DapsManager, String) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.handle_http(move |daps_manager| {
-            let dap = daps_manager.dap(&dap_name)?;
-            if !dap.enabled() {
-                Err(ServerError::DapNotEnabled(dap_name))
-            } else if !dap.is_allowed_permission(Permission::Http) {
-                Err(ServerError::DapPermissionDenied(dap_name, Permission::Http))
-            } else if !daps_manager.is_loaded(&dap_name) {
-                Err(ServerError::DapNotLoaded(dap_name))
-            } else {
-                handler(daps_manager, dap_name)
-            }
-        })
-        .await
-    }
-
-    pub async fn handle_ws_dap(
-        self: Arc<Self>,
-        dap_name: String,
-        handler: impl FnOnce(&mut DapsManager, String) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.handle_http_dap(dap_name, move |daps_manager, dap_name| {
-            let dap = daps_manager.dap(&dap_name)?;
-            if !dap.is_allowed_permission(Permission::Websocket) {
-                Err(ServerError::DapPermissionDenied(dap_name, Permission::Websocket))
-            } else {
-                handler(daps_manager, dap_name)
-            }
-        })
-        .await
-    }
+#[derive(Debug, From)]
+pub enum Error {
+    Export(wasmer::ExportError),
+    Runtime(wasmer::RuntimeError),
+    Instance(crate::daps::instance::DapInstanceError),
+    Io(io::Error),
 }
 
-impl Deref for DapsService {
-    type Target = Mutex<DapsManager>;
+#[derive(Debug)]
+pub enum Message {
+    // WebSocket
+    NewWebSocket(Addr<ws::WebSocketService>),
+    WebSocket(ws::Message),
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    // GossipSub
+    NewGossipSub(gossipsub::Sender),
+    GossipSub(gossipsub::Message),
+}
+
+pub type Sender = channel::Sender<Message>;
+pub type Receiver = channel::Receiver<Message>;
+
+#[derive(Clone)]
+pub struct DapService {
+    instance: ExpectedInstance,
+    receiver: Receiver,
+    gossipsub_sender: Option<gossipsub::Sender>,
+    websocket_sender: Option<Addr<ws::WebSocketService>>,
+}
+
+impl DapService {
+    pub fn new(instance: ExpectedInstance) -> (Self, Sender) {
+        let (sender, receiver) = channel::unbounded();
+        (
+            Self {
+                instance,
+                receiver,
+                gossipsub_sender: None,
+                websocket_sender: None,
+            },
+            sender,
+        )
+    }
+
+    pub fn use_websocket(&mut self, addr: Addr<ws::WebSocketService>) {
+        self.websocket_sender.replace(addr);
+    }
+
+    async fn send_websocket(&self, msg: ws::Message) {
+        if let Some(addr) = &self.websocket_sender {
+            if let Err(err) = addr.send(ws::ActixMessage(msg)).await {
+                log::error!("Websocket send error: {:?}", err);
+            }
+        } else {
+            log::error!("Uninitialized websocket for msg {:?}", msg);
+        }
+    }
+
+    fn handle_websocket(&self, msg: &ws::Message) -> Result<Vec<Route>, Error> {
+        let route_ws_fn = self.instance.exports.get_function("route_ws")?.native::<u64, u64>()?;
+        let arg = self.instance.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
+        self.call_dap_handler(route_ws_fn, arg)
+    }
+
+    pub fn use_gossipsub(&mut self, sender: gossipsub::Sender) {
+        self.gossipsub_sender.replace(sender);
+    }
+
+    pub fn send_gossipsub(&self, msg: gossipsub::Message) {
+        if let Some(sender) = &self.gossipsub_sender {
+            if let Err(err) = sender.send(msg) {
+                log::error!("Gossipsub send error: {:?}", err);
+            }
+        } else {
+            log::error!("Uninitialized gossipsub for msg {:?}", msg);
+        }
+    }
+
+    fn handle_gossipsub(&self, msg: &gossipsub::Message) -> Result<Vec<Route>, Error> {
+        let route_gossipsub_fn = self
+            .instance
+            .exports
+            .get_function("route_gossipsub")?
+            .native::<u64, u64>()?;
+        let arg = self.instance.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
+        self.call_dap_handler(route_gossipsub_fn, arg)
+    }
+
+    fn call_dap_handler(&self, handler_fn: NativeFunc<u64, u64>, arg: WasmSlice) -> Result<Vec<Route>, Error> {
+        let response_slice = handler_fn.call(arg.into())?;
+        let bytes = unsafe { self.instance.wasm_slice_to_vec(response_slice)? };
+        let routes = BorshDeserialize::try_from_slice(&bytes)?;
+
+        Ok(routes)
+    }
+
+    async fn process_routes(&self, routes: Vec<Route>) {
+        log::info!("Routes: {:?}", routes);
+        for route in routes {
+            match route {
+                Route::Http(msg) => log::error!("Unexpected HTTP route: {:?}", msg),
+                Route::WebSocket(msg) => self.send_websocket(msg).await,
+                Route::GossipSub(msg) => self.send_gossipsub(msg),
+            }
+        }
+    }
+
+    pub async fn run(mut self) {
+        loop {
+            match self.receiver.recv().await {
+                // WebSocket
+                Ok(Message::NewWebSocket(sender)) => self.use_websocket(sender),
+                Ok(Message::WebSocket(msg)) => {
+                    log::info!("Receive ws message: {:?}", msg);
+                    match self.handle_websocket(&msg) {
+                        Ok(routes) => self.process_routes(routes).await,
+                        Err(err) => log::error!("Handle websocket error: {:?}", err),
+                    }
+                }
+
+                // GossipSub
+                Ok(Message::NewGossipSub(sender)) => self.use_gossipsub(sender),
+                Ok(Message::GossipSub(msg)) => match self.handle_gossipsub(&msg) {
+                    Ok(routes) => self.process_routes(routes).await,
+                    Err(err) => log::error!("Handle gossipsub error: {:?}", err),
+                },
+
+                // Error
+                Err(err) => log::error!("Receive message error: {:?}", err),
+            }
+        }
     }
 }

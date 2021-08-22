@@ -2,9 +2,9 @@ use std::{borrow::Cow, ops::Deref};
 
 use actix_web::{web, HttpResponse};
 
-use crate::daps::{DapResponse, DapUpdateRequest, DapsService};
+use crate::daps::{DapResponse, DapUpdateRequest, DapsProvider};
 
-pub async fn get_daps(daps_service: web::Data<DapsService>) -> HttpResponse {
+pub async fn get_daps(daps_service: web::Data<DapsProvider>) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http(|daps_manager| {
@@ -20,7 +20,7 @@ pub async fn get_daps(daps_service: web::Data<DapsService>) -> HttpResponse {
         .await
 }
 
-pub async fn update_dap(daps_service: web::Data<DapsService>, body: String) -> HttpResponse {
+pub async fn update_dap(daps_service: web::Data<DapsProvider>, body: String) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http(|daps_manager| {

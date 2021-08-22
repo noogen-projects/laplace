@@ -55,6 +55,19 @@ impl JsonFetcher {
         self.fetch(request, callback).context("Fetch post response error")
     }
 
+    pub fn send_post_json(
+        &mut self,
+        uri: impl AsRef<str>,
+        body: impl Into<String>,
+        callback: Callback<StringResponse>,
+    ) -> Result<()> {
+        let request = Request::post(uri.as_ref())
+            .header("Content-Type", "application/json")
+            .body(Ok(body.into()))
+            .context("Create post request error")?;
+        self.fetch(request, callback).context("Fetch post response error")
+    }
+
     pub fn callback<Comp, Resp, Msg, FnMap, FnMapErr>(
         link: &ComponentLink<Comp>,
         map: FnMap,

@@ -11,6 +11,10 @@ impl WasmSlice {
         (self.0 & 0x00000000ffffffff) as _
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub unsafe fn into_string_in_wasm(self) -> String {
         String::from_raw_parts(self.ptr() as *mut _, self.len() as usize, self.len() as usize)
     }

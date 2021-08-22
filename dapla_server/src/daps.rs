@@ -19,7 +19,7 @@ use rusqlite::Connection;
 use wasmer::{import_namespace, Function, ImportObject, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
-pub use self::{instance::*, manager::*, service::*, settings::*};
+pub use self::{instance::*, manager::*, provider::*, service::*, settings::*};
 use crate::{
     daps::import::database::{self, DatabaseEnv},
     error::{ServerError, ServerResult},
@@ -29,7 +29,8 @@ pub mod handler;
 mod import;
 mod instance;
 mod manager;
-mod service;
+mod provider;
+pub mod service;
 mod settings;
 
 type CommonDap = dapla_common::dap::Dap<PathBuf>;
@@ -134,6 +135,15 @@ impl Dap {
                                 let name = name.clone();
                                 move |daps_service, request, stream| {
                                     handler::ws_start(daps_service, request, stream, name.clone())
+                                }
+                            }),
+                        )
+                        .route(
+                            "/p2p",
+                            web::post().to({
+                                let name = name.clone();
+                                move |daps_service, request| {
+                                    handler::gossipsub_start(daps_service, request, name.clone())
                                 }
                             }),
                         )

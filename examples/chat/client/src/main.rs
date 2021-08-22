@@ -1,8 +1,10 @@
 #![recursion_limit = "512"]
 
+use std::cell::RefCell;
+
 use anyhow::{anyhow, Context, Error};
-use chat_common::{WsMessage, WsResponse};
-use dapla_yew::{MsgError, RawHtml};
+use chat_common::{Peer, WsMessage, WsResponse};
+use dapla_yew::{JsonFetcher, MsgError, RawHtml, StringResponse};
 use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
 use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
@@ -21,12 +23,12 @@ use yew_mdc_widgets::{
     Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
 };
 
-enum Screen {
+enum State {
     SignIn,
-    Chat(ChatState),
+    Chat(Chat),
 }
 
-struct ChatState {
+struct Chat {
     keys: Keys,
     peer_id: PeerId,
     resize_data: ResizeData,
@@ -67,7 +69,8 @@ struct Channel {
 
 struct Root {
     link: ComponentLink<Self>,
-    screen: Screen,
+    fetcher: JsonFetcher,
+    state: State,
 }
 
 enum WsAction {
@@ -78,6 +81,7 @@ enum WsAction {
 
 enum Msg {
     SignIn,
+    InitChat { keys: Keys, peer_id: PeerId },
     ChatScreenMouseMove(MouseEvent),
     ToggleChatSidebarSplitHandle(MouseEvent),
     ToggleChatEditorSplitHandle(MouseEvent),
@@ -107,7 +111,8 @@ impl Component for Root {
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
             link,
-            screen: Screen::SignIn,
+            fetcher: JsonFetcher::new(),
+            state: State::SignIn,
         }
     }
 
@@ -130,39 +135,74 @@ impl Component for Root {
                 })()
                 .msg_error_map(&self.link)
                 {
-                    let callback = self.link.callback(|Json(response)| match response {
-                        Ok(data) => Msg::Ws(WsAction::ReceiveData(data)),
-                        Err(err) => Msg::Error(err),
-                    });
-                    let notification = self.link.batch_callback(|status| match status {
-                        WebSocketStatus::Opened => vec![],
-                        WebSocketStatus::Closed | WebSocketStatus::Error => vec![WsAction::Lost.into()],
-                    });
-                    let location = dom::document().location().expect("Location should be existing");
-                    let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
-                    let ws = WebSocketService::connect(&url, callback, notification)
-                        .unwrap_or_else(|err| panic!("WS should be created for URL {}: {:?}", url, err));
                     let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
+                    let body = serde_json::to_string(&Peer {
+                        peer_id: peer_id.to_bytes(),
+                        keypair: keypair.encode().into(),
+                    })
+                    .expect("Peer should be serialize to JSON");
 
-                    self.screen = Screen::Chat(ChatState {
+                    let success_msg = RefCell::new(Some(Msg::InitChat {
                         keys: Keys {
                             keypair,
                             public_key,
                             secret_key,
                         },
                         peer_id,
-                        resize_data: ResizeData::default(),
-                        ws,
-                        channels: Default::default(),
-                        active_channel_idx: 0,
-                    });
+                    }));
+
+                    self.fetcher
+                        .send_post_json(
+                            "/chat/p2p",
+                            body,
+                            self.link.callback(move |response: StringResponse| {
+                                if response.status().is_success() {
+                                    success_msg
+                                        .borrow_mut()
+                                        .take()
+                                        .unwrap_or_else(|| Msg::Error(anyhow!("Multiple success fetch received")))
+                                } else {
+                                    Msg::Error(anyhow!(
+                                        "Fetch status: {:?}, body: {:?}",
+                                        response.status(),
+                                        response.into_body(),
+                                    ))
+                                }
+                            }),
+                        )
+                        .context("Start P2P error")
+                        .msg_error(&self.link);
                 }
                 true
             }
+            Msg::InitChat { keys, peer_id } => {
+                let location = dom::document().location().expect("Location should be existing");
+                let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
+                let callback = self.link.callback(|Json(response)| match response {
+                    Ok(data) => Msg::Ws(WsAction::ReceiveData(data)),
+                    Err(err) => Msg::Error(err),
+                });
+                let notification = self.link.batch_callback(|status| match status {
+                    WebSocketStatus::Opened => vec![],
+                    WebSocketStatus::Closed | WebSocketStatus::Error => vec![WsAction::Lost.into()],
+                });
+                let ws = WebSocketService::connect(&url, callback, notification)
+                    .unwrap_or_else(|err| panic!("WS should be created for URL {}: {:?}", url, err));
+
+                self.state = State::Chat(Chat {
+                    keys,
+                    peer_id,
+                    resize_data: ResizeData::default(),
+                    ws,
+                    channels: Default::default(),
+                    active_channel_idx: 0,
+                });
+                true
+            }
             Msg::ChatScreenMouseMove(event) => {
-                if let Screen::Chat(ChatState {
+                if let State::Chat(Chat {
                     ref mut resize_data, ..
-                }) = self.screen
+                }) = self.state
                 {
                     if resize_data.width.tracking && event.buttons() == 1 {
                         let delta_x = event.screen_x() - resize_data.width.start_cursor_screen_pos;
@@ -186,9 +226,9 @@ impl Component for Root {
                 false
             }
             Msg::ToggleChatSidebarSplitHandle(event) => {
-                if let Screen::Chat(ChatState {
+                if let State::Chat(Chat {
                     ref mut resize_data, ..
-                }) = self.screen
+                }) = self.state
                 {
                     if event.button() == 0 {
                         let sidebar = select_exist_html_element(".chat-sidebar");
@@ -206,9 +246,9 @@ impl Component for Root {
                 false
             }
             Msg::ToggleChatEditorSplitHandle(event) => {
-                if let Screen::Chat(ChatState {
+                if let State::Chat(Chat {
                     ref mut resize_data, ..
-                }) = self.screen
+                }) = self.state
                 {
                     if event.button() == 0 {
                         let editor = select_exist_html_element(".chat-editor textarea");
@@ -226,19 +266,20 @@ impl Component for Root {
                 false
             }
             Msg::AddPeer(peer_id) => {
-                if let Screen::Chat(state) = &mut self.screen {
+                if let State::Chat(state) = &mut self.state {
                     state.channels.push(Channel {
-                        correspondent_id: peer_id,
-                        correspondent_name: "".to_string(),
+                        correspondent_id: peer_id.clone(),
+                        correspondent_name: "<Unnamed>".to_string(),
                         thread: vec![],
                     });
+                    state.ws.send(Json(&WsMessage::AddPeer(peer_id)));
                     true
                 } else {
                     false
                 }
             }
             Msg::SwitchChannel(idx) => {
-                if let Screen::Chat(state) = &mut self.screen {
+                if let State::Chat(state) = &mut self.state {
                     if state.active_channel_idx != idx {
                         state.active_channel_idx = idx;
                         return true;
@@ -248,7 +289,7 @@ impl Component for Root {
             }
             Msg::Ws(action) => match action {
                 WsAction::SendData(request) => {
-                    if let Screen::Chat(state) = &mut self.screen {
+                    if let State::Chat(state) = &mut self.state {
                         if let Some(channel) = state.channels.get_mut(state.active_channel_idx) {
                             channel.thread.push(Message {
                                 is_mine: true,
@@ -265,7 +306,7 @@ impl Component for Root {
                 WsAction::ReceiveData(response) => {
                     match response {
                         WsResponse::Success(WsMessage::Text { peer_id, msg }) => {
-                            if let Screen::Chat(state) = &mut self.screen {
+                            if let State::Chat(state) = &mut self.state {
                                 if let Some(channel) = state
                                     .channels
                                     .iter_mut()
@@ -313,9 +354,9 @@ impl Component for Root {
             .title(html! { <h2 tabindex = 0>{ "Settings" }</h2> });
         let mut dialogs = html! {};
 
-        let content = match &self.screen {
-            Screen::SignIn => self.view_sign_in(),
-            Screen::Chat(state) => {
+        let content = match &self.state {
+            State::SignIn => self.view_sign_in(),
+            State::Chat(state) => {
                 drawer = drawer
                     .title(html! { <h3 contenteditable = "true">{ "User" }</h3> })
                     .content(
@@ -462,7 +503,7 @@ impl Root {
         }
     }
 
-    fn view_chat(&self, state: &ChatState) -> Html {
+    fn view_chat(&self, state: &Chat) -> Html {
         let mut channels = List::nav().two_line().divider();
         let mut messages = html! {};
         for (idx, channel) in state.channels.iter().enumerate() {

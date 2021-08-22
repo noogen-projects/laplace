@@ -6,18 +6,19 @@ pub use actix_web;
 use actix_web::{middleware, web, App, HttpServer};
 
 use self::{
-    daps::{Dap, DapsService},
+    daps::{Dap, DapsProvider},
     settings::Settings,
 };
 
 pub mod daps;
 pub mod error;
+pub mod gossipsub;
 pub mod handler;
 pub mod settings;
 pub mod ws;
 
 pub async fn run(settings: Settings) -> io::Result<()> {
-    let daps_service = DapsService::new(&settings.daps.path)?;
+    let daps_service = DapsProvider::new(&settings.daps.path)?;
     let web_root = settings.http.web_root.clone();
 
     HttpServer::new(move || {

@@ -3,13 +3,16 @@ use std::convert::TryFrom;
 use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
+use dapla_common::api::Peer;
+use futures::{executor, TryFutureExt};
 
 use crate::{
-    daps::{DapsService, ExpectedInstance},
+    daps::{service, DapsProvider, ExpectedInstance, Permission},
+    gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService},
     ws::WebSocketService,
 };
 
-pub async fn index_file(daps_service: web::Data<DapsService>, request: HttpRequest, dap_name: String) -> HttpResponse {
+pub async fn index_file(daps_service: web::Data<DapsProvider>, request: HttpRequest, dap_name: String) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
@@ -19,7 +22,7 @@ pub async fn index_file(daps_service: web::Data<DapsService>, request: HttpReque
         .await
 }
 
-pub async fn get(daps_service: web::Data<DapsService>, request: HttpRequest, dap_name: String) -> HttpResponse {
+pub async fn get(daps_service: web::Data<DapsProvider>, request: HttpRequest, dap_name: String) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
@@ -38,7 +41,7 @@ pub async fn get(daps_service: web::Data<DapsService>, request: HttpRequest, dap
 }
 
 pub async fn post(
-    daps_service: web::Data<DapsService>,
+    daps_service: web::Data<DapsProvider>,
     request: HttpRequest,
     body: String,
     dap_name: String,
@@ -62,7 +65,7 @@ pub async fn post(
 }
 
 pub async fn ws_start(
-    daps_service: web::Data<DapsService>,
+    daps_service: web::Data<DapsProvider>,
     request: HttpRequest,
     stream: web::Payload,
     dap_name: String,
@@ -70,8 +73,63 @@ pub async fn ws_start(
     daps_service
         .into_inner()
         .handle_ws_dap(dap_name, move |daps_manager, dap_name| {
-            let dap_instance = ExpectedInstance::try_from(daps_manager.instance(&dap_name)?)?;
-            ws::start(WebSocketService::new(dap_instance), &request, stream).map_err(Into::into)
+            let dap_service_sender = daps_manager.service_sender(&dap_name)?;
+
+            let (addr, response) =
+                ws::start_with_addr(WebSocketService::new(dap_service_sender.clone()), &request, stream)?;
+
+            let fut = dap_service_sender
+                .send(service::Message::NewWebSocket(addr))
+                .map_err(|err| log::error!("Error occurs when send to dap service: {:?}", err));
+            executor::block_on(fut).ok(); // todo: use async
+
+            Ok(response)
         })
+        .await
+}
+
+pub async fn gossipsub_start(
+    daps_service: web::Data<DapsProvider>,
+    mut request: web::Json<Peer>,
+    dap_name: String,
+) -> HttpResponse {
+    daps_service
+        .into_inner()
+        .handle_allowed(
+            &[Permission::Http, Permission::Tcp],
+            dap_name,
+            move |daps_manager, dap_name| {
+                let dap_service_sender = daps_manager.service_sender(&dap_name)?;
+                let peer_id = decode_peer_id(&request.peer_id)?;
+                let keypair = decode_keypair(&mut request.keypair)?;
+                let settings = daps_manager.dap(&dap_name)?.settings();
+                let address = settings
+                    .network
+                    .gossipsub
+                    .addr
+                    .parse()
+                    .map_err(gossipsub::Error::from)?;
+                let dial_ports = settings.network.gossipsub.dial_ports.clone();
+
+                log::info!("Start P2P for peer {}", peer_id);
+                let (service, sender) = GossipsubService::new(
+                    keypair,
+                    peer_id,
+                    &[],
+                    address,
+                    dial_ports,
+                    "test-net",
+                    dap_service_sender.clone(),
+                )?;
+                actix::spawn(service);
+
+                let fut = dap_service_sender
+                    .send(service::Message::NewGossipSub(sender))
+                    .map_err(|err| log::error!("Error occurs when send to dap service: {:?}", err));
+                executor::block_on(fut).ok(); // todo: use async
+
+                Ok(HttpResponse::Ok().finish())
+            },
+        )
         .await
 }

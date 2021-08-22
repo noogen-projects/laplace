@@ -1,4 +1,4 @@
-pub use self::{route::*, slice::*};
+pub use self::{route::Route, slice::*};
 
 pub mod database;
 pub mod route;

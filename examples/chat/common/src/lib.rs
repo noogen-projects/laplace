@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct Peer {
+    pub peer_id: Vec<u8>,
+    pub keypair: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WsMessage {
     AddPeer(String),
     UpdateName(String),

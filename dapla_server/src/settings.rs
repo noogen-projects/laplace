@@ -25,6 +25,12 @@ impl Default for HttpSettings {
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct P2pSettings {
+    pub mdns_discovery_enabled: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct LoggerSettings {
@@ -62,6 +68,7 @@ impl Default for DapsSettings {
 #[serde(default)]
 pub struct Settings {
     pub http: HttpSettings,
+    pub p2p: P2pSettings,
     pub log: LoggerSettings,
     pub daps: DapsSettings,
 }

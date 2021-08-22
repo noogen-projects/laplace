@@ -2,6 +2,9 @@
 host = "127.0.0.1"
 port = 8080
 
+[p2p]
+mdns_discovery_enabled = true
+
 [log]
 level = "info"
 

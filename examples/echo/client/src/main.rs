@@ -40,7 +40,7 @@ impl Component for Root {
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
             Msg::Submit => {
-                if !self.fetch_task.is_some() {
+                if self.fetch_task.is_none() {
                     let uri = dom::select_exist_element::<HtmlInputElement>("#uri > input").value();
                     if let Ok(request) = Request::get(format!("/echo/{}", uri)).body(Nothing) {
                         if let Ok(task) = FetchService::fetch(

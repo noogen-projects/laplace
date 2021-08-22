@@ -7,7 +7,10 @@ use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 use wasmer_wasi::{WasiError, WasiStateCreationError};
 
-use crate::daps::{DapInstanceError, DapSettingsError};
+use crate::{
+    daps::{DapInstanceError, DapSettingsError},
+    gossipsub,
+};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -15,6 +18,9 @@ pub type ServerResult<T> = Result<T, ServerError>;
 pub enum ServerError {
     #[error("Web error: {0}")]
     WebError(#[from] actix_web::Error),
+
+    #[error("P2p error: {0}")]
+    P2pError(#[from] gossipsub::Error),
 
     #[error("Wrong parse JSON: {0}")]
     ParseJsonError(#[from] serde_json::Error),

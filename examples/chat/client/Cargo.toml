@@ -13,6 +13,7 @@ description = "The Chat d-app example"
 
 [dependencies]
 anyhow = "1.0"
+serde_json = "1.0"
 libp2p-core = "0.28"
 bs58 = "0.4"
 getrandom = { version = "0.1", features = ["wasm-bindgen"] }
