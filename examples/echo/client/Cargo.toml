@@ -13,6 +13,6 @@ description = "The Echo d-app example"
 
 [dependencies]
 anyhow = "1.0"
-yew = { version = "0.17", features = ["web_sys"] }
+yew = { version = "0.18", features = ["web_sys"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement"] }

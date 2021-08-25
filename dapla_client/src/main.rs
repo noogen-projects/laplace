@@ -88,7 +88,7 @@ impl Component for Root {
                 DapResponse::Daps(daps) => {
                     self.daps = daps.into_iter().map(|dap| dap.into_owned()).collect();
                     true
-                }
+                },
                 DapResponse::Updated(updated) => {
                     if let Some(dap) = self.daps.iter_mut().find(|dap| dap.name() == updated.dap_name) {
                         let mut should_render = false;
@@ -113,7 +113,7 @@ impl Component for Root {
                         ConsoleService::error(&format!("Unknown dap name: {}", updated.dap_name));
                         false
                     }
-                }
+                },
             },
             Msg::SwitchDap(name) => {
                 if let Some(dap) = self.daps.iter_mut().find(|dap| dap.name() == name) {
@@ -137,7 +137,7 @@ impl Component for Root {
                     ConsoleService::error(&format!("Unknown dap name: {}", name));
                     false
                 }
-            }
+            },
             Msg::UpdatePermission(PermissionUpdate {
                 dap_name,
                 permission,
@@ -157,11 +157,11 @@ impl Component for Root {
                         .msg_error(&self.link);
                 }
                 false
-            }
+            },
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
-            }
+            },
         }
     }
 
@@ -250,7 +250,7 @@ impl Root {
             <>
                 <div class = "daps-table-row">
                     <div class = "daps-table-col">
-                        <big><a href = dap.name()>{ dap.title() }</a></big>
+                        <big><a href = dap.name().to_string()>{ dap.title() }</a></big>
                     </div>
                     <div class = "daps-table-col">
                         { enable_switch }

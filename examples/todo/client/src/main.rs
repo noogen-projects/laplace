@@ -5,7 +5,9 @@ use dapla_yew::{JsonFetcher, MsgError};
 use strum::{EnumIter, IntoEnumIterator, ToString};
 use todo_common::{Response, Task};
 use web_sys::HtmlInputElement;
-use yew::{html, services::console::ConsoleService, Component, ComponentLink, Html, InputData, KeyboardEvent, NodeRef};
+use yew::{
+    classes, html, services::console::ConsoleService, Component, ComponentLink, Html, InputData, KeyboardEvent, NodeRef,
+};
 
 #[derive(EnumIter, ToString, Clone, Copy, PartialEq)]
 enum Filter {
@@ -153,7 +155,7 @@ impl Component for Root {
                 }
                 self.state.value.clear();
                 false
-            }
+            },
             Msg::Edit => {
                 if let Some(edit) = self.state.edit.take() {
                     let idx = self.state.filtered_task_idx(edit.task_idx);
@@ -168,17 +170,17 @@ impl Component for Root {
                     self.link.send_message(msg);
                 }
                 false
-            }
+            },
             Msg::TypeNew(value) => {
                 self.state.value = value;
                 false
-            }
+            },
             Msg::TypeEdit(value) => {
                 if let Some(edit) = &mut self.state.edit {
                     edit.value = value;
                 }
                 false
-            }
+            },
             Msg::Save(idx) => {
                 let task = &self.state.list[idx];
                 self.fetcher
@@ -193,7 +195,7 @@ impl Component for Root {
                     .context("Save task error")
                     .msg_error(&self.link);
                 false
-            }
+            },
             Msg::Remove(idx) => {
                 let idx = self.state.remove(idx);
                 self.fetcher
@@ -205,18 +207,18 @@ impl Component for Root {
                     .context("Remove task error")
                     .msg_error(&self.link);
                 false
-            }
+            },
             Msg::SetFilter(filter) => {
                 self.state.filter = filter;
                 true
-            }
+            },
             Msg::ToggleEdit(idx) => {
                 self.state.edit = Some(Edit {
                     value: self.state.list[idx].description.clone(),
                     task_idx: idx,
                 });
                 true
-            }
+            },
             Msg::ToggleAll => {
                 let status = !self.state.is_all_completed();
                 for (idx, task) in self.state.list.iter_mut().enumerate() {
@@ -226,12 +228,12 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::Toggle(idx) => {
                 let idx = self.state.toggle(idx);
                 self.link.send_message(Msg::Save(idx));
                 false
-            }
+            },
             Msg::ClearCompleted => {
                 self.fetcher
                     .send_post(
@@ -242,7 +244,7 @@ impl Component for Root {
                     .context("Clear completed tasks error")
                     .msg_error(&self.link);
                 false
-            }
+            },
             Msg::Focus => {
                 if let Some(input) = self.focus_ref.cast::<HtmlInputElement>() {
                     input
@@ -251,24 +253,24 @@ impl Component for Root {
                         .msg_error(&self.link);
                 }
                 false
-            }
+            },
             Msg::Fetch(Response::List(list)) => {
                 self.state.list = list;
                 true
-            }
+            },
             Msg::Fetch(Response::Task(task)) => {
                 self.state.list.push(task);
                 true
-            }
+            },
             Msg::Fetch(Response::Empty) => true,
             Msg::Fetch(Response::Error(err)) => {
                 self.link.send_message(Msg::Error(anyhow!("{}", err)));
                 false
-            }
+            },
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
-            }
+            },
             Msg::Nope => false,
         }
     }
@@ -286,7 +288,7 @@ impl Component for Root {
                         <h1>{ "todos" }</h1>
                         { self.view_input() }
                     </header>
-                    <section class = ("main", hidden_class)>
+                    <section class = classes!("main", hidden_class)>
                         <input
                             type = "checkbox"
                             class = "toggle-all"
@@ -298,7 +300,7 @@ impl Component for Root {
                             { for self.state.list.iter().filter(|task| self.state.filter.fit(task)).enumerate().map(|task| self.view_task(task)) }
                         </ul>
                     </section>
-                    <footer class = ("footer", hidden_class)>
+                    <footer class = classes!("footer", hidden_class)>
                         <span class = "todo-count">
                             <strong>{ self.state.total() }</strong>
                             { " item(s) left" }
@@ -336,7 +338,7 @@ impl Root {
     fn view_input(&self) -> Html {
         html! {
             <input class = "new-todo" placeholder = "What needs to be done?"
-                    value = &self.state.value
+                    value = self.state.value.clone()
                     oninput = self.link.callback(|event: InputData| Msg::TypeNew(event.value))
                     onkeypress = self.link.callback(|event: KeyboardEvent| {
                         if event.key() == "Enter" { Msg::Add } else { Msg::Nope }
@@ -375,7 +377,7 @@ impl Root {
         if let Some(Edit { value, task_idx }) = &self.state.edit {
             if *task_idx == idx {
                 return html! {
-                    <input class = "edit" type = "text" ref = self.focus_ref.clone() value = value
+                    <input class = "edit" type = "text" ref = self.focus_ref.clone() value = value.clone()
                             onmouseover = self.link.callback(|_| Msg::Focus)
                             oninput = self.link.callback(|event: InputData| Msg::TypeEdit(event.value))
                             onblur = self.link.callback(move |_| Msg::Edit)

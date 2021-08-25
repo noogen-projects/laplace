@@ -24,7 +24,8 @@ use log::{error, info};
 
 use crate::daps::service;
 
-pub use {self::error::Error, dapla_wasm::route::gossipsub::Message};
+pub use self::error::Error;
+pub use dapla_wasm::route::gossipsub::Message;
 
 pub mod error;
 
@@ -116,13 +117,13 @@ impl Future for GossipsubService {
                                 addresses.push(address);
                             }
                         }
-                    }
+                    },
                     SwarmEvent::Behaviour(MdnsEvent::Expired(expired)) => {
                         for (peer_id, address) in expired {
                             info!("MDNS expired {} {}", peer_id, address);
                             self.peers.remove(&peer_id);
                         }
-                    }
+                    },
                     SwarmEvent::NewListenAddr { address, .. } => info!("MDNS listening on {:?}", address),
                     SwarmEvent::IncomingConnection {
                         local_addr,
@@ -144,7 +145,7 @@ impl Future for GossipsubService {
                         .publish(topic, msg)
                         .map(drop)
                         .map_err(Error::GossipsubPublishError)
-                }
+                },
                 Ok(Message::Dial(peer_id)) => {
                     info!("Dial peer: {}", peer_id);
                     PeerId::from_str(&peer_id)
@@ -167,7 +168,7 @@ impl Future for GossipsubService {
                                 Err(Error::DialError(libp2p::swarm::DialError::NoAddresses))
                             }
                         })
-                }
+                },
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return Poll::Ready(()),
             } {
@@ -197,7 +198,7 @@ impl Future for GossipsubService {
                                 log::error!("Error occurs when send to dap service: {:?}", err);
                             }
                         }
-                    }
+                    },
                     SwarmEvent::NewListenAddr { address, .. } => info!("Listening on {:?}", address),
                     SwarmEvent::IncomingConnection {
                         local_addr,

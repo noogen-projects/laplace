@@ -13,8 +13,8 @@ description = "The Todo d-app example"
 
 [dependencies]
 anyhow = "1.0"
-strum = { version = "0.20", features = ["derive"] }
-yew = { version = "0.17", features = ["web_sys"] }
+strum = { version = "0.21", features = ["derive"] }
+yew = { version = "0.18", features = ["web_sys"] }
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
 todo_common = { path = "../common" }
 dapla_yew = { path = "../../../dapla_yew" }

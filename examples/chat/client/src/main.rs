@@ -9,6 +9,7 @@ use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
 use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
 use yew::{
+    classes,
     format::Json,
     html, initialize, run_loop,
     services::{
@@ -174,7 +175,7 @@ impl Component for Root {
                         .msg_error(&self.link);
                 }
                 true
-            }
+            },
             Msg::InitChat { keys, peer_id } => {
                 let location = dom::document().location().expect("Location should be existing");
                 let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
@@ -198,7 +199,7 @@ impl Component for Root {
                     active_channel_idx: 0,
                 });
                 true
-            }
+            },
             Msg::ChatScreenMouseMove(event) => {
                 if let State::Chat(Chat {
                     ref mut resize_data, ..
@@ -224,7 +225,7 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::ToggleChatSidebarSplitHandle(event) => {
                 if let State::Chat(Chat {
                     ref mut resize_data, ..
@@ -244,7 +245,7 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::ToggleChatEditorSplitHandle(event) => {
                 if let State::Chat(Chat {
                     ref mut resize_data, ..
@@ -264,7 +265,7 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::AddPeer(peer_id) => {
                 if let State::Chat(state) = &mut self.state {
                     state.channels.push(Channel {
@@ -277,7 +278,7 @@ impl Component for Root {
                 } else {
                     false
                 }
-            }
+            },
             Msg::SwitchChannel(idx) => {
                 if let State::Chat(state) = &mut self.state {
                     if state.active_channel_idx != idx {
@@ -286,7 +287,7 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::Ws(action) => match action {
                 WsAction::SendData(request) => {
                     if let State::Chat(state) = &mut self.state {
@@ -302,7 +303,7 @@ impl Component for Root {
                         }
                     }
                     true
-                }
+                },
                 WsAction::ReceiveData(response) => {
                     match response {
                         WsResponse::Success(WsMessage::Text { peer_id, msg }) => {
@@ -319,17 +320,17 @@ impl Component for Root {
                                     return true;
                                 }
                             }
-                        }
+                        },
                         msg => self.link.send_message(Msg::Error(anyhow!("{:?}", msg))),
                     }
                     false
-                }
+                },
                 WsAction::Lost => true,
             },
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
-            }
+            },
             Msg::None => false,
         }
     }
@@ -400,7 +401,7 @@ impl Component for Root {
                 };
 
                 self.view_chat(state)
-            }
+            },
         };
 
         html! {
@@ -409,7 +410,7 @@ impl Component for Root {
                 <div class = "mdc-drawer-scrim"></div>
                 { dialogs }
 
-                <div class = ("app-content", Drawer::APP_CONTENT_CLASS)>
+                <div class = classes!("app-content", Drawer::APP_CONTENT_CLASS)>
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust content-container">
                         { content }
