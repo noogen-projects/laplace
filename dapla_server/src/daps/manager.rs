@@ -1,5 +1,6 @@
 use std::{collections::HashMap, convert::TryFrom, fs, io, path::Path};
 
+use futures::executor;
 use log::{error, info};
 use wasmer::Instance;
 
@@ -42,6 +43,7 @@ impl DapsManager {
     }
 
     pub fn unload(&mut self, dap_name: impl AsRef<str>) -> bool {
+        executor::block_on(self.service_stop(dap_name.as_ref())); // todo: use async
         self.daps
             .get_mut(dap_name.as_ref())
             .map(|dap| dap.instance.take().is_some())
@@ -113,6 +115,18 @@ impl DapsManager {
 
             self.service_senders.insert(dap_name.to_string(), sender.clone());
             Ok(sender)
+        }
+    }
+
+    pub async fn service_stop(&mut self, dap_name: impl AsRef<str>) -> bool {
+        if let Some(sender) = self.service_senders.remove(dap_name.as_ref()) {
+            sender
+                .send(service::Message::Stop)
+                .await
+                .map_err(|err| log::error!("Error occurs when send to dap service: {:?}", err))
+                .is_ok()
+        } else {
+            false
         }
     }
 }

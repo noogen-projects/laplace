@@ -19,6 +19,8 @@ pub enum Error {
 
 #[derive(Debug)]
 pub enum Message {
+    Stop,
+
     // WebSocket
     NewWebSocket(Addr<ws::WebSocketService>),
     WebSocket(ws::Message),
@@ -119,6 +121,8 @@ impl DapService {
     pub async fn run(mut self) {
         loop {
             match self.receiver.recv().await {
+                Ok(Message::Stop) => break,
+
                 // WebSocket
                 Ok(Message::NewWebSocket(sender)) => self.use_websocket(sender),
                 Ok(Message::WebSocket(msg)) => {
@@ -127,7 +131,7 @@ impl DapService {
                         Ok(routes) => self.process_routes(routes).await,
                         Err(err) => log::error!("Handle websocket error: {:?}", err),
                     }
-                }
+                },
 
                 // GossipSub
                 Ok(Message::NewGossipSub(sender)) => self.use_gossipsub(sender),

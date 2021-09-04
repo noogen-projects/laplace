@@ -28,13 +28,13 @@ cargo install --force cargo-make wasm-bindgen-cli
 To build dapla and all examples, run:
 
 ```shell
-cargo make all
+cargo +stable make all
 ```
 
 Or for a debug build, run:
 
 ```shell
-cargo make all -p debug
+cargo +stable make all -p debug
 ```
 
 ## Run examples
@@ -42,13 +42,13 @@ cargo make all -p debug
 Run the dapla server:
 
 ```shell
-cargo make run
+cargo +stable make run
 ```
 
 Or for a debug build:
 
 ```shell
-cargo make run -p debug
+cargo +stable make run -p debug
 ```
 
 Then visit [http://localhost:8080](http://localhost:8080). You can change the default port and other settings
@@ -59,13 +59,13 @@ by editing `settings.toml` file.
 To check the project, use the following command:
 
 ```shell script
-cargo check --workspace --all-features --all-targets
+cargo +stable check --workspace --all-features --all-targets
 ```
 
 To run all tests, use the following command:
 
 ```shell script
-cargo test --all-features --all-targets
+cargo +stable test --all-features --all-targets
 ```
 
 To check and perform formatting, use the following commands:
@@ -82,7 +82,7 @@ To enable autoformatting for IntelliJ IDEA with the Rust plugin:
 To run clippy, use the following command:
 
 ```shell script
-cargo clippy --all-targets --all-features -- -D warnings
+cargo +stable clippy --all-targets --all-features -- -D warnings
 ```
 
 To setup git hook, use the following command:

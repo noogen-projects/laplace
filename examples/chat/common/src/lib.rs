@@ -10,6 +10,7 @@ pub struct Peer {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WsMessage {
     AddPeer(String),
+    AddAddress(String),
     UpdateName(String),
     Text { peer_id: String, msg: String },
 }

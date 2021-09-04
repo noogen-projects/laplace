@@ -169,6 +169,12 @@ impl Future for GossipsubService {
                             }
                         })
                 },
+                Ok(Message::AddAddress(address)) => {
+                    info!("Add address: {}", address);
+                    Multiaddr::from_str(&address)
+                        .map_err(Error::WrongMultiaddr)
+                        .and_then(|address| self.swarm.dial_addr(address).map_err(Error::DialError))
+                },
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return Poll::Ready(()),
             } {

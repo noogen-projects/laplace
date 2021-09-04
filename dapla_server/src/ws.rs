@@ -21,12 +21,6 @@ enum WsError {
     Io(io::Error),
 }
 
-impl WsError {
-    fn to_json_string(&self) -> String {
-        format!(r#"{{"Error":"{:?}"}}"#, self)
-    }
-}
-
 pub struct ActixMessage(pub Message);
 
 impl actix::Message for ActixMessage {
@@ -109,7 +103,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
                 error!("WS error: {:?}", err);
                 ctx.stop();
                 return;
-            }
+            },
         };
 
         // process websocket messages
@@ -118,10 +112,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
             ws::Message::Ping(msg) => {
                 self.hb = Instant::now();
                 ctx.pong(&msg);
-            }
+            },
             ws::Message::Pong(_) => {
                 self.hb = Instant::now();
-            }
+            },
             ws::Message::Text(text) => {
                 let dap_service_sender = self.dap_service_sender.clone();
                 let fut = async move {
@@ -133,15 +127,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
                     }
                 };
                 ctx.wait(fut.into_actor(self));
-            }
+            },
             ws::Message::Binary(bin) => ctx.binary(bin),
             ws::Message::Close(reason) => {
                 ctx.close(reason);
                 ctx.stop();
-            }
+            },
             ws::Message::Continuation(_) => {
                 ctx.stop();
-            }
+            },
             ws::Message::Nop => (),
         }
     }

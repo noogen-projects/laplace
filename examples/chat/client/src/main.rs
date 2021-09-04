@@ -24,6 +24,10 @@ use yew_mdc_widgets::{
     Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
 };
 
+use self::addresses::Addresses;
+
+mod addresses;
+
 enum State {
     SignIn,
     Chat(Chat),
@@ -39,7 +43,6 @@ struct Chat {
 }
 
 struct Keys {
-    keypair: Keypair,
     public_key: String,
     secret_key: String,
 }
@@ -69,7 +72,8 @@ struct Channel {
 }
 
 struct Root {
-    link: ComponentLink<Self>,
+    this_link: ComponentLink<Self>,
+    addresses_link: Option<ComponentLink<Addresses>>,
     fetcher: JsonFetcher,
     state: State,
 }
@@ -81,12 +85,14 @@ enum WsAction {
 }
 
 enum Msg {
+    LinkAddresses(ComponentLink<Addresses>),
     SignIn,
     InitChat { keys: Keys, peer_id: PeerId },
     ChatScreenMouseMove(MouseEvent),
     ToggleChatSidebarSplitHandle(MouseEvent),
     ToggleChatEditorSplitHandle(MouseEvent),
     AddPeer(String),
+    AddAddress(String),
     SwitchChannel(usize),
     Ws(WsAction),
     Error(Error),
@@ -111,7 +117,8 @@ impl Component for Root {
 
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
-            link,
+            this_link: link,
+            addresses_link: None,
             fetcher: JsonFetcher::new(),
             state: State::SignIn,
         }
@@ -119,6 +126,10 @@ impl Component for Root {
 
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
+            Msg::LinkAddresses(link) => {
+                self.addresses_link = Some(link);
+                false
+            },
             Msg::SignIn => {
                 let public_key = TextField::value("public-key");
                 let secret_key = TextField::value("secret-key");
@@ -134,7 +145,7 @@ impl Component for Root {
                     );
                     Keypair::decode(&mut bytes).context("Decode keypair error")
                 })()
-                .msg_error_map(&self.link)
+                .msg_error_map(&self.this_link)
                 {
                     let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
                     let body = serde_json::to_string(&Peer {
@@ -144,11 +155,7 @@ impl Component for Root {
                     .expect("Peer should be serialize to JSON");
 
                     let success_msg = RefCell::new(Some(Msg::InitChat {
-                        keys: Keys {
-                            keypair,
-                            public_key,
-                            secret_key,
-                        },
+                        keys: Keys { public_key, secret_key },
                         peer_id,
                     }));
 
@@ -156,7 +163,7 @@ impl Component for Root {
                         .send_post_json(
                             "/chat/p2p",
                             body,
-                            self.link.callback(move |response: StringResponse| {
+                            self.this_link.callback(move |response: StringResponse| {
                                 if response.status().is_success() {
                                     success_msg
                                         .borrow_mut()
@@ -172,18 +179,18 @@ impl Component for Root {
                             }),
                         )
                         .context("Start P2P error")
-                        .msg_error(&self.link);
+                        .msg_error(&self.this_link);
                 }
                 true
             },
             Msg::InitChat { keys, peer_id } => {
                 let location = dom::document().location().expect("Location should be existing");
                 let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
-                let callback = self.link.callback(|Json(response)| match response {
+                let callback = self.this_link.callback(|Json(response)| match response {
                     Ok(data) => Msg::Ws(WsAction::ReceiveData(data)),
                     Err(err) => Msg::Error(err),
                 });
-                let notification = self.link.batch_callback(|status| match status {
+                let notification = self.this_link.batch_callback(|status| match status {
                     WebSocketStatus::Opened => vec![],
                     WebSocketStatus::Closed | WebSocketStatus::Error => vec![WsAction::Lost.into()],
                 });
@@ -279,6 +286,12 @@ impl Component for Root {
                     false
                 }
             },
+            Msg::AddAddress(address) => {
+                if let State::Chat(state) = &mut self.state {
+                    state.ws.send(Json(&WsMessage::AddAddress(address)));
+                }
+                false
+            },
             Msg::SwitchChannel(idx) => {
                 if let State::Chat(state) = &mut self.state {
                     if state.active_channel_idx != idx {
@@ -321,7 +334,12 @@ impl Component for Root {
                                 }
                             }
                         },
-                        msg => self.link.send_message(Msg::Error(anyhow!("{:?}", msg))),
+                        WsResponse::Success(WsMessage::AddAddress(address)) => {
+                            if let Some(link) = &self.addresses_link {
+                                link.send_message(addresses::Msg::Add(address));
+                            }
+                        },
+                        msg => self.this_link.send_message(Msg::Error(anyhow!("{:?}", msg))),
                     }
                     false
                 },
@@ -376,6 +394,12 @@ impl Component for Root {
                                     .text("Keys")
                                     .on_click(|_| Dialog::open_existing("keys-dialog")),
                             )
+                            .item(
+                                ListItem::new()
+                                    .icon("share")
+                                    .text("Addresses")
+                                    .on_click(|_| Dialog::open_existing("addresses-dialog")),
+                            )
                             .markup_only(),
                     );
 
@@ -397,6 +421,7 @@ impl Component for Root {
                     <>
                         { peer_dialog }
                         { keys_dialog }
+                        <Addresses root = self.this_link.clone() list = vec![] />
                     </>
                 };
 
@@ -447,7 +472,7 @@ impl Root {
             .id("sign-in-button")
             .label("Sign In")
             .disabled()
-            .on_click(self.link.callback(|_| Msg::SignIn));
+            .on_click(self.this_link.callback(|_| Msg::SignIn));
 
         let sign_in_form = List::simple_ul().items(vec![
             ListItem::simple().child(html! {
@@ -512,13 +537,16 @@ impl Root {
                 .icon("person")
                 .text(&channel.correspondent_name)
                 .text(&channel.correspondent_id)
-                .on_click(self.link.callback(move |_| Msg::SwitchChannel(idx)));
+                .on_click(self.this_link.callback(move |_| Msg::SwitchChannel(idx)));
 
             if idx == state.active_channel_idx {
                 item = item.selected(true).attr("tabindex", "0");
-                messages = html! {
-                    { for channel.thread.iter().map(|msg| html! { <div><RawHtml inner_html = to_view_inner_html(&msg.body) /></div> }) }
-                };
+                messages = html! { {
+                    for channel.thread.iter().map(|msg| {
+                        let msg_class = if msg.is_mine { "mine-message" } else { "message" };
+                        html! { <div class = msg_class><RawHtml inner_html = to_view_inner_html(&msg.body) /></div> }
+                    })
+                } };
             }
             channels = channels.item(item).divider()
         }
@@ -530,7 +558,7 @@ impl Root {
             .class("centered-hor")
             .on_click(|_| Dialog::open_existing("add-peer-dialog"));
 
-        let sender = self.link.callback(|event: KeyboardEvent| {
+        let sender = self.this_link.callback(|event: KeyboardEvent| {
             if event.key() == "Enter" && event.ctrl_key() {
                 let editor = dom::get_exist_element_by_id::<HtmlTextAreaElement>("editor");
                 let message = editor.value();
@@ -543,12 +571,13 @@ impl Root {
         });
         let editor = html! {
             <label class = "mdc-text-field mdc-text-field--textarea mdc-text-field--no-label">
-                <textarea id = "editor" class = "mdc-text-field__input" rows = "3" aria-label = "Label" onkeypress = sender></textarea>
+                <textarea id = "editor" class = "mdc-text-field__input" rows = "3" aria-label = "Label"
+                    placeholder = "Type your message here..." onkeypress = sender></textarea>
             </label>
         };
 
         html! {
-            <div class = "chat-screen" onmousemove = self.link.callback(|event| Msg::ChatScreenMouseMove(event))>
+            <div class = "chat-screen" onmousemove = self.this_link.callback(|event| Msg::ChatScreenMouseMove(event))>
                 <aside class = "chat-sidebar">
                     <div class = "chat-flex-container scrollable-content">
                         { channels }
@@ -556,7 +585,7 @@ impl Root {
                         { add_peer_dialog }
                     </div>
                 </aside>
-                <div class = "chat-sidebar-split-handle resize-hor-cursor" onmousedown = self.link.callback(|event| {
+                <div class = "chat-sidebar-split-handle resize-hor-cursor" onmousedown = self.this_link.callback(|event| {
                     Msg::ToggleChatSidebarSplitHandle(event)
                 })></div>
                 <div class = "chat-main">
@@ -564,7 +593,7 @@ impl Root {
                         <div id = "messages" class = "chat-messages">
                             { messages }
                         </div>
-                        <div class = "chat-editor-split-handle resize-ver-cursor" onmousedown = self.link.callback(|event| {
+                        <div class = "chat-editor-split-handle resize-ver-cursor" onmousedown = self.this_link.callback(|event| {
                             Msg::ToggleChatEditorSplitHandle(event)
                         })></div>
                         <div class = "chat-editor">
@@ -590,7 +619,7 @@ impl Root {
                     .id("add-peer-button")
                     .label("Add")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.link.callback(|_| {
+                    .on_click(self.this_link.callback(|_| {
                         let id = dom::select_exist_element::<HtmlInputElement>("#new-peer-id > input").value();
                         Dialog::close_existing("add-peer-dialog");
                         Msg::AddPeer(id)
