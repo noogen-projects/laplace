@@ -58,9 +58,8 @@ impl Deref for FullNote {
     type Target = Note;
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            Self { note, .. } => note,
-        }
+        let Self { note, .. } = self;
+        note
     }
 }
 
@@ -130,7 +129,7 @@ impl Component for Root {
                     .context("Get note error")
                     .msg_error(&self.link);
                 false
-            }
+            },
             Msg::OpenNote(name, mode) => {
                 self.current_mode.replace(mode);
 
@@ -144,7 +143,7 @@ impl Component for Root {
 
                 self.link.send_message(Msg::GetInitialNote(name));
                 false
-            }
+            },
             Msg::OpenCurrentNote(mode) => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
                     match mode {
@@ -154,13 +153,13 @@ impl Component for Root {
                             );
                             show_element("note-dialog__view");
                             hide_element("note-dialog__edit");
-                        }
+                        },
                         Mode::Edit => {
                             dom::select_exist_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea")
                                 .set_value(note.content.content().expect("Content should be present"));
                             show_element("note-dialog__edit");
                             hide_element("note-dialog__view");
-                        }
+                        },
                     }
 
                     if note.is_modified() {
@@ -175,7 +174,7 @@ impl Component for Root {
                     Dialog::open_existing("note-dialog");
                 }
                 false
-            }
+            },
             Msg::EditContent(content) => {
                 let index = self.current_note_index.expect("Index should be presented");
                 if !self.notes[index].is_modified() {
@@ -184,7 +183,7 @@ impl Component for Root {
                 }
                 self.notes[index].note_mut().content = NoteContent::FullBody(content);
                 false
-            }
+            },
             Msg::Updated => true,
             Msg::SaveChanges => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
@@ -201,7 +200,7 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::DiscardChanges => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
                     if note.is_new() {
@@ -213,7 +212,7 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::NewNote => {
                 let name = dom::select_exist_element::<HtmlInputElement>("#new-note-name > input").value();
 
@@ -230,7 +229,7 @@ impl Component for Root {
                     self.link.send_message(Msg::OpenCurrentNote(Mode::Edit));
                 }
                 false
-            }
+            },
             Msg::RenameNote(name, new_name) => {
                 let uri = format!("/notes/rename/{}", name);
                 self.fetcher
@@ -238,7 +237,7 @@ impl Component for Root {
                     .context("Rename note error")
                     .msg_error(&self.link);
                 false
-            }
+            },
             Msg::DeleteNote(name) => {
                 let uri = format!("/notes/delete/{}", name);
                 self.fetcher
@@ -246,11 +245,11 @@ impl Component for Root {
                     .context("Delete note error")
                     .msg_error(&self.link);
                 false
-            }
+            },
             Msg::Fetch(Response::Notes(notes)) => {
                 self.notes = notes.into_iter().map(FullNote::initial).collect();
                 true
-            }
+            },
             Msg::Fetch(Response::Note(note)) => {
                 for (i, full_note) in self.notes.iter_mut().enumerate() {
                     if full_note.name == note.name {
@@ -263,18 +262,18 @@ impl Component for Root {
                     Some(mode) => {
                         self.link.send_message(Msg::OpenCurrentNote(mode));
                         false
-                    }
+                    },
                     None => true,
                 }
-            }
+            },
             Msg::Fetch(Response::Error(err)) => {
                 self.link.send_message(Msg::Error(anyhow!("{}", err)));
                 false
-            }
+            },
             Msg::Error(err) => {
                 ConsoleService::error(&format!("{}", err));
                 true
-            }
+            },
         }
     }
 
@@ -288,57 +287,53 @@ impl Component for Root {
             .title("Notes dap example")
             .enable_shadow_when_scroll_window();
 
-        let note_cards: Vec<_> = self
-            .notes
-            .iter()
-            .map(|note| {
-                let menu_id = format!("{}-menu", note.name);
-                let menu = Menu::new()
-                    .id(&menu_id)
-                    .item(ListItem::new().text("Rename").on_click({
-                        let note_name = note.name.clone();
-                        move |_| {
-                            let input = dom::select_exist_element::<HtmlInputElement>("#note-new-name > input");
-                            input.set_value(&note_name);
-                            input.dataset().set("note_name", &note_name).ok();
-                            Dialog::open_existing("rename-note-dialog");
-                        }
-                    }))
-                    .divider()
-                    .item(ListItem::new().text("Delete").on_click({
-                        let note_name = note.name.clone();
-                        move |_| {
-                            dom::get_exist_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
-                            Dialog::open_existing("confirm-delete-note-dialog");
-                        }
-                    }));
+        let note_cards = self.notes.iter().map(|note| {
+            let menu_id = format!("{}-menu", note.name);
+            let menu = Menu::new()
+                .id(&menu_id)
+                .item(ListItem::new().text("Rename").on_click({
+                    let note_name = note.name.clone();
+                    move |_| {
+                        let input = dom::select_exist_element::<HtmlInputElement>("#note-new-name > input");
+                        input.set_value(&note_name);
+                        input.dataset().set("note_name", &note_name).ok();
+                        Dialog::open_existing("rename-note-dialog");
+                    }
+                }))
+                .divider()
+                .item(ListItem::new().text("Delete").on_click({
+                    let note_name = note.name.clone();
+                    move |_| {
+                        dom::get_exist_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
+                        Dialog::open_existing("confirm-delete-note-dialog");
+                    }
+                }));
 
-                let edit_button = IconButton::new()
-                    .class(CardContent::ACTION_ICON_CLASSES)
-                    .icon("edit")
-                    .on_click(self.link.callback({
+            let edit_button = IconButton::new()
+                .class(CardContent::ACTION_ICON_CLASSES)
+                .icon("edit")
+                .on_click(self.link.callback({
+                    let name = note.name.clone();
+                    move |_| Msg::OpenNote(name.clone(), Mode::Edit)
+                }));
+            let menu_button = IconButton::new()
+                .class(CardContent::ACTION_ICON_CLASSES)
+                .icon("more_horiz")
+                .on_click(move |_| Menu::open_existing(&menu_id));
+
+            Card::new(&note.name)
+                .content(CardContent::primary_action(html! {
+                    <div class = "note-card__content" onclick = self.link.callback({
                         let name = note.name.clone();
-                        move |_| Msg::OpenNote(name.clone(), Mode::Edit)
-                    }));
-                let menu_button = IconButton::new()
-                    .class(CardContent::ACTION_ICON_CLASSES)
-                    .icon("more_horiz")
-                    .on_click(move |_| Menu::open_existing(&menu_id));
-
-                Card::new(&note.name)
-                    .content(CardContent::primary_action(html! {
-                        <div class = "note-card__content" onclick = self.link.callback({
-                            let name = note.name.clone();
-                            move |_| Msg::OpenNote(name.clone(), Mode::View)
-                        })>
-                            { to_preview_html(&note.content) }
-                        </div>
-                    }))
-                    .content(CardContent::actions().action_icons(html! { <>
-                        { edit_button } <div class = Menu::ANCHOR_CLASS>{ menu_button } { menu }</div>
-                    </> }))
-            })
-            .collect();
+                        move |_| Msg::OpenNote(name.clone(), Mode::View)
+                    })>
+                        { to_preview_html(&note.content) }
+                    </div>
+                }))
+                .content(CardContent::actions().action_icons(html! { <>
+                    { edit_button } <div class = Menu::ANCHOR_CLASS>{ menu_button } { menu }</div>
+                </> }))
+        });
 
         let view_note_dialog = self.view_note_dialog();
         let add_note_dialog = self.add_note_dialog();
@@ -363,7 +358,7 @@ impl Component for Root {
 
                         <div class = "notes mdc-layout-grid">
                             <div class = "mdc-layout-grid__inner">
-                                { for note_cards.into_iter().map(|card| html! { <div class = "mdc-layout-grid__cell">{ card }</div> }) }
+                                { for note_cards.map(|card| html! { <div class = "mdc-layout-grid__cell">{ card }</div> }) }
                             </div>
                         </div>
 

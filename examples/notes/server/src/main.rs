@@ -6,33 +6,28 @@ use std::{
     path::Path,
 };
 
-use dapla_wasm::WasmSlice;
-pub use dapla_wasm::{alloc, dealloc};
+use dapla_wasm::process::{
+    self,
+    http::{self, Method, Uri},
+};
 use notes_common::{make_preview, Note, NoteContent, Response};
 use thiserror::Error;
 
-#[no_mangle]
-pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_get(uri.into_string_in_wasm()))
-}
+#[process::http]
+fn http(request: http::Request) -> http::Response {
+    let (request, body) = request.into_parts();
+    let response = match request.method {
+        Method::GET => NotesRequest::parse(request.uri, None)
+            .map(|request| request.process())
+            .unwrap_or_else(Response::Error),
+        Method::POST => NotesRequest::parse(request.uri, Some(body))
+            .map(|request| request.process())
+            .unwrap_or_else(Response::Error),
+        method => Response::Error(format!("Unsupported HTTP method {}", method)),
+    };
 
-fn do_get(uri: String) -> String {
-    let response = NotesRequest::parse(&uri, None)
-        .map(|request| request.process())
-        .unwrap_or_else(Response::Error);
-    serde_json::to_string(&response).unwrap_or_else(Response::json_error_from)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn post(uri: WasmSlice, body: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_post(uri.into_string_in_wasm(), body.into_string_in_wasm()))
-}
-
-fn do_post(uri: String, body: String) -> String {
-    let response = NotesRequest::parse(&uri, Some(&body))
-        .map(|request| request.process())
-        .unwrap_or_else(Response::Error);
-    serde_json::to_string(&response).unwrap_or_else(Response::json_error_from)
+    let response = serde_json::to_string(&response).unwrap_or_else(Response::json_error_from);
+    http::Response::new(response.into_bytes())
 }
 
 #[derive(Debug, Error)]
@@ -59,24 +54,30 @@ enum NotesRequest {
 }
 
 impl NotesRequest {
-    fn parse(uri: &str, content: Option<&str>) -> Result<Self, String> {
-        let chunks: Vec<_> = uri.split(|c| c == '/').collect();
+    fn parse(uri: Uri, body: Option<Vec<u8>>) -> Result<Self, String> {
+        let path = uri.path();
+        let chunks: Vec<_> = path.split(|c| c == '/').collect();
+
         match &chunks[..] {
             [.., "list"] => Ok(Self::GetNotes),
-            [.., "note", name] => Ok(if let Some(content) = content {
-                Self::UpdateNote(name.to_string(), content.to_string())
-            } else {
-                Self::GetNote(name.to_string())
-            }),
+            [.., "note", name] => {
+                if let Some(body) = body {
+                    let content = String::from_utf8(body).map_err(|err| err.to_string())?;
+                    Ok(Self::UpdateNote(name.to_string(), content))
+                } else {
+                    Ok(Self::GetNote(name.to_string()))
+                }
+            },
             [.., "rename", name] => {
-                if let Some(content) = content {
+                if let Some(body) = body {
+                    let content = String::from_utf8(body).map_err(|err| err.to_string())?;
                     Ok(Self::RenameNote(name.to_string(), content.trim().to_string()))
                 } else {
                     Err(format!("New name for '{}' not specified", name))
                 }
-            }
+            },
             [.., "delete", name] => Ok(Self::DeleteNote(name.to_string())),
-            _ => Err(format!("Cannot parse uri {}, {:?}", uri, chunks)),
+            _ => Err(format!("Cannot parse uri path {}, {:?}", path, chunks)),
         }
     }
 

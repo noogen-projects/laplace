@@ -10,6 +10,7 @@ use self::{
     settings::Settings,
 };
 
+pub mod convert;
 pub mod daps;
 pub mod error;
 pub mod gossipsub;

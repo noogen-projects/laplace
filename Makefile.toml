@@ -55,11 +55,13 @@ dependencies = ["create_dap_dir"]
 
 [tasks.build_client]
 command = "cargo"
+toolchain = "stable"
 args = ["build", "-p", "${APP}_client", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
 dependencies = ["wasm_build_prepare"]
 
 [tasks.build_server]
 command = "cargo"
+toolchain = "stable"
 args = ["build", "-p", "${APP}_server", "--target", "wasm32-unknown-unknown", "${ADDITIONAL}"]
 dependencies = ["wasm_build_prepare"]
 
@@ -142,6 +144,7 @@ dependencies = ["chat", "echo", "notes", "todo"]
 
 [tasks.dapla_server]
 command = "cargo"
+toolchain = "stable"
 args = ["build", "-p", "dapla_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
@@ -152,6 +155,7 @@ dependencies = ["dapla_server"]
 
 [tasks.run_dapla]
 command = "cargo"
+toolchain = "stable"
 args = ["run", "-p", "dapla_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
@@ -160,6 +164,6 @@ dependencies = ["choose_profile"]
 dependencies = ["dapla", "examples"]
 
 [tasks.run]
-env = { RUSTFLAGS = "" }
+env = { RUSTFLAGS = "", RUST_LOG = "info,regalloc=warn,wasmer_compiler_cranelift=warn" }
 run_task = "run_dapla"
 dependencies = ["all"]

@@ -2,6 +2,10 @@ use borsh::BorshSerialize;
 pub use dapla_wasm::{alloc, dealloc};
 use dapla_wasm::{
     database::{execute, query, Value},
+    process::{
+        self,
+        http::{self, Method, Uri},
+    },
     WasmSlice,
 };
 use sql_builder::{quote, SqlBuilder, SqlBuilderError};
@@ -27,28 +31,21 @@ pub unsafe extern "C" fn init() -> WasmSlice {
     WasmSlice::from(data)
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn get(uri: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_get(uri.into_string_in_wasm()))
-}
+#[process::http]
+fn http(request: http::Request) -> http::Response {
+    let (request, body) = request.into_parts();
+    let response = match request.method {
+        Method::GET => TodoRequest::parse(request.uri, None)
+            .map(|request| request.process())
+            .unwrap_or_else(Response::Error),
+        Method::POST => TodoRequest::parse(request.uri, Some(body))
+            .map(|request| request.process())
+            .unwrap_or_else(Response::Error),
+        method => Response::Error(format!("Unsupported HTTP method {}", method)),
+    };
 
-fn do_get(uri: String) -> String {
-    let response = TodoRequest::parse(&uri, None)
-        .map(|request| request.process())
-        .unwrap_or_else(Response::Error);
-    serde_json::to_string(&response).unwrap_or_else(Response::json_error_from)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn post(uri: WasmSlice, body: WasmSlice) -> WasmSlice {
-    WasmSlice::from(do_post(uri.into_string_in_wasm(), body.into_string_in_wasm()))
-}
-
-fn do_post(uri: String, body: String) -> String {
-    let response = TodoRequest::parse(&uri, Some(&body))
-        .map(|request| request.process())
-        .unwrap_or_else(Response::Error);
-    serde_json::to_string(&response).unwrap_or_else(Response::json_error_from)
+    let response = serde_json::to_string(&response).unwrap_or_else(Response::json_error_from);
+    http::Response::new(response.into_bytes())
 }
 
 #[derive(Debug, Error)]
@@ -84,22 +81,26 @@ enum TodoRequest {
 }
 
 impl TodoRequest {
-    fn parse(uri: &str, body: Option<&str>) -> Result<Self, String> {
-        let chunks: Vec<_> = uri.split(|c| c == '/').collect();
+    fn parse(uri: Uri, body: Option<Vec<u8>>) -> Result<Self, String> {
+        let path = uri.path();
+        let chunks: Vec<_> = path.split(|c| c == '/').collect();
+
         match &chunks[..] {
             [.., "list"] => Ok(Self::List),
             [.., "add"] => {
-                let body = body.ok_or_else(|| "Task not specified".to_string())?;
-                parse_task(body).map(Self::Add)
-            }
+                let body = String::from_utf8(body.ok_or_else(|| "Task not specified".to_string())?)
+                    .map_err(|err| err.to_string())?;
+                parse_task(&body).map(Self::Add)
+            },
             [.., "update", idx] => {
                 let idx = parse_idx(idx)?;
-                let body = body.ok_or_else(|| "Task not specified".to_string())?;
-                parse_task(body).map(|task| Self::Update(idx, task))
-            }
+                let body = String::from_utf8(body.ok_or_else(|| "Task not specified".to_string())?)
+                    .map_err(|err| err.to_string())?;
+                parse_task(&body).map(|task| Self::Update(idx, task))
+            },
             [.., "delete", idx] => parse_idx(idx).map(Self::Delete),
             [.., "clear_completed"] => Ok(Self::ClearCompleted),
-            _ => Err(format!("Cannot parse uri {}, {:?}", uri, chunks)),
+            _ => Err(format!("Cannot parse uri path {}, {:?}", path, chunks)),
         }
     }
 

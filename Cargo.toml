@@ -4,6 +4,7 @@ members = [
     "dapla_common",
     "dapla_server",
     "dapla_wasm",
+    "dapla_wasm_macro",
     "dapla_yew",
     "examples/chat/client",
     "examples/chat/common",
@@ -20,3 +21,6 @@ members = [
 
 [profile.release]
 lto = true
+
+[patch.crates-io]
+http = { git = "https://github.com/noogen-projects/http", branch = "borsh" }

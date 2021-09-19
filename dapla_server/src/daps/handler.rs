@@ -3,11 +3,15 @@ use std::convert::TryFrom;
 use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
+use borsh::{BorshDeserialize, BorshSerialize};
 use dapla_common::api::Peer;
+use dapla_wasm::process::http;
 use futures::{executor, TryFutureExt};
 
 use crate::{
-    daps::{service, DapsProvider, ExpectedInstance, Permission},
+    convert,
+    daps::{service, DapsManager, DapsProvider, ExpectedInstance, Permission},
+    error::ServerResult,
     gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService},
     ws::WebSocketService,
 };
@@ -22,20 +26,31 @@ pub async fn index_file(daps_service: web::Data<DapsProvider>, request: HttpRequ
         .await
 }
 
+fn handle_http(
+    daps_manager: &mut DapsManager,
+    dap_name: &str,
+    request: &HttpRequest,
+    body: Option<Vec<u8>>,
+) -> ServerResult<HttpResponse> {
+    let instance = ExpectedInstance::try_from(daps_manager.instance(dap_name)?)?;
+    let process_http_fn = instance.exports.get_function("process_http")?.native::<u64, u64>()?;
+
+    let request = convert::to_wasm_http_request(request, body);
+    let bytes = request.try_to_vec()?;
+    let arg = instance.bytes_to_wasm_slice(&bytes)?;
+
+    let slice = process_http_fn.call(arg.into())?;
+    let bytes = unsafe { instance.wasm_slice_to_vec(slice)? };
+    let response: http::Response = BorshDeserialize::deserialize(&mut bytes.as_slice())?;
+
+    Ok(HttpResponse::build(response.status()).body(response.into_parts().1))
+}
+
 pub async fn get(daps_service: web::Data<DapsProvider>, request: HttpRequest, dap_name: String) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
-            let instance = ExpectedInstance::try_from(daps_manager.instance(&dap_name)?)?;
-            let uri = request.path();
-            let get_fn = instance.exports.get_function("get")?.native::<u64, u64>()?;
-
-            let uri_arg = instance.bytes_to_wasm_slice(&uri)?;
-
-            let slice = get_fn.call(uri_arg.into())?;
-            let response_body = unsafe { instance.wasm_slice_to_string(slice)? };
-
-            Ok(HttpResponse::Ok().body(response_body))
+            handle_http(daps_manager, &dap_name, &request, None)
         })
         .await
 }
@@ -43,23 +58,13 @@ pub async fn get(daps_service: web::Data<DapsProvider>, request: HttpRequest, da
 pub async fn post(
     daps_service: web::Data<DapsProvider>,
     request: HttpRequest,
-    body: String,
+    body: web::Bytes,
     dap_name: String,
 ) -> HttpResponse {
     daps_service
         .into_inner()
         .handle_http_dap(dap_name, move |daps_manager, dap_name| {
-            let instance = ExpectedInstance::try_from(daps_manager.instance(&dap_name)?)?;
-            let uri = request.path();
-            let post_fn = instance.exports.get_function("post")?.native::<(u64, u64), u64>()?;
-
-            let uri_arg = instance.bytes_to_wasm_slice(&uri)?;
-            let body_arg = instance.bytes_to_wasm_slice(&body)?;
-
-            let slice = post_fn.call(uri_arg.into(), body_arg.into())?;
-            let response_body = unsafe { instance.wasm_slice_to_string(slice)? };
-
-            Ok(HttpResponse::Ok().body(response_body))
+            handle_http(daps_manager, &dap_name, &request, Some(body.to_vec()))
         })
         .await
 }

@@ -31,8 +31,8 @@ log = "0.4"
 env_logger = "0.9"
 config = "0.11"
 toml = "0.5"
-wasmer = "1.0"
-wasmer-wasi = "1.0"
+wasmer = "2.0"
+wasmer-wasi = "2.0"
 rusqlite = { version = "0.25", features = ["bundled"] }
 dapla_common = { path = "../dapla_common" }
 dapla_wasm = { path = "../dapla_wasm" }

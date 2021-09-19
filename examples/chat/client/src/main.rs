@@ -577,7 +577,7 @@ impl Root {
         };
 
         html! {
-            <div class = "chat-screen" onmousemove = self.this_link.callback(|event| Msg::ChatScreenMouseMove(event))>
+            <div class = "chat-screen" onmousemove = self.this_link.callback(Msg::ChatScreenMouseMove)>
                 <aside class = "chat-sidebar">
                     <div class = "chat-flex-container scrollable-content">
                         { channels }
@@ -585,9 +585,8 @@ impl Root {
                         { add_peer_dialog }
                     </div>
                 </aside>
-                <div class = "chat-sidebar-split-handle resize-hor-cursor" onmousedown = self.this_link.callback(|event| {
-                    Msg::ToggleChatSidebarSplitHandle(event)
-                })></div>
+                <div class = "chat-sidebar-split-handle resize-hor-cursor"
+                        onmousedown = self.this_link.callback(Msg::ToggleChatSidebarSplitHandle)></div>
                 <div class = "chat-main">
                     <div class = "chat-flex-container">
                         <div id = "messages" class = "chat-messages">
