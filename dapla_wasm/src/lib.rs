@@ -3,8 +3,7 @@ pub extern crate borsh;
 pub use self::{route::Route, slice::*};
 
 pub mod database;
-pub mod invoke;
-pub mod process;
+pub mod http;
 pub mod route;
 pub mod slice;
 

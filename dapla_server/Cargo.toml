@@ -34,5 +34,6 @@ toml = "0.5"
 wasmer = "2.0"
 wasmer-wasi = "2.0"
 rusqlite = { version = "0.25", features = ["bundled"] }
+reqwest = { version = "0.11", features = ["blocking"] }
 dapla_common = { path = "../dapla_common" }
 dapla_wasm = { path = "../dapla_wasm" }

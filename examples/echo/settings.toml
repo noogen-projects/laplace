@@ -5,3 +5,5 @@ enabled = true
 [permissions]
 required = ["http"]
 allowed = ["http"]
+
+#[network.http]

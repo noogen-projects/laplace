@@ -16,3 +16,4 @@ borsh = "0.9"
 derive_more = "0.99"
 http = { git = "https://github.com/noogen-projects/http", branch = "borsh", features = ["borsh"] }
 dapla_wasm_macro = { path = "../dapla_wasm_macro" }
+thiserror = "1.0"

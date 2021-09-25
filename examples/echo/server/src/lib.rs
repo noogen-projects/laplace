@@ -1,6 +1,6 @@
-use dapla_wasm::process::{self, http};
+use dapla_wasm::http;
 
-#[process::http]
+#[http::process]
 fn http(request: http::Request) -> http::Response {
     let mut body = String::from("Echo ");
     body.push_str(&request.uri().to_string());

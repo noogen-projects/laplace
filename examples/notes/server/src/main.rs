@@ -6,14 +6,11 @@ use std::{
     path::Path,
 };
 
-use dapla_wasm::process::{
-    self,
-    http::{self, Method, Uri},
-};
+use dapla_wasm::http::{self, Method, Uri};
 use notes_common::{make_preview, Note, NoteContent, Response};
 use thiserror::Error;
 
-#[process::http]
+#[http::process]
 fn http(request: http::Request) -> http::Response {
     let (request, body) = request.into_parts();
     let response = match request.method {

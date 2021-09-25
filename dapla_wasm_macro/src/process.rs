@@ -10,10 +10,7 @@ pub fn http(attrs: TokenStream, input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn process_http(request: ::dapla_wasm::WasmSlice) -> ::dapla_wasm::WasmSlice {
-            use ::dapla_wasm::{
-                borsh::{BorshDeserialize, BorshSerialize},
-                process::http,
-            };
+            use ::dapla_wasm::{borsh::{BorshDeserialize, BorshSerialize}, http};
 
             let mut request = request.into_vec_in_wasm();
             let request: http::Request = BorshDeserialize::deserialize(&mut request.as_slice())

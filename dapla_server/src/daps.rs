@@ -16,12 +16,15 @@ pub use dapla_common::{
 };
 use log::error;
 use rusqlite::Connection;
-use wasmer::{import_namespace, Function, ImportObject, Instance, Module, Store};
+use wasmer::{Exports, Function, ImportObject, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
 pub use self::{instance::*, manager::*, provider::*, service::*, settings::*};
 use crate::{
-    daps::import::database::{self, DatabaseEnv},
+    daps::import::{
+        database::{self, DatabaseEnv},
+        http::{self, HttpEnv},
+    },
     error::{ServerError, ServerResult},
 };
 
@@ -174,6 +177,7 @@ impl Dap {
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
         let is_allow_db_access = self.is_allowed_permission(Permission::Database);
+        let is_allow_http = self.is_allowed_permission(Permission::Http);
 
         let dir_path = self.root_dir().join("data");
         if !dir_path.exists() && (is_allow_read || is_allow_write) {
@@ -202,6 +206,8 @@ impl Dap {
         };
 
         let shared_instance = Arc::new(ArcSwapOption::from(None));
+        let mut exports = Exports::new();
+
         if is_allow_db_access {
             let connection = Arc::new(Mutex::new(Connection::open(&self.settings().database.path)?));
 
@@ -229,15 +235,29 @@ impl Dap {
                 },
                 database::query_row,
             );
-            import_object.register(
-                "env",
-                import_namespace!({
-                    "db_execute" => execute_native,
-                    "db_query" => query_native,
-                    "db_query_row" => query_row_native,
-                }),
-            );
+
+            exports.insert("db_execute", execute_native);
+            exports.insert("db_query", query_native);
+            exports.insert("db_query_row", query_row_native);
         }
+
+        if is_allow_http {
+            let client = reqwest::blocking::Client::new();
+
+            let invoke_http_native = Function::new_native_with_env(
+                &store,
+                HttpEnv {
+                    instance: shared_instance.clone(),
+                    client,
+                    settings: self.dap.settings().network.http.clone(),
+                },
+                http::invoke_http,
+            );
+
+            exports.insert("invoke_http", invoke_http_native);
+        }
+
+        import_object.register("env", exports);
 
         let instance = Instance::new(&module, &import_object)?;
         shared_instance.store(Some(Arc::new(instance.clone())));

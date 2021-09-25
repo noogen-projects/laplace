@@ -5,7 +5,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use borsh::{BorshDeserialize, BorshSerialize};
 use dapla_common::api::Peer;
-use dapla_wasm::process::http;
+use dapla_wasm::http;
 use futures::{executor, TryFutureExt};
 
 use crate::{

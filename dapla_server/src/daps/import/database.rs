@@ -5,7 +5,7 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
-use borsh::ser::BorshSerialize;
+use borsh::BorshSerialize;
 use dapla_wasm::database::{Row, Value};
 use rusqlite::{types::ValueRef, Connection, OptionalExtension};
 use wasmer::{Instance, WasmerEnv};
@@ -37,8 +37,6 @@ pub struct ExpectedDatabaseEnv {
     pub instance: ExpectedInstance,
     pub connection: Arc<Mutex<Connection>>,
 }
-
-impl ExpectedDatabaseEnv {}
 
 pub fn execute(env: &DatabaseEnv, sql_query_slice: u64) -> u64 {
     run(env, sql_query_slice, do_execute)

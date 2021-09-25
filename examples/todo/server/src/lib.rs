@@ -2,10 +2,7 @@ use borsh::BorshSerialize;
 pub use dapla_wasm::{alloc, dealloc};
 use dapla_wasm::{
     database::{execute, query, Value},
-    process::{
-        self,
-        http::{self, Method, Uri},
-    },
+    http::{self, Method, Uri},
     WasmSlice,
 };
 use sql_builder::{quote, SqlBuilder, SqlBuilderError};
@@ -31,7 +28,7 @@ pub unsafe extern "C" fn init() -> WasmSlice {
     WasmSlice::from(data)
 }
 
-#[process::http]
+#[http::process]
 fn http(request: http::Request) -> http::Response {
     let (request, body) = request.into_parts();
     let response = match request.method {
