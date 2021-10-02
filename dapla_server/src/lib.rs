@@ -19,16 +19,19 @@ pub mod settings;
 pub mod ws;
 
 pub async fn run(settings: Settings) -> io::Result<()> {
-    let daps_service = DapsProvider::new(&settings.daps.path)?;
+    let daps_path = settings.daps.path.clone();
+    let daps_provider = web::block(move || DapsProvider::new(daps_path))
+        .await
+        .expect("Daps provider should be constructed")?;
     let web_root = settings.http.web_root.clone();
 
     HttpServer::new(move || {
         let static_dir = web_root.join(Dap::static_dir_name());
 
         let mut app = App::new()
-            .data(daps_service.clone())
+            .app_data(web::Data::new(daps_provider.clone()))
             .wrap(middleware::DefaultHeaders::new().header("X-Version", "0.2"))
-            .wrap(middleware::NormalizePath::default())
+            .wrap(middleware::NormalizePath::trim())
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
             .service(Files::new(&Dap::main_static_uri(), &static_dir).index_file(Dap::index_file_name()))
@@ -42,7 +45,7 @@ pub async fn run(settings: Settings) -> io::Result<()> {
             .route(&Dap::main_uri("daps"), web::get().to(handler::get_daps))
             .route(&Dap::main_uri("dap"), web::post().to(handler::update_dap));
 
-        let mut daps_manager = daps_service.lock().expect("Daps manager lock should be acquired");
+        let mut daps_manager = daps_provider.lock().expect("Daps manager lock should be acquired");
         daps_manager.load_daps();
 
         for dap in daps_manager.daps_iter() {

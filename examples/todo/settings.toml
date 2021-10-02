@@ -3,8 +3,8 @@ title = "Todo"
 enabled = true
 
 [permissions]
-required = ["database", "http"]
-allowed = ["database", "http"]
+required = ["database", "client_http"]
+allowed = ["database", "client_http"]
 
 [database]
 path = "daps/todo/todos.db"

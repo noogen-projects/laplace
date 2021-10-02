@@ -13,6 +13,7 @@ use crate::{
 pub struct DapsManager {
     daps: HashMap<String, Dap>,
     service_senders: HashMap<String, service::Sender>,
+    http_client: reqwest::blocking::Client,
 }
 
 impl DapsManager {
@@ -28,18 +29,23 @@ impl DapsManager {
                 })
             })
             .collect::<io::Result<_>>()
-            .map(|daps| Self {
-                daps,
-                service_senders: Default::default(),
+            .map(|daps| {
+                let http_client = reqwest::blocking::Client::new();
+                Self {
+                    daps,
+                    service_senders: Default::default(),
+                    http_client,
+                }
             })
     }
 
     pub fn load(&mut self, dap_name: impl AsRef<str>) -> ServerResult<()> {
         let dap_name = dap_name.as_ref();
+        let http_client = self.http_client.clone();
         self.daps
             .get_mut(dap_name)
             .ok_or_else(|| ServerError::DapNotFound(dap_name.to_string()))?
-            .instantiate()
+            .instantiate(http_client)
     }
 
     pub fn unload(&mut self, dap_name: impl AsRef<str>) -> bool {
@@ -51,10 +57,11 @@ impl DapsManager {
     }
 
     pub fn load_daps(&mut self) {
+        let http_client = self.http_client.clone();
         for (name, dap) in &mut self.daps {
             if !dap.is_main() && dap.enabled() && !dap.is_loaded() {
                 info!("Load dap '{}'", name);
-                dap.instantiate().expect("Dap should be loaded");
+                dap.instantiate(http_client.clone()).expect("Dap should be loaded");
             }
         }
     }
@@ -64,6 +71,19 @@ impl DapsManager {
             .get(dap_name.as_ref())
             .map(|dap| dap.is_loaded())
             .unwrap_or(false)
+    }
+
+    pub fn loaded_dap(&self, dap_name: impl AsRef<str>) -> ServerResult<(&Dap, Instance)> {
+        let dap_name = dap_name.as_ref();
+        self.daps
+            .get(dap_name)
+            .ok_or_else(|| ServerError::DapNotFound(dap_name.to_string()))
+            .and_then(|dap| {
+                dap.instance
+                    .clone()
+                    .ok_or_else(|| ServerError::DapNotLoaded(dap_name.to_string()))
+                    .map(|instance| (dap, instance))
+            })
     }
 
     pub fn dap(&self, dap_name: impl AsRef<str>) -> ServerResult<&Dap> {
@@ -82,10 +102,6 @@ impl DapsManager {
 
     pub fn daps_iter(&self) -> impl Iterator<Item = &Dap> {
         self.daps.values()
-    }
-
-    pub fn daps_iter_mut(&mut self) -> impl Iterator<Item = &mut Dap> {
-        self.daps.values_mut()
     }
 
     pub fn instance(&self, dap_name: impl AsRef<str>) -> ServerResult<Instance> {

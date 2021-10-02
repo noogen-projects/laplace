@@ -3,7 +3,5 @@ title = "Echo"
 enabled = true
 
 [permissions]
-required = ["http"]
-allowed = ["http"]
-
-#[network.http]
+required = ["client_http"]
+allowed = ["client_http"]

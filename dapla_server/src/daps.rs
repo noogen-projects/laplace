@@ -151,14 +151,14 @@ impl Dap {
                             }),
                         )
                         .route(
-                            "/*",
+                            "/{tail}*",
                             web::get().to({
                                 let name = name.clone();
                                 move |daps_service, request| handler::get(daps_service, request, name.clone())
                             }),
                         )
                         .route(
-                            "/*",
+                            "/{tail}*",
                             web::post().to(move |daps_service, request, body| {
                                 handler::post(daps_service, request, body, name.clone())
                             }),
@@ -168,7 +168,7 @@ impl Dap {
         }
     }
 
-    pub fn instantiate(&mut self) -> ServerResult<()> {
+    pub fn instantiate(&mut self, http_client: reqwest::blocking::Client) -> ServerResult<()> {
         let wasm = fs::read(self.server_module_file())?;
 
         let store = Store::default();
@@ -242,13 +242,11 @@ impl Dap {
         }
 
         if is_allow_http {
-            let client = reqwest::blocking::Client::new();
-
             let invoke_http_native = Function::new_native_with_env(
                 &store,
                 HttpEnv {
                     instance: shared_instance.clone(),
-                    client,
+                    client: http_client,
                     settings: self.dap.settings().network.http.clone(),
                 },
                 http::invoke_http,
@@ -300,6 +298,18 @@ impl Dap {
 
         self.save_settings()?;
         Ok(query)
+    }
+
+    pub fn check_enabled_and_allow_permissions(&self, permissions: &[Permission]) -> ServerResult<()> {
+        if !self.enabled() {
+            return Err(ServerError::DapNotEnabled(self.name().into()));
+        };
+        for &permission in permissions {
+            if !self.is_allowed_permission(permission) {
+                return Err(ServerError::DapPermissionDenied(self.name().into(), permission));
+            }
+        }
+        Ok(())
     }
 }
 

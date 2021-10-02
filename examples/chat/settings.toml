@@ -3,8 +3,8 @@ title = "Chat"
 enabled = true
 
 [permissions]
-required = ["http", "websocket", "tcp"]
-allowed = ["http", "websocket", "tcp"]
+required = ["client_http", "websocket", "tcp"]
+allowed = ["client_http", "websocket", "tcp"]
 
 [network.gossipsub]
 addr = "/ip4/0.0.0.0/tcp/36598"

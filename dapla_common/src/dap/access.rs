@@ -13,6 +13,9 @@ pub enum Permission {
     #[strum(serialize = "file_write")]
     FileWrite,
 
+    #[strum(serialize = "client_http")]
+    ClientHttp,
+
     #[strum(serialize = "http")]
     Http,
 

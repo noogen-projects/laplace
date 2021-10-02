@@ -84,6 +84,7 @@ pub fn do_invoke_http(
         .send()
         .map_err(|err| http::InvokeError::FailRequest(err.status(), format!("{}", err)))
         .and_then(|response| {
+            log::debug!("Invoke HTTP response: {:#?}", response);
             let mut builder = http::ResponseBuilder::new()
                 .status(response.status())
                 .version(response.version());

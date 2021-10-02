@@ -78,6 +78,9 @@ pub enum ServerError {
 
     #[error("Dap initialization error: {0:?}")]
     DapInitError(String),
+
+    #[error("Blocking call error: {0}")]
+    BlockingError(#[from] actix_web::error::BlockingError),
 }
 
 impl ResponseError for ServerError {}

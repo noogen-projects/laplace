@@ -1,4 +1,6 @@
 use std::{
+    fmt,
+    future::Future,
     io,
     ops::Deref,
     path::Path,
@@ -7,10 +9,11 @@ use std::{
 
 use actix_web::HttpResponse;
 use dapla_common::dap::Permission;
+use futures::future;
 use log::error;
 
 use crate::{
-    daps::DapsManager,
+    daps::{Dap, DapsManager, Instance},
     error::{ServerError, ServerResult},
 };
 
@@ -22,80 +25,92 @@ impl DapsProvider {
         DapsManager::new(daps_path).map(|manager| Self(Arc::new(Mutex::new(manager))))
     }
 
-    pub async fn handle_http(
-        self: Arc<Self>,
-        handler: impl FnOnce(&mut DapsManager) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.lock()
-            .map_err(|err| {
-                error!("Daps service lock should be asquired: {:?}", err);
-                ServerError::DapsServiceNotLock
-            })
-            .and_then(|mut daps_manager| handler(&mut daps_manager))
-            .into()
+    pub async fn handle<Fut>(self: Arc<Self>, handler: impl FnOnce(&mut DapsManager) -> Fut) -> HttpResponse
+    where
+        Fut: Future<Output = ServerResult<HttpResponse>>,
+    {
+        match self.lock().map_err(|err| {
+            error!("Daps service lock should be asquired: {:?}", err);
+            ServerError::DapsServiceNotLock
+        }) {
+            Ok(mut daps_manager) => handler(&mut daps_manager).await.unwrap_or_else(error_response),
+            Err(err) => error_response(err),
+        }
     }
 
-    pub async fn handle_http_dap(
-        self: Arc<Self>,
-        dap_name: String,
-        handler: impl FnOnce(&mut DapsManager, String) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.handle_http(move |daps_manager| {
-            let dap = daps_manager.dap(&dap_name)?;
-            if !dap.enabled() {
-                Err(ServerError::DapNotEnabled(dap_name))
-            } else if !dap.is_allowed_permission(Permission::Http) {
-                Err(ServerError::DapPermissionDenied(dap_name, Permission::Http))
-            } else if !daps_manager.is_loaded(&dap_name) {
-                Err(ServerError::DapNotLoaded(dap_name))
-            } else {
-                handler(daps_manager, dap_name)
-            }
-        })
-        .await
-    }
-
-    pub async fn handle_ws_dap(
-        self: Arc<Self>,
-        dap_name: String,
-        handler: impl FnOnce(&mut DapsManager, String) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.handle_http_dap(dap_name, move |daps_manager, dap_name| {
-            let dap = daps_manager.dap(&dap_name)?;
-            if !dap.is_allowed_permission(Permission::Websocket) {
-                Err(ServerError::DapPermissionDenied(dap_name, Permission::Websocket))
-            } else {
-                handler(daps_manager, dap_name)
-            }
-        })
-        .await
-    }
-
-    pub async fn handle_allowed(
+    pub async fn handle_allowed<Fut>(
         self: Arc<Self>,
         permissions: &[Permission],
         dap_name: String,
-        handler: impl FnOnce(&mut DapsManager, String) -> ServerResult<HttpResponse>,
-    ) -> HttpResponse {
-        self.handle_http(move |daps_manager| {
-            let dap = daps_manager.dap(&dap_name)?;
-            if !dap.enabled() {
-                return Err(ServerError::DapNotEnabled(dap_name));
-            };
-
-            for &permission in permissions {
-                if !dap.is_allowed_permission(permission) {
-                    return Err(ServerError::DapPermissionDenied(dap_name, permission));
-                }
-            }
-
-            if !daps_manager.is_loaded(&dap_name) {
-                Err(ServerError::DapNotLoaded(dap_name))
-            } else {
-                handler(daps_manager, dap_name)
-            }
+        handler: impl FnOnce(&mut DapsManager, String) -> Fut,
+    ) -> HttpResponse
+    where
+        Fut: Future<Output = ServerResult<HttpResponse>>,
+    {
+        self.handle(move |daps_manager| {
+            daps_manager
+                .loaded_dap(&dap_name)
+                .and_then(|(dap, _)| dap.check_enabled_and_allow_permissions(permissions))
+                .map(|_| future::Either::Left(handler(daps_manager, dap_name)))
+                .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
         })
         .await
+    }
+
+    pub async fn handle_allowed_dap<Fut>(
+        self: Arc<Self>,
+        permissions: &[Permission],
+        dap_name: String,
+        handler: impl FnOnce(String, &Dap, Instance) -> Fut,
+    ) -> HttpResponse
+    where
+        Fut: Future<Output = ServerResult<HttpResponse>>,
+    {
+        self.handle(move |daps_manager| {
+            daps_manager
+                .loaded_dap(&dap_name)
+                .and_then(|(dap, instance)| {
+                    dap.check_enabled_and_allow_permissions(permissions)?;
+                    Ok(future::Either::Left(handler(dap_name, dap, instance)))
+                })
+                .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
+        })
+        .await
+    }
+
+    pub async fn handle_client_http<Fut>(
+        self: Arc<Self>,
+        dap_name: String,
+        handler: impl FnOnce(&mut DapsManager, String) -> Fut,
+    ) -> HttpResponse
+    where
+        Fut: Future<Output = ServerResult<HttpResponse>>,
+    {
+        self.handle_allowed(&[Permission::ClientHttp], dap_name, handler).await
+    }
+
+    pub async fn handle_client_http_dap<Fut>(
+        self: Arc<Self>,
+        dap_name: String,
+        handler: impl FnOnce(String, &Dap, Instance) -> Fut,
+    ) -> HttpResponse
+    where
+        Fut: Future<Output = ServerResult<HttpResponse>>,
+    {
+        self.handle_allowed_dap(&[Permission::ClientHttp], dap_name, handler)
+            .await
+    }
+
+    pub async fn handle_ws<Fut>(
+        self: Arc<Self>,
+        dap_name: String,
+        handler: impl FnOnce(&mut DapsManager, String) -> Fut,
+    ) -> HttpResponse
+    where
+        Fut: Future<Output = ServerResult<HttpResponse>>,
+    {
+        self.handle_allowed(&[Permission::ClientHttp, Permission::Websocket], dap_name, handler)
+            .await
     }
 }
 
@@ -105,4 +120,10 @@ impl Deref for DapsProvider {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
+}
+
+fn error_response(err: impl fmt::Debug) -> HttpResponse {
+    let error_message = format!("{:#?}", err);
+    error!("Internal Server error: {}", error_message);
+    HttpResponse::InternalServerError().body(error_message)
 }
