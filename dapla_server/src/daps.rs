@@ -24,6 +24,7 @@ use crate::{
     daps::import::{
         database::{self, DatabaseEnv},
         http::{self, HttpEnv},
+        sleep,
     },
     error::{ServerError, ServerResult},
 };
@@ -178,6 +179,7 @@ impl Dap {
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
         let is_allow_db_access = self.is_allowed_permission(Permission::Database);
         let is_allow_http = self.is_allowed_permission(Permission::Http);
+        let is_allow_sleep = self.is_allowed_permission(Permission::Sleep);
 
         let dir_path = self.root_dir().join("data");
         if !dir_path.exists() && (is_allow_read || is_allow_write) {
@@ -253,6 +255,12 @@ impl Dap {
             );
 
             exports.insert("invoke_http", invoke_http_native);
+        }
+
+        if is_allow_sleep {
+            let invoke_sleep_native = Function::new_native(&store, sleep::invoke_sleep);
+
+            exports.insert("invoke_sleep", invoke_sleep_native);
         }
 
         import_object.register("env", exports);

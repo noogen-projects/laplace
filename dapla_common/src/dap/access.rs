@@ -27,6 +27,9 @@ pub enum Permission {
 
     #[strum(serialize = "database")]
     Database,
+
+    #[strum(serialize = "sleep")]
+    Sleep,
 }
 
 impl Permission {

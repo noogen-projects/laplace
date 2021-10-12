@@ -5,6 +5,7 @@ pub use self::{route::Route, slice::*};
 pub mod database;
 pub mod http;
 pub mod route;
+pub mod sleep;
 pub mod slice;
 
 #[no_mangle]
