@@ -131,8 +131,8 @@ impl Component for Root {
                 false
             },
             Msg::SignIn => {
-                let public_key = TextField::value("public-key");
-                let secret_key = TextField::value("secret-key");
+                let public_key = TextField::get_value("public-key");
+                let secret_key = TextField::get_value("secret-key");
 
                 if let Ok(keypair) = (|| {
                     let mut bytes = bs58::decode(&secret_key)
@@ -487,7 +487,7 @@ impl Root {
                         let generate_key_button = dom::get_exist_element_by_id::<HtmlElement>("generate-key-button");
                         let sign_in_button = dom::get_exist_element_by_id::<HtmlElement>("sign-in-button");
 
-                        if input.value.is_empty() && TextField::value("secret-key").is_empty() {
+                        if input.value.is_empty() && TextField::get_value("secret-key").is_empty() {
                             generate_key_button.remove_attribute("disabled").ok();
                             sign_in_button.set_attribute("disabled", "").ok();
                         } else if generate_key_button.get_attribute("disabled").is_none() {
@@ -505,7 +505,7 @@ impl Root {
                         let generate_key_button = dom::get_exist_element_by_id::<HtmlElement>("generate-key-button");
                         let sign_in_button = dom::get_exist_element_by_id::<HtmlElement>("sign-in-button");
 
-                        if input.value.is_empty() && TextField::value("public-key").is_empty() {
+                        if input.value.is_empty() && TextField::get_value("public-key").is_empty() {
                             generate_key_button.remove_attribute("disabled").ok();
                             sign_in_button.set_attribute("disabled", "").ok();
                         } else if generate_key_button.get_attribute("disabled").is_none() {

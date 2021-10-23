@@ -1,6 +1,7 @@
 [http]
 host = "127.0.0.1"
 port = 8080
+session_token = "D8BMQ294GbdEEUIWocWxlKjqM90zmu6PKfAr994VA1dU9kUb4g8BtOXgPeTIbMEg"
 
 [p2p]
 mdns_discovery_enabled = true

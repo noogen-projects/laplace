@@ -67,6 +67,8 @@ pub fn do_invoke_http(
     log::debug!("Invoke HTTP: {:#?},\n{:#?}", request, settings);
     let (parts, body) = request.into_parts();
 
+    log::info!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
+
     if !is_method_allowed(&parts.method, &settings.methods) {
         return Err(http::InvokeError::ForbiddenMethod(parts.method));
     }
@@ -84,7 +86,7 @@ pub fn do_invoke_http(
         .send()
         .map_err(|err| http::InvokeError::FailRequest(err.status(), format!("{}", err)))
         .and_then(|response| {
-            log::debug!("Invoke HTTP response: {:#?}", response);
+            log::info!("Invoke HTTP response: {:#?}", response);
             let mut builder = http::ResponseBuilder::new()
                 .status(response.status())
                 .version(response.version());

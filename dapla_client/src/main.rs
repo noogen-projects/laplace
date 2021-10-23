@@ -9,7 +9,7 @@ use dapla_yew::{error::MsgError, fetch::JsonFetcher};
 use yew::{html, initialize, run_loop, services::ConsoleService, utils, App, Component, ComponentLink, Html};
 use yew_mdc_widgets::{
     auto_init,
-    utils::dom::{select_exist_element, JsObjectAccess, JsValue},
+    utils::dom::{self, JsObjectAccess, JsValue},
     Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
 };
 
@@ -181,7 +181,7 @@ impl Component for Root {
             .navigation_item(IconButton::new().icon("menu"))
             .enable_shadow_when_scroll_window()
             .on_navigation(|_| {
-                let drawer = select_exist_element::<Element>("#app-drawer").get("MDCDrawer");
+                let drawer = dom::get_exist_element_by_id::<Element>("app-drawer").get("MDCDrawer");
                 let opened = drawer.get("open").as_bool().unwrap_or(false);
                 drawer.set("open", !opened);
             });

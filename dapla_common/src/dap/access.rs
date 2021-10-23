@@ -30,6 +30,12 @@ pub enum Permission {
 
     #[strum(serialize = "sleep")]
     Sleep,
+
+    #[strum(serialize = "daps_incoming")]
+    DapsIncoming,
+
+    #[strum(serialize = "daps_outgoing")]
+    DapsOutgoing,
 }
 
 impl Permission {

@@ -1,6 +1,7 @@
 [application]
 title = "Todo"
 enabled = true
+session_token = "OTpFVytjgoRuUpoBACruBcBmxXmREVnmjFMhqAwfJdfQ8amoqkJxJncWZMVo9mGe"
 
 [permissions]
 required = ["database", "client_http"]

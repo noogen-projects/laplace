@@ -1,6 +1,6 @@
 use std::io;
 
-use clap::Clap;
+use clap::Parser;
 use dapla_server::settings::Settings;
 
 use self::cmd::CmdOpts;

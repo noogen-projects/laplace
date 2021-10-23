@@ -1,6 +1,7 @@
 [application]
 title = "Echo"
 enabled = true
+session_token = "HWAJn0ty4WIIqURJXNA66Jfk5piM7Prsod7iSVcWpEkvI64oCenJRL5PYcjaqLOe"
 
 [permissions]
 required = ["client_http"]

@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use clap::Clap;
-
-#[derive(Clap)]
+#[derive(clap::Parser)]
 pub struct CmdOpts {
     #[clap(short, long, default_value = "settings.toml")]
     pub settings_path: PathBuf,

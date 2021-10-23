@@ -1,11 +1,23 @@
 [application]
 title = "Chat"
 enabled = true
+session_token = "JDQmIY3pxSI28Y3U5x6BpTmnx0ojFp6Emc29zrEOrmA0bWJhZue97dJ4YNjxyERX"
 
 [permissions]
-required = ["client_http", "websocket", "tcp"]
-allowed = ["client_http", "websocket", "tcp"]
+required = ["client_http", "websocket", "tcp", "daps_outgoing"]
+allowed = ["client_http", "websocket", "tcp", "daps_outgoing"]
 
 [network.gossipsub]
 addr = "/ip4/0.0.0.0/tcp/36598"
 dial_ports = [36598, 36599]
+
+[[dap_requests]]
+dap_name = "sowa"
+
+    [[dap_requests.outgoing]]
+    methods = ["get"]
+    request = "account/.*"
+
+    [[dap_requests.outgoing]]
+    methods = ["post"]
+    request = "transfer/.*"

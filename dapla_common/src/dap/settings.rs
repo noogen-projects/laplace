@@ -9,6 +9,7 @@ use super::Permission;
 pub struct ApplicationSettings {
     pub title: String,
     pub enabled: bool,
+    pub session_token: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -198,9 +199,32 @@ pub struct GossipsubSettings {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
+pub struct DapIncomingRequestSettings {
+    pub methods: HttpMethods,
+    pub request: String,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DapOutgoingRequestSettings {
+    pub methods: HttpMethods,
+    pub request: String,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DapRequestsSettings {
+    pub dap_name: String,
+    pub incoming: Vec<DapIncomingRequestSettings>,
+    pub outgoing: Vec<DapOutgoingRequestSettings>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct DapSettings {
     pub application: ApplicationSettings,
     pub permissions: PermissionsSettings,
     pub database: DatabaseSettings,
     pub network: NetworkSettings,
+    pub dap_requests: Vec<DapRequestsSettings>,
 }
