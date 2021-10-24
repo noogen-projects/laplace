@@ -126,15 +126,12 @@ mod tests {
     fn deserialize_request() {
         let json = r#"{"update":{"dap_name":"test"}}"#;
         let request: UpdateRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            request,
-            UpdateRequest {
-                update: UpdateQuery {
-                    dap_name: "test".to_string(),
-                    ..Default::default()
-                }
+        assert_eq!(request, UpdateRequest {
+            update: UpdateQuery {
+                dap_name: "test".to_string(),
+                ..Default::default()
             }
-        );
+        });
     }
 
     #[test]

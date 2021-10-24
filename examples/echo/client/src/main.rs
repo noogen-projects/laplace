@@ -65,12 +65,12 @@ impl Component for Root {
                     }
                 }
                 false
-            }
+            },
             Msg::Fetch(data) => {
                 self.fetch_task = None;
                 self.responses.push(data);
                 true
-            }
+            },
             Msg::Error => false,
         }
     }
