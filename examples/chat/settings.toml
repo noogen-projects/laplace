@@ -1,7 +1,7 @@
 [application]
 title = "Chat"
 enabled = true
-session_token = "JDQmIY3pxSI28Y3U5x6BpTmnx0ojFp6Emc29zrEOrmA0bWJhZue97dJ4YNjxyERX"
+access_token = "JDQmIY3pxSI28Y3U5x6BpTmnx0ojFp6Emc29zrEOrmA0bWJhZue97dJ4YNjxyERX"
 
 [permissions]
 required = ["client_http", "websocket", "tcp", "daps_outgoing"]

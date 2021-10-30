@@ -9,7 +9,7 @@ use super::Permission;
 pub struct ApplicationSettings {
     pub title: String,
     pub enabled: bool,
-    pub session_token: Option<String>,
+    pub access_token: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
