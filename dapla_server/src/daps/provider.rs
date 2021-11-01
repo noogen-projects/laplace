@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     future::Future,
     io,
     ops::Deref,
@@ -14,7 +13,7 @@ use log::error;
 
 use crate::{
     daps::{Dap, DapsManager, Instance},
-    error::{ServerError, ServerResult},
+    error::{error_response, ServerError, ServerResult},
 };
 
 #[derive(Clone)]
@@ -120,10 +119,4 @@ impl Deref for DapsProvider {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
-}
-
-fn error_response(err: impl fmt::Debug) -> HttpResponse {
-    let error_message = format!("{:#?}", err);
-    error!("Internal Server error: {}", error_message);
-    HttpResponse::InternalServerError().body(error_message)
 }

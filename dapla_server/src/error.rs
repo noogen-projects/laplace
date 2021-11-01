@@ -1,7 +1,8 @@
-use std::io;
+use std::{fmt, io};
 
-use actix_web::ResponseError;
+use actix_web::{HttpResponse, ResponseError};
 use dapla_common::dap::Permission;
+use log::error;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
@@ -84,3 +85,15 @@ pub enum ServerError {
 }
 
 impl ResponseError for ServerError {}
+
+impl From<ServerError> for HttpResponse {
+    fn from(error: ServerError) -> Self {
+        error_response(error)
+    }
+}
+
+pub fn error_response(err: impl fmt::Debug) -> HttpResponse {
+    let error_message = format!("{:#?}", err);
+    error!("Internal Server error: {}", error_message);
+    HttpResponse::InternalServerError().body(error_message)
+}

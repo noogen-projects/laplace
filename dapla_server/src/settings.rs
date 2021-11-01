@@ -13,6 +13,7 @@ pub struct HttpSettings {
     pub host: String,
     pub port: u16,
     pub web_root: PathBuf,
+    pub access_token: Option<String>,
 }
 
 impl Default for HttpSettings {
@@ -21,6 +22,7 @@ impl Default for HttpSettings {
             host: "localhost".into(),
             port: 8080,
             web_root: PathBuf::new(),
+            access_token: None,
         }
     }
 }

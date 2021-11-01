@@ -246,11 +246,17 @@ impl Root {
                     .unwrap_or_else(Msg::Error)
             }));
 
+        let dap_ref = if let Some(access_token) = dap.settings().application.access_token.as_deref() {
+            format!("{}?access_token={}", dap.name(), access_token)
+        } else {
+            dap.name().to_string()
+        };
+
         html! {
             <>
                 <div class = "daps-table-row">
                     <div class = "daps-table-col">
-                        <big><a href = dap.name().to_string()>{ dap.title() }</a></big>
+                        <big><a href = dap_ref>{ dap.title() }</a></big>
                     </div>
                     <div class = "daps-table-col">
                         { enable_switch }
