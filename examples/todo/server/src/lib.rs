@@ -30,12 +30,12 @@ pub unsafe extern "C" fn init() -> WasmSlice {
 
 #[http::process]
 fn http(request: http::Request) -> http::Response {
-    let (request, body) = request.into_parts();
-    let response = match request.method {
-        Method::GET => TodoRequest::parse(request.uri, None)
+    let http::Request { method, uri, body, .. } = request;
+    let response = match method {
+        Method::GET => TodoRequest::parse(uri, None)
             .map(|request| request.process())
             .unwrap_or_else(Response::Error),
-        Method::POST => TodoRequest::parse(request.uri, Some(body))
+        Method::POST => TodoRequest::parse(uri, Some(body))
             .map(|request| request.process())
             .unwrap_or_else(Response::Error),
         method => Response::Error(format!("Unsupported HTTP method {}", method)),

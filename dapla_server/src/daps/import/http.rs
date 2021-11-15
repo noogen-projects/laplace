@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, convert::TryFrom, sync::Arc, time::Duration};
+use std::{borrow::Borrow, convert::TryFrom, iter::FromIterator, sync::Arc, time::Duration};
 
 use arc_swap::ArcSwapOption;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -65,39 +65,45 @@ pub fn do_invoke_http(
     settings: &HttpSettings,
 ) -> http::InvokeResult<http::Response> {
     log::debug!("Invoke HTTP: {:#?},\n{:#?}", request, settings);
-    let (parts, body) = request.into_parts();
+    let http::Request {
+        method,
+        uri,
+        version,
+        headers,
+        body,
+    } = request;
 
     log::info!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
 
-    if !is_method_allowed(&parts.method, &settings.methods) {
-        return Err(http::InvokeError::ForbiddenMethod(parts.method));
+    if !is_method_allowed(&method, &settings.methods) {
+        return Err(http::InvokeError::ForbiddenMethod(method.to_string()));
     }
 
-    if !is_host_allowed(parts.uri.host().unwrap_or(""), &settings.hosts) {
-        return Err(http::InvokeError::ForbiddenHost(parts.uri.host().unwrap_or("").into()));
+    if !is_host_allowed(uri.host().unwrap_or(""), &settings.hosts) {
+        return Err(http::InvokeError::ForbiddenHost(uri.host().unwrap_or("").into()));
     }
 
     client
-        .request(parts.method, parts.uri.to_string())
-        .version(parts.version)
+        .request(method, uri.to_string())
+        .version(version)
         .body(body)
-        .headers(parts.headers)
+        .headers(headers)
         .timeout(Duration::from_millis(settings.timeout_ms))
         .send()
-        .map_err(|err| http::InvokeError::FailRequest(err.status(), format!("{}", err)))
-        .and_then(|response| {
+        .map_err(|err| http::InvokeError::FailRequest(err.status().map(|status| status.as_u16()), format!("{}", err)))
+        .map(|response| {
             log::info!("Invoke HTTP response: {:#?}", response);
-            let mut builder = http::ResponseBuilder::new()
-                .status(response.status())
-                .version(response.version());
-
-            if let Some(headers) = builder.headers_mut() {
-                headers.extend(response.headers().clone());
+            http::Response {
+                status: response.status(),
+                version: response.version(),
+                headers: http::HeaderMap::from_iter(
+                    response
+                        .headers()
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone())),
+                ),
+                body: response.bytes().map(|bytes| bytes.to_vec()).unwrap_or_default(),
             }
-
-            builder
-                .body(response.bytes().map(|bytes| bytes.to_vec()).unwrap_or_default())
-                .map_err(|err| http::InvokeError::FailBuildResponse(format!("{:?}", err)))
         })
 }
 

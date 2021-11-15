@@ -14,6 +14,6 @@ description = "The WASM utilities of the decentralized application platform"
 [dependencies]
 borsh = "0.9"
 derive_more = "0.99"
-http = { git = "https://github.com/noogen-projects/http", branch = "borsh", features = ["borsh"] }
+http = "0.2"
 dapla_wasm_macro = { path = "../dapla_wasm_macro" }
 thiserror = "1.0"

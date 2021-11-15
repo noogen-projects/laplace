@@ -1955,7 +1955,6 @@ name = "http"
 version = "0.2.4"
 source = "git+https://github.com/noogen-projects/http?branch=borsh#f2f74cd9ab22eb702d39ded3d31b83f271eb073d"
 dependencies = [
- "borsh",
  "bytes 1.1.0",
  "fnv",
  "itoa",

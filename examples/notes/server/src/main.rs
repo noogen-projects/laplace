@@ -12,12 +12,12 @@ use thiserror::Error;
 
 #[http::process]
 fn http(request: http::Request) -> http::Response {
-    let (request, body) = request.into_parts();
-    let response = match request.method {
-        Method::GET => NotesRequest::parse(request.uri, None)
+    let http::Request { method, uri, body, .. } = request;
+    let response = match method {
+        Method::GET => NotesRequest::parse(uri, None)
             .map(|request| request.process())
             .unwrap_or_else(Response::Error),
-        Method::POST => NotesRequest::parse(request.uri, Some(body))
+        Method::POST => NotesRequest::parse(uri, Some(body))
             .map(|request| request.process())
             .unwrap_or_else(Response::Error),
         method => Response::Error(format!("Unsupported HTTP method {}", method)),

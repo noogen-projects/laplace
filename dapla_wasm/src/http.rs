@@ -1,17 +1,20 @@
+pub use self::{request::*, response::*};
 pub use dapla_wasm_macro::process_http as process;
-pub use http::{self as types, HeaderMap, HeaderValue, Method, StatusCode, Uri, Version};
+pub use http::{
+    self as types,
+    header::{self, HeaderName},
+    HeaderMap, HeaderValue, Method, StatusCode, Uri, Version,
+};
 
-use std::io;
+use std::{io, iter::FromIterator};
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{maybestd::io::Write, BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::WasmSlice;
 
-pub type Request = http::Request<Vec<u8>>;
-pub type RequestBuilder = http::request::Builder;
-pub type Response = http::Response<Vec<u8>>;
-pub type ResponseBuilder = http::response::Builder;
+pub mod request;
+pub mod response;
 
 pub type Result<T> = std::result::Result<T, Error>;
 pub type InvokeResult<T> = std::result::Result<T, InvokeError>;
@@ -28,16 +31,16 @@ pub enum InvokeError {
     FailBuildResponse(String),
 
     #[error("HTTP method \"{0}\" not allowed")]
-    ForbiddenMethod(Method),
+    ForbiddenMethod(String),
 
     #[error("HTTP host \"{0}\" not allowed")]
     ForbiddenHost(String),
 
     #[error("HTTP request error: {}, {1}", display_code(.0))]
-    FailRequest(Option<StatusCode>, String),
+    FailRequest(Option<u16>, String),
 }
 
-fn display_code(code: &Option<StatusCode>) -> String {
+fn display_code(code: &Option<u16>) -> String {
     if let Some(code) = code {
         format!("{}", code)
     } else {
@@ -73,4 +76,46 @@ pub fn invoke(request: Request) -> Result<Response> {
     let response: InvokeResult<Response> =
         BorshDeserialize::try_from_slice(&response_bytes).map_err(Error::FailDeserializeResponse)?;
     response.map_err(Error::FailInvoke)
+}
+
+fn serialize_version<W: Write>(version: Version, writer: &mut W) -> io::Result<()> {
+    match version {
+        http::Version::HTTP_09 => 9_u8,
+        http::Version::HTTP_10 => 10,
+        http::Version::HTTP_11 => 11,
+        http::Version::HTTP_2 => 20,
+        http::Version::HTTP_3 => 30,
+        _ => return Err(io::Error::from(io::ErrorKind::Unsupported)),
+    }
+    .serialize(writer)
+}
+
+fn deserialize_version(buf: &mut &[u8]) -> io::Result<Version> {
+    Ok(match u8::deserialize(buf)? {
+        9 => http::Version::HTTP_09,
+        10 => http::Version::HTTP_10,
+        11 => http::Version::HTTP_11,
+        20 => http::Version::HTTP_2,
+        30 => http::Version::HTTP_3,
+        _ => return Err(io::Error::from(io::ErrorKind::Unsupported)),
+    })
+}
+
+fn serialize_headers<W: Write>(headers: &HeaderMap, writer: &mut W) -> io::Result<()> {
+    let headers: Vec<_> = headers
+        .into_iter()
+        .map(|(key, value)| (key.as_str().as_bytes(), value.as_bytes()))
+        .collect();
+    headers.serialize(writer)
+}
+
+fn deserialize_headers(buf: &mut &[u8]) -> io::Result<HeaderMap> {
+    let mut headers = Vec::new();
+    for (name, value) in Vec::<(Vec<u8>, Vec<u8>)>::deserialize(buf)?.into_iter() {
+        headers.push((
+            HeaderName::from_bytes(&name).map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?,
+            HeaderValue::from_bytes(&value).map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?,
+        ));
+    }
+    Ok(HeaderMap::from_iter(headers))
 }

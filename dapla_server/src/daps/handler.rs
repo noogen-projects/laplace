@@ -47,7 +47,7 @@ async fn handle_http(
     let bytes = unsafe { instance.wasm_slice_to_vec(slice)? };
     let response: http::Response = BorshDeserialize::deserialize(&mut bytes.as_slice())?;
 
-    Ok(HttpResponse::build(response.status()).body(response.into_parts().1))
+    Ok(HttpResponse::build(response.status).body(response.body))
 }
 
 pub async fn get(daps_service: web::Data<DapsProvider>, request: HttpRequest, dap_name: String) -> HttpResponse {
