@@ -21,6 +21,3 @@ members = [
 
 [profile.release]
 lto = true
-
-[patch.crates-io]
-http = { git = "https://github.com/noogen-projects/http", branch = "borsh" }

@@ -36,7 +36,7 @@ impl NoteContent {
             Self::Preview(preview) => preview.clone(),
             Self::FullBody(content) => {
                 make_preview(content.lines().map(|line| Ok(line.to_string()))).expect("Lines should be always Ok")
-            }
+            },
         }
     }
 }
