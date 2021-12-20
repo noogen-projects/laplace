@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use dapla_wasm::http::{self, Method, Uri};
+use laplace_wasm::http::{self, Method, Uri};
 use notes_common::{make_preview, Note, NoteContent, Response};
 use thiserror::Error;
 

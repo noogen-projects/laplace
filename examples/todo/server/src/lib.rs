@@ -1,6 +1,6 @@
 use borsh::BorshSerialize;
-pub use dapla_wasm::{alloc, dealloc};
-use dapla_wasm::{
+pub use laplace_wasm::{alloc, dealloc};
+use laplace_wasm::{
     database::{execute, query, Value},
     http::{self, Method, Uri},
     WasmSlice,

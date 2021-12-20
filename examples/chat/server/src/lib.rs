@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use chat_common::{WsMessage, WsResponse};
-pub use dapla_wasm::{alloc, dealloc};
-use dapla_wasm::{
+pub use laplace_wasm::{alloc, dealloc};
+use laplace_wasm::{
     route::{gossipsub, websocket},
     Route, WasmSlice,
 };

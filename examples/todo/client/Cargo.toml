@@ -8,8 +8,8 @@ authors = [
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/noogen-projects/dapla"
-description = "The Todo d-app example"
+repository = "https://github.com/noogen-projects/laplace"
+description = "The Todo lapp example"
 
 [dependencies]
 anyhow = "1.0"
@@ -17,4 +17,4 @@ strum = { version = "0.21", features = ["derive"] }
 yew = { version = "0.18", features = ["web_sys"] }
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
 todo_common = { path = "../common" }
-dapla_yew = { path = "../../../dapla_yew" }
+laplace_yew = { path = "../../../laplace_yew" }

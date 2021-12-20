@@ -1,4 +1,4 @@
-use dapla_wasm::http;
+use laplace_wasm::http;
 
 #[http::process]
 fn http(request: http::Request) -> http::Response {

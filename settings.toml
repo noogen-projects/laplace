@@ -9,5 +9,5 @@ mdns_discovery_enabled = true
 [log]
 level = "info"
 
-[daps]
-path = "daps"
+[lapps]
+path = "lapps"

@@ -1,0 +1,18 @@
+[package]
+name = "laplace_yew"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/noogen-projects/laplace"
+description = "The WASM client yew helpers of the local-firs web-application platform"
+
+[dependencies]
+anyhow = "1.0"
+yew = { version = "0.18", features = ["web_sys"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

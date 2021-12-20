@@ -1,0 +1,19 @@
+[package]
+name = "laplace_wasm"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/noogen-projects/laplace"
+description = "The WASM utilities of the local-firs web-application platform"
+
+[dependencies]
+borsh = "0.9"
+derive_more = "0.99"
+http = "0.2"
+laplace_wasm_macro = { path = "../laplace_wasm_macro" }
+thiserror = "1.0"

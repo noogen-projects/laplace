@@ -82,7 +82,7 @@ impl Component for Root {
     fn view(&self) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
-            .title("Echo dap")
+            .title("Echo lapp")
             .enable_shadow_when_scroll_window();
 
         let mut list = List::ul().divider();

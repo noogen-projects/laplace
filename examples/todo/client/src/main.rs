@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 
 use anyhow::{anyhow, Context, Error};
-use dapla_yew::{JsonFetcher, MsgError};
+use laplace_yew::{JsonFetcher, MsgError};
 use strum::{EnumIter, IntoEnumIterator, ToString};
 use todo_common::{Response, Task};
 use web_sys::HtmlInputElement;

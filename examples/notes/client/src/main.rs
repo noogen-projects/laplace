@@ -3,7 +3,7 @@
 use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Error};
-use dapla_yew::{JsonFetcher, MsgError, RawHtml};
+use laplace_yew::{JsonFetcher, MsgError, RawHtml};
 use lew::SimpleEditor;
 use notes_common::{Note, NoteContent, Response};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
@@ -284,7 +284,7 @@ impl Component for Root {
     fn view(&self) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
-            .title("Notes dap example")
+            .title("Notes lapp example")
             .enable_shadow_when_scroll_window();
 
         let note_cards = self.notes.iter().map(|note| {

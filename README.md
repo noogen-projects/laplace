@@ -1,10 +1,10 @@
-# dapla
+# Laplace
 
-The decentralized application platform.
+The local-firs web-application platform for the decentralized web.
 
 ## Build
 
-Building dapla requires the latest `stable` and `nightly` Rust toolchains, the `wasm32` targets and `cargo-make` and
+Building Laplace requires the latest `stable` and `nightly` Rust toolchains, the `wasm32` targets and `cargo-make` and
 `wasm-bindgen` build tools.
 
 To install Rust and its toolchains/targets via [rustup](https://rustup.rs/), if it is not already installed, run:
@@ -25,7 +25,7 @@ To install [cargo-make](https://github.com/sagiegurari/cargo-make) and
 cargo install --force cargo-make wasm-bindgen-cli
 ```
 
-To build dapla and all examples, run:
+To build Laplace and all examples, run:
 
 ```shell
 cargo +stable make all
@@ -39,7 +39,7 @@ cargo +stable make all -p debug
 
 ## Run examples
 
-Run the dapla server:
+Run the Laplace server:
 
 ```shell
 cargo +stable make run

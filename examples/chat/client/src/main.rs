@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use anyhow::{anyhow, Context, Error};
 use chat_common::{Peer, WsMessage, WsResponse};
-use dapla_yew::{JsonFetcher, MsgError, RawHtml, StringResponse};
+use laplace_yew::{JsonFetcher, MsgError, RawHtml, StringResponse};
 use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
 use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
@@ -360,7 +360,7 @@ impl Component for Root {
     fn view(&self) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
-            .title("Chat dap")
+            .title("Chat lapp")
             .navigation_item(IconButton::new().icon("menu"))
             .on_navigation(|_| {
                 let drawer = dom::select_exist_element::<Element>("#chat-drawer").get(drawer::mdc::TYPE_NAME);

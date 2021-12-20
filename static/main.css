@@ -31,12 +31,12 @@ body {
     border-bottom: 1px solid rgba(0,0,0,.87);
 }
 
-.daps-table {
+.lapps-table {
     display: table;
     width: auto;
 }
 
-.daps-table-row {
+.lapps-table-row {
     display: table-row;
     width: auto;
     height: auto;
@@ -45,7 +45,7 @@ body {
     margin-bottom: 10px;
 }
 
-.daps-table-col {
+.lapps-table-col {
     float: left; /* fix for  buggy browsers */
     display: table-column;
     vertical-align: middle;

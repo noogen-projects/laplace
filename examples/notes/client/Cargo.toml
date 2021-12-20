@@ -8,8 +8,8 @@ authors = [
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/noogen-projects/dapla"
-description = "The Notes d-app example"
+repository = "https://github.com/noogen-projects/laplace"
+description = "The Notes lapp example"
 
 [dependencies]
 anyhow = "1.0"
@@ -19,4 +19,4 @@ lew = { git = "https://github.com/noogen-projects/lew" }
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement", "HtmlElement", "HtmlTextAreaElement", "DomStringMap"] }
 pulldown-cmark = "0.8"
 notes_common = { path = "../common" }
-dapla_yew = { path = "../../../dapla_yew" }
+laplace_yew = { path = "../../../laplace_yew" }

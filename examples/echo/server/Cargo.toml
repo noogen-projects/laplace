@@ -8,11 +8,11 @@ authors = [
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/noogen-projects/dapla"
-description = "The Echo d-app example"
+repository = "https://github.com/noogen-projects/laplace"
+description = "The Echo lapp example"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-dapla_wasm = { path = "../../../dapla_wasm" }
+laplace_wasm = { path = "../../../laplace_wasm" }

@@ -822,8 +822,8 @@ dependencies = [
  "anyhow",
  "bs58",
  "chat_common",
- "dapla_yew",
  "getrandom 0.1.16",
+ "laplace_yew",
  "libp2p-core",
  "pulldown-cmark",
  "serde_json",
@@ -845,7 +845,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "chat_common",
- "dapla_wasm",
+ "laplace_wasm",
  "serde_json",
 ]
 
@@ -1149,91 +1149,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dapla_client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dapla_common",
- "dapla_yew",
- "serde 1.0.130",
- "serde_json",
- "yew",
- "yew-mdc-widgets",
-]
-
-[[package]]
-name = "dapla_common"
-version = "0.1.0"
-dependencies = [
- "serde 1.0.130",
- "serde_json",
- "serde_with",
- "strum",
-]
-
-[[package]]
-name = "dapla_server"
-version = "0.1.0"
-dependencies = [
- "actix",
- "actix-files",
- "actix-web",
- "actix-web-actors",
- "anyhow",
- "arc-swap",
- "async-std",
- "borsh",
- "bs58",
- "clap",
- "config",
- "dapla_common",
- "dapla_wasm",
- "derive_more",
- "env_logger",
- "futures",
- "libp2p",
- "log",
- "reqwest",
- "rusqlite",
- "serde 1.0.130",
- "serde_json",
- "thiserror",
- "toml",
- "wasmer",
- "wasmer-wasi",
-]
-
-[[package]]
-name = "dapla_wasm"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "dapla_wasm_macro",
- "derive_more",
- "http",
- "thiserror",
-]
-
-[[package]]
-name = "dapla_wasm_macro"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "dapla_yew"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde 1.0.130",
- "serde_json",
- "yew",
-]
-
-[[package]]
 name = "darling"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1326,7 +1241,7 @@ dependencies = [
 name = "echo_server"
 version = "0.1.0"
 dependencies = [
- "dapla_wasm",
+ "laplace_wasm",
 ]
 
 [[package]]
@@ -2175,6 +2090,91 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 
 [[package]]
+name = "laplace_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "laplace_common",
+ "laplace_yew",
+ "serde 1.0.130",
+ "serde_json",
+ "yew",
+ "yew-mdc-widgets",
+]
+
+[[package]]
+name = "laplace_common"
+version = "0.1.0"
+dependencies = [
+ "serde 1.0.130",
+ "serde_json",
+ "serde_with",
+ "strum",
+]
+
+[[package]]
+name = "laplace_server"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-files",
+ "actix-web",
+ "actix-web-actors",
+ "anyhow",
+ "arc-swap",
+ "async-std",
+ "borsh",
+ "bs58",
+ "clap",
+ "config",
+ "derive_more",
+ "env_logger",
+ "futures",
+ "laplace_common",
+ "laplace_wasm",
+ "libp2p",
+ "log",
+ "reqwest",
+ "rusqlite",
+ "serde 1.0.130",
+ "serde_json",
+ "thiserror",
+ "toml",
+ "wasmer",
+ "wasmer-wasi",
+]
+
+[[package]]
+name = "laplace_wasm"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "derive_more",
+ "http",
+ "laplace_wasm_macro",
+ "thiserror",
+]
+
+[[package]]
+name = "laplace_wasm_macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "laplace_yew"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde 1.0.130",
+ "serde_json",
+ "yew",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3020,7 +3020,7 @@ name = "notes_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "dapla_yew",
+ "laplace_yew",
  "lew",
  "notes_common",
  "pulldown-cmark",
@@ -3040,7 +3040,7 @@ dependencies = [
 name = "notes_server"
 version = "0.1.0"
 dependencies = [
- "dapla_wasm",
+ "laplace_wasm",
  "notes_common",
  "serde_json",
  "thiserror",
@@ -4357,7 +4357,7 @@ name = "todo_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "dapla_yew",
+ "laplace_yew",
  "strum",
  "todo_common",
  "web-sys",
@@ -4377,7 +4377,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "dapla_wasm",
+ "laplace_wasm",
  "serde_json",
  "sql-builder",
  "thiserror",

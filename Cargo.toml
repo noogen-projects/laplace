@@ -1,11 +1,5 @@
 [workspace]
 members = [
-    "dapla_client",
-    "dapla_common",
-    "dapla_server",
-    "dapla_wasm",
-    "dapla_wasm_macro",
-    "dapla_yew",
     "examples/chat/client",
     "examples/chat/common",
     "examples/chat/server",
@@ -17,6 +11,13 @@ members = [
     "examples/todo/client",
     "examples/todo/common",
     "examples/todo/server",
+
+    "laplace_client",
+    "laplace_common",
+    "laplace_server",
+    "laplace_wasm",
+    "laplace_wasm_macro",
+    "laplace_yew",
 ]
 
 [profile.release]

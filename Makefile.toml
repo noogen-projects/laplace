@@ -29,28 +29,28 @@ RUSTFLAGS = "-Copt-level=s"
 RUSTFLAGS = ""
 
 
-[tasks.create_dap_dir]
+[tasks.create_lapp_dir]
 script_runner = "@duckscript"
-script = "mkdir daps/${APP}"
+script = "mkdir lapps/${APP}"
 dependencies = ["parse_params"]
 
 [tasks.copy_static]
 script_runner = "@duckscript"
 script = '''
-rm -r daps/${APP}/static
-if not eq ${APP} "dapla"
-    cp examples/${APP}/static daps/${APP}/
+rm -r lapps/${APP}/static
+if not eq ${APP} "laplace"
+    cp examples/${APP}/static lapps/${APP}/
 end
 '''
-dependencies = ["create_dap_dir"]
+dependencies = ["create_lapp_dir"]
 
 [tasks.copy_settings]
 script_runner = "@duckscript"
 script = '''
-rm daps/${APP}/settings.toml
-cp examples/${APP}/settings.toml daps/${APP}/settings.toml
+rm lapps/${APP}/settings.toml
+cp examples/${APP}/settings.toml lapps/${APP}/settings.toml
 '''
-dependencies = ["create_dap_dir"]
+dependencies = ["create_lapp_dir"]
 
 
 [tasks.build_client]
@@ -80,7 +80,7 @@ args = [
     "web",
     "--no-typescript",
     "--out-dir",
-    "daps/${APP}/static",
+    "lapps/${APP}/static",
     "--out-name",
     "${APP}_client",
     "target/wasm32-unknown-unknown/${MODE}/${APP}_client.wasm",
@@ -90,16 +90,16 @@ dependencies = ["choose_profile", "copy_static"]
 [tasks.deploy_server]
 script_runner = "@duckscript"
 script = '''
-rm daps/${APP}/${APP}_server.wasm
-cp target/wasm32-unknown-unknown/${MODE}/${APP}_server.wasm daps/${APP}/${APP}_server.wasm
+rm lapps/${APP}/${APP}_server.wasm
+cp target/wasm32-unknown-unknown/${MODE}/${APP}_server.wasm lapps/${APP}/${APP}_server.wasm
 '''
 dependencies = ["choose_profile", "copy_settings"]
 
 [tasks.deploy_server_wasi]
 script_runner = "@duckscript"
 script = '''
-rm daps/${APP}/${APP}_server.wasm
-cp target/wasm32-wasi/${MODE}/${APP}_server.wasm daps/${APP}/${APP}_server.wasm
+rm lapps/${APP}/${APP}_server.wasm
+cp target/wasm32-wasi/${MODE}/${APP}_server.wasm lapps/${APP}/${APP}_server.wasm
 '''
 dependencies = ["choose_profile", "copy_settings"]
 
@@ -142,28 +142,28 @@ run_task = [
 dependencies = ["chat", "echo", "notes", "todo"]
 
 
-[tasks.dapla_server]
+[tasks.laplace_server]
 command = "cargo"
 toolchain = "stable"
-args = ["build", "-p", "dapla_server", "${ADDITIONAL}"]
+args = ["build", "-p", "laplace_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
-[tasks.dapla]
-env = { APP = "dapla" }
+[tasks.laplace]
+env = { APP = "laplace" }
 run_task = "client"
-dependencies = ["dapla_server"]
+dependencies = ["laplace_server"]
 
-[tasks.run_dapla]
+[tasks.run_laplace]
 command = "cargo"
 toolchain = "stable"
-args = ["run", "-p", "dapla_server", "${ADDITIONAL}"]
+args = ["run", "-p", "laplace_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
 
 [tasks.all]
-dependencies = ["dapla", "examples"]
+dependencies = ["laplace", "examples"]
 
 [tasks.run]
 env = { RUSTFLAGS = "", RUST_LOG = "info,regalloc=warn,wasmer_compiler_cranelift=warn" }
-run_task = "run_dapla"
+run_task = "run_laplace"
 dependencies = ["all"]

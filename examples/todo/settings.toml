@@ -8,4 +8,4 @@ required = ["database", "client_http"]
 allowed = ["database", "client_http"]
 
 [database]
-path = "daps/todo/todos.db"
+path = "lapps/todo/todos.db"
