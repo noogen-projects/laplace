@@ -161,7 +161,7 @@ impl Future for GossipsubService {
                                     address.pop();
                                     address.push(Protocol::Tcp(port));
                                     info!("Dial address: {}", address);
-                                    self.swarm.dial_addr(address.clone()).map_err(Error::DialError)?;
+                                    self.swarm.dial(address.clone()).map_err(Error::DialError)?;
                                 }
                                 Ok(())
                             } else {
@@ -173,7 +173,7 @@ impl Future for GossipsubService {
                     info!("Add address: {}", address);
                     Multiaddr::from_str(&address)
                         .map_err(Error::WrongMultiaddr)
-                        .and_then(|address| self.swarm.dial_addr(address).map_err(Error::DialError))
+                        .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
                 },
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return Poll::Ready(()),

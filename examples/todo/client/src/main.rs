@@ -1,15 +1,15 @@
 #![recursion_limit = "512"]
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context as _, Error};
 use laplace_yew::{JsonFetcher, MsgError};
-use strum::{EnumIter, IntoEnumIterator, ToString};
+use strum::{Display, EnumIter, IntoEnumIterator};
 use todo_common::{Response, Task};
 use web_sys::HtmlInputElement;
 use yew::{
     classes, html, services::console::ConsoleService, Component, ComponentLink, Html, InputData, KeyboardEvent, NodeRef,
 };
 
-#[derive(EnumIter, ToString, Clone, Copy, PartialEq)]
+#[derive(EnumIter, Display, Clone, Copy, PartialEq)]
 enum Filter {
     All,
     Active,

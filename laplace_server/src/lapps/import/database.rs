@@ -102,7 +102,7 @@ fn run<T: BorshSerialize>(
 }
 
 fn to_row(source: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
-    (0..source.column_count())
+    (0..source.as_ref().column_count())
         .into_iter()
         .map(|idx| source.get_ref(idx).map(to_value))
         .collect::<Result<_, _>>()

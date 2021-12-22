@@ -1,7 +1,5 @@
-use std::{convert::TryFrom, str::FromStr};
-
 use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumString, IntoStaticStr, ParseError};
+use strum::{AsRefStr, EnumString, IntoStaticStr};
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, AsRefStr, IntoStaticStr, EnumString)]
 #[serde(try_from = "&str")]
@@ -41,13 +39,5 @@ pub enum Permission {
 impl Permission {
     pub fn as_str(&self) -> &'static str {
         self.into()
-    }
-}
-
-impl TryFrom<&str> for Permission {
-    type Error = ParseError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        FromStr::from_str(value)
     }
 }
