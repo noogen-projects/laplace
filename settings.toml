@@ -7,7 +7,7 @@ access_token = "24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR"
 mdns_discovery_enabled = true
 
 [log]
-level = "info"
+spec = "info,regalloc=warn,wasmer_compiler_cranelift=warn"
 
 [lapps]
 path = "lapps"

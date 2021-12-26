@@ -44,7 +44,7 @@ fn display_code(code: &Option<u16>) -> String {
     if let Some(code) = code {
         format!("{}", code)
     } else {
-        format!("None")
+        "None".to_string()
     }
 }
 

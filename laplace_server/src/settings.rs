@@ -1,11 +1,7 @@
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::path::{Path, PathBuf};
 
 use config::{Config, ConfigError, Environment, File};
-use log::Level;
-use serde::{de::Error, Deserialize, Deserializer};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
@@ -36,21 +32,18 @@ pub struct P2pSettings {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct LoggerSettings {
-    #[serde(deserialize_with = "deserialize_log_level")]
-    pub level: Level,
-}
-
-fn deserialize_log_level<'de, D>(deserializer: D) -> Result<Level, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let level = String::deserialize(deserializer)?;
-    Level::from_str(&level).map_err(Error::custom)
+    pub spec: String,
+    pub dir: Option<PathBuf>,
+    pub duplicate_to_stdout: bool,
 }
 
 impl Default for LoggerSettings {
     fn default() -> Self {
-        Self { level: Level::Debug }
+        Self {
+            spec: "debug".into(),
+            dir: None,
+            duplicate_to_stdout: false,
+        }
     }
 }
 
