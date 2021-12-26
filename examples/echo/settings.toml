@@ -1,6 +1,8 @@
 [application]
 title = "Echo"
 enabled = true
+description = "The Echo local-first web app example"
+tags = ["example", "echo"]
 access_token = "HWAJn0ty4WIIqURJXNA66Jfk5piM7Prsod7iSVcWpEkvI64oCenJRL5PYcjaqLOe"
 
 [permissions]

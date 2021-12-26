@@ -1,4 +1,7 @@
-use std::{fmt, path::PathBuf};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -9,6 +12,8 @@ use super::Permission;
 pub struct ApplicationSettings {
     pub title: String,
     pub enabled: bool,
+    pub description: Option<String>,
+    pub tags: Option<Vec<String>>,
     pub access_token: Option<String>,
 }
 
@@ -22,14 +27,57 @@ pub struct PermissionsSettings {
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct DatabaseSettings {
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
+}
+
+impl DatabaseSettings {
+    pub const fn new() -> Self {
+        Self { path: None }
+    }
+
+    pub fn path(&self) -> &Path {
+        self.path.as_deref().unwrap_or_else(|| Path::new(""))
+    }
+
+    pub fn into_path(self) -> PathBuf {
+        self.path.unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct NetworkSettings {
-    pub http: HttpSettings,
-    pub gossipsub: GossipsubSettings,
+    pub http: Option<HttpSettings>,
+    pub gossipsub: Option<GossipsubSettings>,
+}
+
+impl NetworkSettings {
+    pub const fn new() -> Self {
+        Self {
+            http: None,
+            gossipsub: None,
+        }
+    }
+
+    pub fn http(&self) -> &HttpSettings {
+        static DEFAULT: HttpSettings = HttpSettings::new();
+
+        self.http.as_ref().unwrap_or(&DEFAULT)
+    }
+
+    pub fn into_http(self) -> HttpSettings {
+        self.http.unwrap_or_default()
+    }
+
+    pub fn gossipsub(&self) -> &GossipsubSettings {
+        static DEFAULT: GossipsubSettings = GossipsubSettings::new();
+
+        self.gossipsub.as_ref().unwrap_or(&DEFAULT)
+    }
+
+    pub fn into_gossipsub(self) -> GossipsubSettings {
+        self.gossipsub.unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -45,13 +93,19 @@ const fn http_timeout_ms() -> u64 {
     1000 * 10
 }
 
-impl Default for HttpSettings {
-    fn default() -> Self {
+impl HttpSettings {
+    pub const fn new() -> Self {
         Self {
-            methods: Default::default(),
-            hosts: Default::default(),
+            methods: HttpMethods::new(),
+            hosts: HttpHosts::new(),
             timeout_ms: http_timeout_ms(),
         }
+    }
+}
+
+impl Default for HttpSettings {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -68,9 +122,15 @@ pub enum HttpMethods {
     List(Vec<HttpMethod>),
 }
 
+impl HttpMethods {
+    pub const fn new() -> Self {
+        Self::All
+    }
+}
+
 impl Default for HttpMethods {
     fn default() -> Self {
-        Self::All
+        Self::new()
     }
 }
 
@@ -132,9 +192,15 @@ pub enum HttpHosts {
     List(Vec<String>),
 }
 
+impl HttpHosts {
+    pub const fn new() -> Self {
+        Self::All
+    }
+}
+
 impl Default for HttpHosts {
     fn default() -> Self {
-        Self::All
+        Self::new()
     }
 }
 
@@ -197,6 +263,15 @@ pub struct GossipsubSettings {
     pub dial_ports: Vec<u16>,
 }
 
+impl GossipsubSettings {
+    pub const fn new() -> Self {
+        Self {
+            addr: String::new(),
+            dial_ports: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LappIncomingRequestSettings {
@@ -224,7 +299,39 @@ pub struct LappRequestsSettings {
 pub struct LappSettings {
     pub application: ApplicationSettings,
     pub permissions: PermissionsSettings,
-    pub database: DatabaseSettings,
-    pub network: NetworkSettings,
-    pub lapp_requests: Vec<LappRequestsSettings>,
+    pub database: Option<DatabaseSettings>,
+    pub network: Option<NetworkSettings>,
+    pub lapp_requests: Option<Vec<LappRequestsSettings>>,
+}
+
+impl LappSettings {
+    pub fn database(&self) -> &DatabaseSettings {
+        static DEFAULT: DatabaseSettings = DatabaseSettings::new();
+
+        self.database.as_ref().unwrap_or(&DEFAULT)
+    }
+
+    pub fn into_database(self) -> DatabaseSettings {
+        self.database.unwrap_or_default()
+    }
+
+    pub fn network(&self) -> &NetworkSettings {
+        static DEFAULT: NetworkSettings = NetworkSettings::new();
+
+        self.network.as_ref().unwrap_or(&DEFAULT)
+    }
+
+    pub fn into_network(self) -> NetworkSettings {
+        self.network.unwrap_or_default()
+    }
+
+    pub fn lapp_requests(&self) -> &[LappRequestsSettings] {
+        static DEFAULT: Vec<LappRequestsSettings> = Vec::new();
+
+        self.lapp_requests.as_deref().unwrap_or(&DEFAULT)
+    }
+
+    pub fn into_lapp_requests(self) -> Vec<LappRequestsSettings> {
+        self.lapp_requests.unwrap_or_default()
+    }
 }

@@ -164,6 +164,6 @@ dependencies = ["choose_profile"]
 dependencies = ["laplace", "examples"]
 
 [tasks.run]
-env = { RUSTFLAGS = "", RUST_LOG = "info,regalloc=warn,wasmer_compiler_cranelift=warn" }
+env = { RUSTFLAGS = "", RUST_LOG = "debug,regalloc=warn,wasmer_wasi=info,wasmer_compiler_cranelift=warn,cranelift_codegen=warn" }
 run_task = "run_laplace"
 dependencies = ["all"]

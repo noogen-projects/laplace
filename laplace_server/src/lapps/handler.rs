@@ -130,7 +130,7 @@ pub async fn gossipsub_start(
                             future::Either::Left(gossipsub_start_handler(
                                 lapp_service_sender,
                                 request,
-                                lapp.settings().network.gossipsub.clone(),
+                                lapp.settings().network().gossipsub().clone(),
                             ))
                         })
                     })

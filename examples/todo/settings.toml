@@ -1,6 +1,8 @@
 [application]
 title = "Todo"
 enabled = true
+description = "The Todo local-first web app example"
+tags = ["example", "todo"]
 access_token = "OTpFVytjgoRuUpoBACruBcBmxXmREVnmjFMhqAwfJdfQ8amoqkJxJncWZMVo9mGe"
 
 [permissions]

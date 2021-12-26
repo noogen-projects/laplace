@@ -33,6 +33,8 @@ impl FileSettings for LappSettings {
     }
 
     fn save(&self, path: impl AsRef<Path>) -> LappSettingsResult<()> {
+        log::debug!("Save settings to file {}\n{:#?}", path.as_ref().display(), self);
+
         let settings = toml::to_string(self)?;
         fs::write(path, settings).map_err(Into::into)
     }

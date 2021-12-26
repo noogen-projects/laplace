@@ -28,6 +28,7 @@ use self::addresses::Addresses;
 
 mod addresses;
 
+#[allow(clippy::large_enum_variant)]
 enum State {
     SignIn,
     Chat(Chat),

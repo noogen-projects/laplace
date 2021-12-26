@@ -211,7 +211,8 @@ impl Lapp {
         let mut exports = Exports::new();
 
         if is_allow_db_access {
-            let connection = Arc::new(Mutex::new(Connection::open(&self.settings().database.path)?));
+            let database_path = self.settings().database().path();
+            let connection = Arc::new(Mutex::new(Connection::open(database_path)?));
 
             let execute_native = Function::new_native_with_env(
                 &store,
@@ -249,7 +250,7 @@ impl Lapp {
                 HttpEnv {
                     instance: shared_instance.clone(),
                     client: http_client,
-                    settings: self.lapp.settings().network.http.clone(),
+                    settings: self.lapp.settings().network().http().clone(),
                 },
                 http::invoke_http,
             );

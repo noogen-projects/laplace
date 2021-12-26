@@ -1,6 +1,8 @@
 [application]
 title = "Chat"
 enabled = true
+description = "The Chat local-first web app example"
+tags = ["example", "chat"]
 access_token = "JDQmIY3pxSI28Y3U5x6BpTmnx0ojFp6Emc29zrEOrmA0bWJhZue97dJ4YNjxyERX"
 
 [permissions]
