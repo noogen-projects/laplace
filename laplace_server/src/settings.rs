@@ -40,7 +40,7 @@ pub struct LoggerSettings {
 impl Default for LoggerSettings {
     fn default() -> Self {
         Self {
-            spec: "debug".into(),
+            spec: "info".into(),
             dir: None,
             duplicate_to_stdout: false,
         }

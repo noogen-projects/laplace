@@ -1,15 +1,12 @@
-use std::io;
-
 pub use actix_files;
 pub use actix_web;
 
+use std::io;
+
 use actix_files::{Files, NamedFile};
-use actix_web::{dev::Service, http, middleware, web, App, HttpResponse, HttpServer};
-use futures::future;
-use log::error;
+use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 
 use self::{
-    error::{error_response, ServerError},
     lapps::{Lapp, LappsProvider},
     settings::Settings,
 };
@@ -42,55 +39,7 @@ pub async fn run(settings: Settings) -> io::Result<()> {
             .wrap_fn({
                 let lapps_provider = lapps_provider.clone();
                 let laplace_access_token = laplace_access_token.clone();
-                move |request, service| {
-                    let request = match auth::query_access_token_redirect(request) {
-                        Ok(response) => return future::Either::Right(future::ok(response)),
-                        Err(request) => request,
-                    };
-
-                    let lapp_name = request
-                        .path()
-                        .split('/')
-                        .skip_while(|chunk| chunk.is_empty())
-                        .next()
-                        .unwrap_or_default();
-
-                    let access_token = request
-                        .cookie("access_token")
-                        .map(|cookie| cookie.value().to_string())
-                        .unwrap_or_default();
-
-                    if lapp_name.is_empty()
-                        || lapp_name == "static"
-                        || (lapp_name == Lapp::main_name() && access_token == laplace_access_token.as_str())
-                    {
-                        return future::Either::Left(service.call(request));
-                    }
-
-                    let lapps_manager = match lapps_provider.lock() {
-                        Ok(lapps_manager) => lapps_manager,
-                        Err(err) => {
-                            error!("Lapps service lock should be asquired: {:?}", err);
-                            return future::Either::Right(future::ok(
-                                request.into_response(error_response(ServerError::LappsServiceNotLock)),
-                            ));
-                        },
-                    };
-
-                    match lapps_manager.lapp(lapp_name) {
-                        Ok(lapp) => {
-                            if access_token.as_str()
-                                == lapp.settings().application.access_token.as_deref().unwrap_or_default()
-                            {
-                                future::Either::Left(service.call(request))
-                            } else {
-                                let response = request.into_response(HttpResponse::Forbidden().finish());
-                                future::Either::Right(future::ok(response))
-                            }
-                        },
-                        Err(err) => future::Either::Right(future::ok(request.into_response(error_response(err)))),
-                    }
-                }
+                auth::create_check_access_middleware(lapps_provider, laplace_access_token)
             })
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
