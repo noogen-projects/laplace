@@ -153,15 +153,8 @@ impl Lapp {
                         )
                         .route(
                             "/{tail}*",
-                            web::get().to({
-                                let name = name.clone();
-                                move |lapps_service, request| handler::get(lapps_service, request, name.clone())
-                            }),
-                        )
-                        .route(
-                            "/{tail}*",
-                            web::post().to(move |lapps_service, request, body| {
-                                handler::post(lapps_service, request, body, name.clone())
+                            web::route().to(move |lapps_service, request, body| {
+                                handler::http(lapps_service, request, body, name.clone())
                             }),
                         ),
                 );

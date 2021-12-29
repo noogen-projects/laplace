@@ -35,7 +35,21 @@ pub async fn index_file(
         .await
 }
 
-async fn handle_http(
+pub async fn http(
+    lapps_service: web::Data<LappsProvider>,
+    request: HttpRequest,
+    body: Option<web::Bytes>,
+    lapp_name: String,
+) -> HttpResponse {
+    lapps_service
+        .into_inner()
+        .handle_client_http_lapp(lapp_name, move |_, _, lapp_instance| {
+            http_handler(lapp_instance, request, body.map(|bytes| bytes.to_vec()))
+        })
+        .await
+}
+
+async fn http_handler(
     lapp_instance: Instance,
     request: HttpRequest,
     body: Option<Vec<u8>>,
@@ -52,29 +66,6 @@ async fn handle_http(
     let response: http::Response = BorshDeserialize::deserialize(&mut bytes.as_slice())?;
 
     Ok(HttpResponse::build(response.status).body(response.body))
-}
-
-pub async fn get(lapps_service: web::Data<LappsProvider>, request: HttpRequest, lapp_name: String) -> HttpResponse {
-    lapps_service
-        .into_inner()
-        .handle_client_http_lapp(lapp_name, move |_, _, lapp_instance| {
-            handle_http(lapp_instance, request, None)
-        })
-        .await
-}
-
-pub async fn post(
-    lapps_service: web::Data<LappsProvider>,
-    request: HttpRequest,
-    body: web::Bytes,
-    lapp_name: String,
-) -> HttpResponse {
-    lapps_service
-        .into_inner()
-        .handle_client_http_lapp(lapp_name, move |_, _, lapp_instance| {
-            handle_http(lapp_instance, request, Some(body.to_vec()))
-        })
-        .await
 }
 
 pub async fn ws_start(

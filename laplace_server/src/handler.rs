@@ -16,7 +16,7 @@ pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse 
                 .filter(|lapp| !lapp.is_main())
                 .map(|lapp| Cow::Borrowed(lapp.deref()))
                 .collect();
-            lapps.sort_unstable_by(|a, b| a.name().cmp(b.name()));
+            lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
             let response = HttpResponse::Ok().json(LappResponse::Lapps(lapps));
 
             async { Ok(response) }
