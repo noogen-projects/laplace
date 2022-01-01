@@ -26,7 +26,7 @@ use libp2p::{
 use log::{error, info};
 use thiserror::Error;
 
-use crate::lapps::service;
+use crate::service;
 
 pub type Sender = mpsc::Sender<Message>;
 pub type Receiver = mpsc::Receiver<Message>;
@@ -37,7 +37,7 @@ pub struct GossipsubService {
     dial_ports: Vec<u16>,
     topic: Topic,
     receiver: Receiver,
-    lapp_service_sender: service::Sender,
+    lapp_service_sender: service::lapp::Sender,
     peers: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
@@ -52,7 +52,7 @@ impl GossipsubService {
         address: Multiaddr,
         dial_ports: Vec<u16>,
         topic_name: impl Into<String>,
-        lapp_service_sender: service::Sender,
+        lapp_service_sender: service::lapp::Sender,
     ) -> Result<(Self, Sender), Error> {
         let transport = executor::block_on(libp2p::development_transport(keypair.clone()))?;
         let message_id_fn = |message: &GossipsubMessage| {
@@ -195,7 +195,7 @@ impl Future for GossipsubService {
                             // todo: use async send
                             if let Err(err) =
                                 self.lapp_service_sender
-                                    .try_send(service::Message::GossipSub(Message::Text {
+                                    .try_send(service::lapp::Message::GossipSub(Message::Text {
                                         peer_id: peer_id.to_base58(),
                                         msg: text.to_string(),
                                     }))

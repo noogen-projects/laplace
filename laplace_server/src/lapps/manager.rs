@@ -6,13 +6,13 @@ use wasmer::Instance;
 
 use crate::{
     error::{ServerError, ServerResult},
-    lapps::{service, ExpectedInstance},
-    Lapp,
+    lapps::ExpectedInstance,
+    service, Lapp,
 };
 
 pub struct LappsManager {
     lapps: HashMap<String, Lapp>,
-    service_senders: HashMap<String, service::Sender>,
+    service_senders: HashMap<String, service::lapp::Sender>,
     http_client: reqwest::blocking::Client,
 }
 
@@ -111,7 +111,7 @@ impl LappsManager {
             .ok_or_else(|| ServerError::LappNotLoaded(lapp_name.to_string()))
     }
 
-    pub fn service_sender(&mut self, lapp_name: impl AsRef<str>) -> ServerResult<service::Sender> {
+    pub fn service_sender(&mut self, lapp_name: impl AsRef<str>) -> ServerResult<service::lapp::Sender> {
         let lapp_name = lapp_name.as_ref();
         if let Some(sender) = self.service_senders.get(lapp_name) {
             Ok(sender.clone())
@@ -135,7 +135,7 @@ impl LappsManager {
     pub async fn service_stop(&mut self, lapp_name: impl AsRef<str>) -> bool {
         if let Some(sender) = self.service_senders.remove(lapp_name.as_ref()) {
             sender
-                .send(service::Message::Stop)
+                .send(service::lapp::Message::Stop)
                 .await
                 .map_err(|err| log::error!("Error occurs when send to lapp service: {:?}", err))
                 .is_ok()

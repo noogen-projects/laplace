@@ -9,7 +9,7 @@ use derive_more::From;
 use log::{debug, error};
 use wasmer::{ExportError, RuntimeError};
 
-use crate::lapps::{service, LappInstanceError};
+use crate::{lapps::LappInstanceError, service};
 
 pub use laplace_wasm::route::websocket::Message;
 
@@ -33,7 +33,7 @@ pub struct WebSocketService {
     /// otherwise we drop connection.
     hb: Instant,
 
-    lapp_service_sender: service::Sender,
+    lapp_service_sender: service::lapp::Sender,
 }
 
 impl WebSocketService {
@@ -43,7 +43,7 @@ impl WebSocketService {
     /// How long before lack of client response causes a timeout
     const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 
-    pub fn new(lapp_service_sender: service::Sender) -> Self {
+    pub fn new(lapp_service_sender: service::lapp::Sender) -> Self {
         Self {
             hb: Instant::now(),
             lapp_service_sender,
@@ -120,7 +120,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
                 let lapp_service_sender = self.lapp_service_sender.clone();
                 let fut = async move {
                     if let Err(err) = lapp_service_sender
-                        .send(service::Message::WebSocket(Message::Text(text.to_string())))
+                        .send(service::lapp::Message::WebSocket(Message::Text(text.to_string())))
                         .await
                     {
                         log::error!("Error occurs when send to lapp service: {:?}", err);

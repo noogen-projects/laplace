@@ -9,7 +9,7 @@ use wasmer::NativeFunc;
 use laplace_wasm::{Route, WasmSlice};
 
 use crate::{
-    lapps::ExpectedInstance,
+    lapps::{ExpectedInstance, LappInstanceError},
     service::{gossipsub, websocket},
 };
 
@@ -17,7 +17,7 @@ use crate::{
 pub enum Error {
     Export(wasmer::ExportError),
     Runtime(wasmer::RuntimeError),
-    Instance(crate::lapps::instance::LappInstanceError),
+    Instance(LappInstanceError),
     Io(io::Error),
 }
 

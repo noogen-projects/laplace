@@ -12,7 +12,8 @@ use laplace_wasm::http;
 use crate::{
     convert,
     error::ServerResult,
-    lapps::{service, ExpectedInstance, Instance, LappsProvider, Permission},
+    lapps::{ExpectedInstance, Instance, LappsProvider, Permission},
+    service,
     service::{
         gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService},
         websocket::WebSocketService,
@@ -91,7 +92,7 @@ pub async fn ws_start(
 }
 
 async fn process_ws_start(
-    lapp_service_sender: service::Sender,
+    lapp_service_sender: service::lapp::Sender,
     lapp_name: String,
     request: HttpRequest,
     stream: web::Payload,
@@ -99,7 +100,7 @@ async fn process_ws_start(
     let (addr, response) = ws::start_with_addr(WebSocketService::new(lapp_service_sender.clone()), &request, stream)?;
 
     lapp_service_sender
-        .send(service::Message::NewWebSocket(addr))
+        .send(service::lapp::Message::NewWebSocket(addr))
         .map_err(|err| log::error!("Error occurs when send to lapp service: {:?}, lapp: {}", err, lapp_name))
         .await
         .ok();
@@ -135,7 +136,7 @@ pub async fn gossipsub_start(
 }
 
 async fn process_gossipsub_start(
-    lapp_service_sender: service::Sender,
+    lapp_service_sender: service::lapp::Sender,
     mut request: web::Json<Peer>,
     settings: GossipsubSettings,
 ) -> ServerResult<HttpResponse> {
@@ -157,7 +158,7 @@ async fn process_gossipsub_start(
     actix::spawn(service);
 
     lapp_service_sender
-        .send(service::Message::NewGossipSub(sender))
+        .send(service::lapp::Message::NewGossipSub(sender))
         .map_err(|err| log::error!("Error occurs when send to lapp service: {:?}", err))
         .await
         .ok();
