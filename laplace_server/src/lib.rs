@@ -1,9 +1,8 @@
-pub use actix_files;
-pub use actix_web;
-
 use std::io;
 
+pub use actix_files;
 use actix_files::{Files, NamedFile};
+pub use actix_web;
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 
 use self::{
@@ -14,11 +13,10 @@ use self::{
 pub mod auth;
 pub mod convert;
 pub mod error;
-pub mod gossipsub;
 pub mod handler;
 pub mod lapps;
+pub mod service;
 pub mod settings;
-pub mod ws;
 
 pub async fn run(settings: Settings) -> io::Result<()> {
     let lapps_path = settings.lapps.path.clone();

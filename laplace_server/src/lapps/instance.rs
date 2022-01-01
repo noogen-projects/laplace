@@ -1,8 +1,9 @@
+pub use wasmer::{Instance, Memory};
+
 use std::{convert::TryFrom, ops::Deref, ptr::copy_nonoverlapping, slice, string::FromUtf8Error, sync::Arc};
 
 use laplace_wasm::WasmSlice;
 use thiserror::Error;
-use wasmer::{Instance, Memory};
 
 #[derive(Debug, Error)]
 pub enum LappInstanceError {

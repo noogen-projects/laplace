@@ -1,16 +1,16 @@
 use std::{fmt, io};
 
 use actix_web::{HttpResponse, ResponseError};
-use laplace_common::lapp::Permission;
-use log::error;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 use wasmer_wasi::{WasiError, WasiStateCreationError};
 
+use laplace_common::lapp::Permission;
+
 use crate::{
-    gossipsub,
     lapps::{LappInstanceError, LappSettingsError},
+    service::gossipsub,
 };
 
 pub type ServerResult<T> = Result<T, ServerError>;
@@ -94,6 +94,7 @@ impl From<ServerError> for HttpResponse {
 
 pub fn error_response(err: impl fmt::Debug) -> HttpResponse {
     let error_message = format!("{:#?}", err);
-    error!("Internal Server error: {}", error_message);
+    log::error!("Internal Server error: {}", error_message);
+
     HttpResponse::InternalServerError().body(error_message)
 }

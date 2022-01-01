@@ -5,15 +5,18 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use borsh::{BorshDeserialize, BorshSerialize};
 use futures::{future, TryFutureExt};
+
 use laplace_common::{api::Peer, lapp::settings::GossipsubSettings};
 use laplace_wasm::http;
 
 use crate::{
     convert,
     error::ServerResult,
-    gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService},
     lapps::{service, ExpectedInstance, Instance, LappsProvider, Permission},
-    ws::WebSocketService,
+    service::{
+        gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService},
+        websocket::WebSocketService,
+    },
 };
 
 pub async fn index_file(
@@ -44,12 +47,12 @@ pub async fn http(
     lapps_service
         .into_inner()
         .handle_client_http_lapp(lapp_name, move |_, _, lapp_instance| {
-            http_handler(lapp_instance, request, body.map(|bytes| bytes.to_vec()))
+            process_http(lapp_instance, request, body.map(|bytes| bytes.to_vec()))
         })
         .await
 }
 
-async fn http_handler(
+async fn process_http(
     lapp_instance: Instance,
     request: HttpRequest,
     body: Option<Vec<u8>>,
@@ -80,14 +83,14 @@ pub async fn ws_start(
             lapps_manager
                 .service_sender(&lapp_name)
                 .map(|lapp_service_sender| {
-                    future::Either::Left(ws_start_handler(lapp_service_sender, lapp_name, request, stream))
+                    future::Either::Left(process_ws_start(lapp_service_sender, lapp_name, request, stream))
                 })
                 .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
         })
         .await
 }
 
-async fn ws_start_handler(
+async fn process_ws_start(
     lapp_service_sender: service::Sender,
     lapp_name: String,
     request: HttpRequest,
@@ -118,7 +121,7 @@ pub async fn gossipsub_start(
                     .service_sender(&lapp_name)
                     .and_then(|lapp_service_sender| {
                         lapps_manager.lapp(&lapp_name).map(|lapp| {
-                            future::Either::Left(gossipsub_start_handler(
+                            future::Either::Left(process_gossipsub_start(
                                 lapp_service_sender,
                                 request,
                                 lapp.settings().network().gossipsub().clone(),
@@ -131,7 +134,7 @@ pub async fn gossipsub_start(
         .await
 }
 
-async fn gossipsub_start_handler(
+async fn process_gossipsub_start(
     lapp_service_sender: service::Sender,
     mut request: web::Json<Peer>,
     settings: GossipsubSettings,

@@ -28,13 +28,13 @@ pub async fn update_lapp(lapps_service: web::Data<LappsProvider>, body: String) 
     lapps_service
         .into_inner()
         .handle(|lapps_manager| {
-            let result = update_lapp_handler(lapps_manager, body);
+            let result = process_update_lapp(lapps_manager, body);
             async { result }
         })
         .await
 }
 
-fn update_lapp_handler(lapps_manager: &mut LappsManager, body: String) -> ServerResult<HttpResponse> {
+fn process_update_lapp(lapps_manager: &mut LappsManager, body: String) -> ServerResult<HttpResponse> {
     let request: LappUpdateRequest = serde_json::from_str(&body)?;
     let update_query = request.into_query();
     let lapp = lapps_manager.lapp_mut(&update_query.lapp_name)?;

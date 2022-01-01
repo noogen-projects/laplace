@@ -4,10 +4,14 @@ use actix::Addr;
 use async_std::channel;
 use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::From;
-use laplace_wasm::{Route, WasmSlice};
 use wasmer::NativeFunc;
 
-use crate::{gossipsub, lapps::ExpectedInstance, ws};
+use laplace_wasm::{Route, WasmSlice};
+
+use crate::{
+    lapps::ExpectedInstance,
+    service::{gossipsub, websocket},
+};
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -22,8 +26,8 @@ pub enum Message {
     Stop,
 
     // WebSocket
-    NewWebSocket(Addr<ws::WebSocketService>),
-    WebSocket(ws::Message),
+    NewWebSocket(Addr<websocket::WebSocketService>),
+    WebSocket(websocket::Message),
 
     // GossipSub
     NewGossipSub(gossipsub::Sender),
@@ -38,7 +42,7 @@ pub struct LappService {
     instance: ExpectedInstance,
     receiver: Receiver,
     gossipsub_sender: Option<gossipsub::Sender>,
-    websocket_sender: Option<Addr<ws::WebSocketService>>,
+    websocket_sender: Option<Addr<websocket::WebSocketService>>,
 }
 
 impl LappService {
@@ -55,13 +59,13 @@ impl LappService {
         )
     }
 
-    pub fn use_websocket(&mut self, addr: Addr<ws::WebSocketService>) {
+    pub fn use_websocket(&mut self, addr: Addr<websocket::WebSocketService>) {
         self.websocket_sender.replace(addr);
     }
 
-    async fn send_websocket(&self, msg: ws::Message) {
+    async fn send_websocket(&self, msg: websocket::Message) {
         if let Some(addr) = &self.websocket_sender {
-            if let Err(err) = addr.send(ws::ActixMessage(msg)).await {
+            if let Err(err) = addr.send(websocket::ActixMessage(msg)).await {
                 log::error!("Websocket send error: {:?}", err);
             }
         } else {
@@ -69,7 +73,7 @@ impl LappService {
         }
     }
 
-    fn handle_websocket(&self, msg: &ws::Message) -> Result<Vec<Route>, Error> {
+    fn handle_websocket(&self, msg: &websocket::Message) -> Result<Vec<Route>, Error> {
         let route_ws_fn = self.instance.exports.get_function("route_ws")?.native::<u64, u64>()?;
         let arg = self.instance.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
         self.call_lapp_handler(route_ws_fn, arg)

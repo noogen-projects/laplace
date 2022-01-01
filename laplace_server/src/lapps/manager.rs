@@ -52,7 +52,7 @@ impl LappsManager {
         executor::block_on(self.service_stop(lapp_name.as_ref())); // todo: use async
         self.lapps
             .get_mut(lapp_name.as_ref())
-            .map(|lapp| lapp.instance.take().is_some())
+            .map(|lapp| lapp.take_instance().is_some())
             .unwrap_or(false)
     }
 
@@ -79,8 +79,7 @@ impl LappsManager {
             .get(lapp_name)
             .ok_or_else(|| ServerError::LappNotFound(lapp_name.to_string()))
             .and_then(|lapp| {
-                lapp.instance
-                    .clone()
+                lapp.instance()
                     .ok_or_else(|| ServerError::LappNotLoaded(lapp_name.to_string()))
                     .map(|instance| (lapp, instance))
             })
@@ -108,7 +107,7 @@ impl LappsManager {
         let lapp_name = lapp_name.as_ref();
         self.lapps
             .get(lapp_name)
-            .and_then(|lapp| lapp.instance.clone())
+            .and_then(|lapp| lapp.instance())
             .ok_or_else(|| ServerError::LappNotLoaded(lapp_name.to_string()))
     }
 
@@ -122,8 +121,7 @@ impl LappsManager {
                 .get(lapp_name)
                 .ok_or_else(|| ServerError::LappNotFound(lapp_name.to_string()))?;
             let instance = lapp
-                .instance
-                .clone()
+                .instance()
                 .ok_or_else(|| ServerError::LappNotLoaded(lapp_name.to_string()))?;
 
             let (service, sender) = service::LappService::new(ExpectedInstance::try_from(instance)?);
