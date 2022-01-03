@@ -73,7 +73,7 @@ pub fn do_invoke_http(
         body,
     } = request;
 
-    log::info!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
+    log::debug!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
 
     if !is_method_allowed(&method, &settings.methods) {
         return Err(http::InvokeError::ForbiddenMethod(method.to_string()));
@@ -92,7 +92,8 @@ pub fn do_invoke_http(
         .send()
         .map_err(|err| http::InvokeError::FailRequest(err.status().map(|status| status.as_u16()), format!("{}", err)))
         .map(|response| {
-            log::info!("Invoke HTTP response: {:#?}", response);
+            log::debug!("Invoke HTTP response: {:#?}", response);
+
             http::Response {
                 status: response.status(),
                 version: response.version(),
@@ -102,7 +103,11 @@ pub fn do_invoke_http(
                         .iter()
                         .map(|(name, value)| (name.clone(), value.clone())),
                 ),
-                body: response.bytes().map(|bytes| bytes.to_vec()).unwrap_or_default(),
+                body: {
+                    let body = response.bytes().map(|bytes| bytes.to_vec()).unwrap_or_default();
+                    log::debug!("Invoke HTTP response body: {}", String::from_utf8_lossy(&body));
+                    body
+                },
             }
         })
 }

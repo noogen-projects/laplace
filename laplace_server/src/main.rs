@@ -33,6 +33,7 @@ fn init_logger(settings: &LoggerSettings) {
         } else {
             Duplicate::None
         })
+        .format(flexi_logger::colored_detailed_format)
         .start()
         .expect("Logger should be started");
 }
