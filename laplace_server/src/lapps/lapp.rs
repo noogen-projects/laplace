@@ -8,7 +8,7 @@ use std::{
     fs,
     ops::{Deref, DerefMut},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLockReadGuard},
 };
 
 use actix_files::Files;
@@ -17,6 +17,7 @@ use arc_swap::ArcSwapOption;
 use borsh::BorshDeserialize;
 use log::error;
 use rusqlite::Connection;
+use serde::{Serialize, Serializer};
 use wasmer::{Exports, Function, ImportObject, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
@@ -32,16 +33,37 @@ use crate::{
         settings::{FileSettings, LappSettings, LappSettingsResult},
         ExpectedInstance,
     },
+    service,
 };
 
-type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
+pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
+pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, PathBuf, CommonLappGuard<'a>>;
 
-pub type LappResponse<'a> = laplace_common::api::Response<'a, PathBuf>;
+#[derive(Debug)]
+pub struct CommonLappGuard<'a>(pub RwLockReadGuard<'a, Lapp>);
+
+impl Deref for CommonLappGuard<'_> {
+    type Target = CommonLapp;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl Serialize for CommonLappGuard<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.lapp.serialize(serializer)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Lapp {
     lapp: CommonLapp,
     instance: Option<Instance>,
+    service_sender: Option<service::lapp::Sender>,
 }
 
 impl Lapp {
@@ -49,6 +71,7 @@ impl Lapp {
         let mut lapp = Self {
             lapp: CommonLapp::new(name.into(), root_dir.into(), Default::default()),
             instance: None,
+            service_sender: None,
         };
         if !lapp.is_main() {
             if let Err(err) = lapp.reload_settings() {
@@ -115,6 +138,34 @@ impl Lapp {
 
     pub fn take_instance(&mut self) -> Option<Instance> {
         self.instance.take()
+    }
+
+    pub fn service_sender(&self) -> Option<service::lapp::Sender> {
+        self.service_sender.clone()
+    }
+
+    pub fn run_service_if_needed(&mut self) -> ServerResult<service::lapp::Sender> {
+        if let Some(sender) = self.service_sender() {
+            Ok(sender)
+        } else {
+            let instance = self
+                .instance()
+                .ok_or_else(|| ServerError::LappNotLoaded(self.name().to_string()))?;
+
+            let (service, sender) = service::LappService::new(ExpectedInstance::try_from(instance)?);
+            actix::spawn(service.run());
+
+            self.service_sender = Some(sender.clone());
+            Ok(sender)
+        }
+    }
+
+    pub async fn service_stop(&mut self) -> bool {
+        if let Some(sender) = self.service_sender.take() {
+            service::LappService::stop(sender).await
+        } else {
+            false
+        }
     }
 
     pub fn http_configure(&self) -> impl FnOnce(&mut web::ServiceConfig) + '_ {

@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{borrow::Cow, convert::TryFrom};
 
 use anyhow::{anyhow, Context, Error, Result};
 use laplace_common::{
@@ -14,7 +14,7 @@ use yew_mdc_widgets::{
 };
 
 type Lapp = CommonLapp<String>;
-type LappResponse = CommonLappResponse<'static, String>;
+type LappResponse = CommonLappResponse<'static, String, Cow<'static, CommonLapp<String>>>;
 
 struct Root {
     lapps: Vec<Lapp>,
@@ -85,7 +85,7 @@ impl Component for Root {
     fn update(&mut self, msg: Self::Message) -> bool {
         match msg {
             Msg::Fetch(response) => match response {
-                LappResponse::Lapps(lapps) => {
+                LappResponse::Lapps { lapps, .. } => {
                     self.lapps = lapps.into_iter().map(|lapp| lapp.into_owned()).collect();
                     true
                 },

@@ -1,47 +1,34 @@
-use std::{
-    future::Future,
-    io,
-    ops::Deref,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{future::Future, io, ops::Deref, path::Path, sync::Arc};
 
 use actix_web::HttpResponse;
 use futures::future;
 use laplace_common::lapp::Permission;
-use log::error;
 
 use crate::{
-    error::{error_response, ServerError, ServerResult},
+    error::{error_response, ServerResult},
     lapps::{Instance, Lapp, LappsManager},
 };
 
 #[derive(Clone)]
-pub struct LappsProvider(Arc<Mutex<LappsManager>>);
+pub struct LappsProvider(Arc<LappsManager>);
 
 impl LappsProvider {
     pub fn new(lapps_path: impl AsRef<Path>) -> io::Result<Self> {
-        LappsManager::new(lapps_path).map(|manager| Self(Arc::new(Mutex::new(manager))))
+        LappsManager::new(lapps_path).map(|manager| Self(Arc::new(manager)))
     }
 
-    pub async fn handle<Fut>(self: Arc<Self>, handler: impl FnOnce(&mut LappsManager) -> Fut) -> HttpResponse
+    pub async fn handle<Fut>(self: Arc<Self>, handler: impl FnOnce(Arc<LappsManager>) -> Fut) -> HttpResponse
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
     {
-        match self.lock().map_err(|err| {
-            error!("Lapps service lock should be asquired: {:?}", err);
-            ServerError::LappsServiceNotLock
-        }) {
-            Ok(mut lapps_manager) => handler(&mut lapps_manager).await.unwrap_or_else(error_response),
-            Err(err) => error_response(err),
-        }
+        handler(self.0.clone()).await.unwrap_or_else(error_response)
     }
 
     pub async fn handle_allowed<Fut>(
         self: Arc<Self>,
         permissions: &[Permission],
         lapp_name: String,
-        handler: impl FnOnce(&mut LappsManager, String) -> Fut,
+        handler: impl FnOnce(Arc<LappsManager>, String) -> Fut,
     ) -> HttpResponse
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
@@ -70,7 +57,7 @@ impl LappsProvider {
                 .loaded_lapp(&lapp_name)
                 .and_then(|(lapp, instance)| {
                     lapp.check_enabled_and_allow_permissions(permissions)?;
-                    Ok(future::Either::Left(handler(lapp_name, lapp, instance)))
+                    Ok(future::Either::Left(handler(lapp_name, &*lapp, instance)))
                 })
                 .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
         })
@@ -80,7 +67,7 @@ impl LappsProvider {
     pub async fn handle_client_http<Fut>(
         self: Arc<Self>,
         lapp_name: String,
-        handler: impl FnOnce(&mut LappsManager, String) -> Fut,
+        handler: impl FnOnce(Arc<LappsManager>, String) -> Fut,
     ) -> HttpResponse
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
@@ -103,7 +90,7 @@ impl LappsProvider {
     pub async fn handle_ws<Fut>(
         self: Arc<Self>,
         lapp_name: String,
-        handler: impl FnOnce(&mut LappsManager, String) -> Fut,
+        handler: impl FnOnce(Arc<LappsManager>, String) -> Fut,
     ) -> HttpResponse
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
@@ -114,7 +101,7 @@ impl LappsProvider {
 }
 
 impl Deref for LappsProvider {
-    type Target = Mutex<LappsManager>;
+    type Target = LappsManager;
 
     fn deref(&self) -> &Self::Target {
         &self.0

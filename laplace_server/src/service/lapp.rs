@@ -149,4 +149,12 @@ impl LappService {
             }
         }
     }
+
+    pub async fn stop(sender: Sender) -> bool {
+        sender
+            .send(Message::Stop)
+            .await
+            .map_err(|err| log::error!("Error occurs when send to lapp service: {:?}", err))
+            .is_ok()
+    }
 }

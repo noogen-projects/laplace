@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{marker::PhantomData, ops::Deref};
 
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -49,7 +49,7 @@ impl UpdateQuery {
         self.into()
     }
 
-    pub fn into_response<'a, PathT: Clone>(self) -> Response<'a, PathT> {
+    pub fn into_response<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>>>(self) -> Response<'a, PathT, LappT> {
         self.into()
     }
 }
@@ -78,19 +78,34 @@ impl From<UpdateQuery> for UpdateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum Response<'a, PathT: Clone> {
-    Lapps(Vec<Cow<'a, Lapp<PathT>>>),
+pub enum Response<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> {
+    Lapps {
+        lapps: Vec<LappT>,
+        _marker: PhantomData<&'a Lapp<PathT>>,
+    },
 
     Updated(UpdateQuery),
 }
 
-impl<'a, PathT: Clone> From<Vec<Cow<'a, Lapp<PathT>>>> for Response<'a, PathT> {
-    fn from(lapps: Vec<Cow<'a, Lapp<PathT>>>) -> Self {
-        Self::Lapps(lapps)
+impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> Response<'a, PathT, LappT> {
+    pub fn lapps(lapps: impl Into<Vec<LappT>>) -> Self {
+        Self::Lapps {
+            lapps: lapps.into(),
+            _marker: Default::default(),
+        }
     }
 }
 
-impl<PathT: Clone> From<UpdateQuery> for Response<'_, PathT> {
+impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<Vec<LappT>> for Response<'a, PathT, LappT> {
+    fn from(lapps: Vec<LappT>) -> Self {
+        Self::Lapps {
+            lapps,
+            _marker: Default::default(),
+        }
+    }
+}
+
+impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<UpdateQuery> for Response<'a, PathT, LappT> {
     fn from(update: UpdateQuery) -> Self {
         Self::Updated(update)
     }
@@ -136,22 +151,22 @@ mod tests {
 
     #[test]
     fn serialize_lapps_response() {
-        let response = Response::<'_, String>::Lapps(vec![]);
+        let response = Response::<'_, String, &Lapp<String>>::from(vec![]);
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(json, r#"{"Lapps":[]}"#);
     }
 
     #[test]
     fn serialize_updated_response() {
-        let response = Response::<'_, String>::Updated(UpdateQuery::new("test"));
+        let response = Response::<'_, String, &Lapp<String>>::Updated(UpdateQuery::new("test"));
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(json, r#"{"Updated":{"lapp_name":"test"}}"#);
 
-        let response = Response::<'_, String>::Updated(UpdateQuery::new("test").enabled(true));
+        let response = Response::<'_, String, &Lapp<String>>::Updated(UpdateQuery::new("test").enabled(true));
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(json, r#"{"Updated":{"lapp_name":"test","enabled":true}}"#);
 
-        let response = Response::<'_, String>::Updated(
+        let response = Response::<'_, String, &Lapp<String>>::Updated(
             UpdateQuery::new("test")
                 .enabled(true)
                 .allow_permission(Permission::Http)

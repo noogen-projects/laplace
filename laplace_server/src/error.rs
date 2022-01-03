@@ -29,6 +29,9 @@ pub enum ServerError {
     #[error("Lapps service poisoned lock: another task failed inside")]
     LappsServiceNotLock,
 
+    #[error("Lapps poisoned lock")]
+    LappNotLock,
+
     #[error("Lapp '{0}' does not exist")]
     LappNotFound(String),
 

@@ -63,11 +63,9 @@ pub async fn run(settings: Settings) -> io::Result<()> {
             .route(&Lapp::main_uri("lapps"), web::get().to(handler::get_lapps))
             .route(&Lapp::main_uri("lapp"), web::post().to(handler::update_lapp));
 
-        let mut lapps_manager = lapps_provider.lock().expect("Lapps manager lock should be acquired");
-        lapps_manager.load_lapps();
-
-        for lapp in lapps_manager.lapps_iter() {
-            app = app.configure(lapp.http_configure());
+        lapps_provider.load_lapps();
+        for lapp in lapps_provider.lapps_iter() {
+            app = app.configure(lapp.read().expect("Lapp is not readable").http_configure());
         }
         app
     })

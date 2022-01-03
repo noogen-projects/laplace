@@ -7,7 +7,7 @@ use actix_web::{
 use futures::future::{self, Either, Ready};
 
 use crate::{
-    error::{error_response, ServerError},
+    error::error_response,
     lapps::{Lapp, LappsProvider},
 };
 
@@ -51,25 +51,13 @@ where
                 Either::Right(future::ok(request.into_response(HttpResponse::Forbidden().finish())))
             }
         } else {
-            let lapps_manager = match lapps_provider.lock() {
-                Ok(lapps_manager) => lapps_manager,
-                Err(err) => {
-                    log::error!("Lapps service lock should be asquired: {:?}", err);
-                    return Either::Right(future::ok(
-                        request.into_response(error_response(ServerError::LappsServiceNotLock)),
-                    ));
-                },
-            };
-
-            match lapps_manager.lapp(lapp_name) {
-                Ok(lapp) => {
-                    if access_token.as_str() == lapp.settings().application.access_token.as_deref().unwrap_or_default()
-                    {
-                        Either::Left(service.call(request))
-                    } else {
-                        let response = request.into_response(HttpResponse::Forbidden().finish());
-                        Either::Right(future::ok(response))
-                    }
+            match lapps_provider.lapp(lapp_name).map(|lapp| {
+                access_token.as_str() == lapp.settings().application.access_token.as_deref().unwrap_or_default()
+            }) {
+                Ok(true) => Either::Left(service.call(request)),
+                Ok(false) => {
+                    let response = request.into_response(HttpResponse::Forbidden().finish());
+                    Either::Right(future::ok(response))
                 },
                 Err(err) => Either::Right(future::ok(request.into_response(error_response(err)))),
             }

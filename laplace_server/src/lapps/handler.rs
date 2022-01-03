@@ -82,7 +82,8 @@ pub async fn ws_start(
         .into_inner()
         .handle_ws(lapp_name, move |lapps_manager, lapp_name| {
             lapps_manager
-                .service_sender(&lapp_name)
+                .lapp_mut(&lapp_name)
+                .and_then(|mut lapp| lapp.run_service_if_needed())
                 .map(|lapp_service_sender| {
                     future::Either::Left(process_ws_start(lapp_service_sender, lapp_name, request, stream))
                 })
@@ -119,7 +120,8 @@ pub async fn gossipsub_start(
             lapp_name,
             move |lapps_manager, lapp_name| {
                 lapps_manager
-                    .service_sender(&lapp_name)
+                    .lapp_mut(&lapp_name)
+                    .and_then(|mut lapp| lapp.run_service_if_needed())
                     .and_then(|lapp_service_sender| {
                         lapps_manager.lapp(&lapp_name).map(|lapp| {
                             future::Either::Left(process_gossipsub_start(
