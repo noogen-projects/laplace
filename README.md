@@ -51,8 +51,9 @@ Or for a debug build:
 cargo +stable make run -p debug
 ```
 
-Then visit [http://localhost:8080](http://localhost:8080). You can change the default port and other settings
-by editing `settings.toml` file.
+Then visit [http://localhost:8080](http://localhost:8080). If you are running for the first time or the previous link
+did not work, then visit [http://localhost:8080/?access_token=24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR](http://localhost:8080/?access_token=24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR).
+You can change the default port, access token and other settings by editing `settings.toml` file.
 
 ## Development notes
 
