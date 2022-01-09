@@ -10,6 +10,7 @@ pub struct HttpSettings {
     pub port: u16,
     pub web_root: PathBuf,
     pub access_token: Option<String>,
+    pub print_url: bool,
 }
 
 impl Default for HttpSettings {
@@ -19,6 +20,7 @@ impl Default for HttpSettings {
             port: 8080,
             web_root: PathBuf::new(),
             access_token: None,
+            print_url: true,
         }
     }
 }

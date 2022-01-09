@@ -26,6 +26,20 @@ pub async fn run(settings: Settings) -> io::Result<()> {
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = settings.http.access_token.clone().unwrap_or_default();
 
+    if settings.http.print_url {
+        let access_query = if !laplace_access_token.is_empty() {
+            format!("?access_token={}", laplace_access_token)
+        } else {
+            "".into()
+        };
+        log::info!(
+            "Laplace URL: http://{}:{}/{}",
+            settings.http.host,
+            settings.http.port,
+            access_query
+        );
+    }
+
     HttpServer::new(move || {
         let static_dir = web_root.join(Lapp::static_dir_name());
         let laplace_uri = format!("/{}", Lapp::main_name());

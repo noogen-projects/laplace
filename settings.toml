@@ -2,6 +2,7 @@
 host = "127.0.0.1"
 port = 8080
 access_token = "24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR"
+print_url = true
 
 [p2p]
 mdns_discovery_enabled = true
