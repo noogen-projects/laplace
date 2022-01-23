@@ -1,15 +1,19 @@
 use std::{borrow::Cow, convert::TryFrom};
 
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, Context as _, Error};
 use laplace_common::{
     api::{Response as CommonLappResponse, UpdateQuery},
     lapp::{Lapp as CommonLapp, Permission},
 };
-use laplace_yew::{error::MsgError, fetch::JsonFetcher};
-use yew::{html, initialize, run_loop, services::ConsoleService, utils, App, Component, ComponentLink, Html};
+use laplace_yew::error::MsgError;
+use wasm_web_helpers::{
+    error::Result,
+    fetch::{JsonFetcher, Response},
+};
+use yew::{self, classes, html, start_app_in_element, Callback, Component, Context, Html};
 use yew_mdc_widgets::{
-    auto_init,
-    utils::dom::{self, JsObjectAccess, JsValue},
+    auto_init, console,
+    dom::{self, existing::JsObjectAccess, JsValue},
     Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
 };
 
@@ -18,8 +22,6 @@ type LappResponse = CommonLappResponse<'static, String, Cow<'static, CommonLapp<
 
 struct Root {
     lapps: Vec<Lapp>,
-    link: ComponentLink<Self>,
-    fetcher: JsonFetcher,
 }
 
 #[derive(Debug)]
@@ -30,7 +32,7 @@ struct PermissionUpdate {
 }
 
 impl PermissionUpdate {
-    fn try_from_chip_selection_detail(detail: JsValue) -> Result<Self> {
+    fn try_from_chip_selection_detail(detail: JsValue) -> anyhow::Result<Self> {
         let chip_id = detail
             .get("chipId")
             .as_string()
@@ -69,20 +71,12 @@ impl Component for Root {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let mut root = Self {
-            lapps: vec![],
-            link,
-            fetcher: JsonFetcher::new(),
-        };
-
-        root.send_get(Lapp::main_uri("lapps"))
-            .context("Get lapps list error")
-            .msg_error(&root.link);
-        root
+    fn create(ctx: &Context<Self>) -> Self {
+        Self::send_get(ctx, Lapp::main_uri("lapps"));
+        Self { lapps: vec![] }
     }
 
-    fn update(&mut self, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Fetch(response) => match response {
                 LappResponse::Lapps { lapps, .. } => {
@@ -110,7 +104,7 @@ impl Component for Root {
 
                         should_render
                     } else {
-                        ConsoleService::error(&format!("Unknown lapp name: {}", updated.lapp_name));
+                        console::error!(&format!("Unknown lapp name: {}", updated.lapp_name));
                         false
                     }
                 },
@@ -126,15 +120,13 @@ impl Component for Root {
                             .into_request(),
                     )
                     .context("Serialize query error")
-                    .msg_error_map(&self.link)
+                    .msg_error_map(ctx.link())
                     {
-                        self.send_post(uri, body)
-                            .context("Switch lapp error")
-                            .msg_error(&self.link);
+                        Self::send_post(ctx, uri, body);
                     }
                     false
                 } else {
-                    ConsoleService::error(&format!("Unknown lapp name: {}", name));
+                    console::error!(&format!("Unknown lapp name: {}", name));
                     false
                 }
             },
@@ -150,26 +142,20 @@ impl Component for Root {
                         .into_request(),
                 )
                 .context("Serialize query error")
-                .msg_error_map(&self.link)
+                .msg_error_map(ctx.link())
                 {
-                    self.send_post(uri, body)
-                        .context("Select permission error")
-                        .msg_error(&self.link);
+                    Self::send_post(ctx, uri, body);
                 }
                 false
             },
             Msg::Error(err) => {
-                ConsoleService::error(&format!("{}", err));
+                console::error!(&format!("{}", err));
                 true
             },
         }
     }
 
-    fn change(&mut self, _props: Self::Properties) -> bool {
-        false
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let drawer = Drawer::new()
             .id("app-drawer")
             .title(html! { <h3 tabindex = 0>{ "Settings" }</h3> })
@@ -181,7 +167,7 @@ impl Component for Root {
             .navigation_item(IconButton::new().icon("menu"))
             .enable_shadow_when_scroll_window()
             .on_navigation(|_| {
-                let drawer = dom::get_exist_element_by_id::<Element>("app-drawer").get("MDCDrawer");
+                let drawer = dom::existing::get_element_by_id::<Element>("app-drawer").get("MDCDrawer");
                 let opened = drawer.get("open").as_bool().unwrap_or(false);
                 drawer.set("open", !opened);
             });
@@ -191,14 +177,14 @@ impl Component for Root {
                 { drawer }
                 <div class="mdc-drawer-scrim"></div>
 
-                <div class = vec!["app-content", Drawer::APP_CONTENT_CLASS]>
+                <div class = { classes!("app-content", Drawer::APP_CONTENT_CLASS) }>
                     { top_app_bar }
 
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
                             <h1 class = "title mdc-typography--headline5">{ "Applications" }</h1>
                             <div class = "lapps-table">
-                                { self.lapps.iter().map(|lapp| self.view_lapp(lapp)).collect::<Html>() }
+                                { self.lapps.iter().map(|lapp| self.view_lapp(ctx, lapp)).collect::<Html>() }
                             </div>
                         </div>
                     </div>
@@ -207,27 +193,27 @@ impl Component for Root {
         }
     }
 
-    fn rendered(&mut self, _first_render: bool) {
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         auto_init();
     }
 }
 
 impl Root {
-    pub fn send_get(&mut self, uri: impl AsRef<str>) -> Result<()> {
-        let callback = JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error);
-        self.fetcher.send_get(uri, callback)
+    pub fn send_get(ctx: &Context<Self>, uri: impl AsRef<str>) {
+        let callback = callback(ctx);
+        JsonFetcher::send_get(uri, move |response_result| callback.emit(response_result));
     }
 
-    pub fn send_post(&mut self, uri: impl AsRef<str>, body: impl Into<String>) -> Result<()> {
-        let callback = JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error);
-        self.fetcher.send_post(uri, body, callback)
+    pub fn send_post(ctx: &Context<Self>, uri: impl AsRef<str>, body: impl Into<String>) {
+        let callback = callback(ctx);
+        JsonFetcher::send_post(uri, body, move |response_result| callback.emit(response_result));
     }
 
-    fn view_lapp(&self, lapp: &Lapp) -> Html {
+    fn view_lapp(&self, ctx: &Context<Self>, lapp: &Lapp) -> Html {
         let lapp_name = lapp.name().to_string();
 
         let enable_switch = Switch::new()
-            .on_click(self.link.callback(move |_| Msg::SwitchLapp(lapp_name.clone())))
+            .on_click(ctx.link().callback(move |_| Msg::SwitchLapp(lapp_name.clone())))
             .turn(lapp.enabled());
 
         let permissions = ChipSet::new()
@@ -240,7 +226,7 @@ impl Root {
                     .text(permission.as_str())
                     .select(lapp.is_allowed_permission(permission))
             }))
-            .on_selection(self.link.callback(|event: CustomEvent| {
+            .on_selection(ctx.link().callback(|event: CustomEvent| {
                 PermissionUpdate::try_from_chip_selection_detail(event.detail())
                     .map(Msg::UpdatePermission)
                     .unwrap_or_else(Msg::Error)
@@ -256,7 +242,7 @@ impl Root {
             <>
                 <div class = "lapps-table-row">
                     <div class = "lapps-table-col">
-                        <big><a href = lapp_ref>{ lapp.title() }</a></big>
+                        <big><a href = { lapp_ref }>{ lapp.title() }</a></big>
                     </div>
                     <div class = "lapps-table-col">
                         { enable_switch }
@@ -272,12 +258,22 @@ impl Root {
     }
 }
 
+fn callback(ctx: &Context<Root>) -> Callback<Result<(Response, Option<LappResponse>)>> {
+    ctx.link()
+        .callback(|response_result: Result<(Response, Option<LappResponse>)>| {
+            response_result
+                .map(|(_, body)| {
+                    if let Some(body) = body {
+                        Msg::Fetch(body)
+                    } else {
+                        Msg::Error(anyhow!("Response body is None"))
+                    }
+                })
+                .unwrap_or_else(|err| Msg::Error(err.into()))
+        })
+}
+
 fn main() {
-    initialize();
-    if let Ok(Some(root)) = utils::document().query_selector("#root") {
-        App::<Root>::new().mount_with_props(root, ());
-        run_loop();
-    } else {
-        ConsoleService::error("Can't get root node for rendering");
-    }
+    let root = dom::existing::get_element_by_id("root");
+    start_app_in_element::<Root>(root);
 }

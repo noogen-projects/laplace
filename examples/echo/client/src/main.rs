@@ -1,85 +1,62 @@
 #![recursion_limit = "256"]
 
-use anyhow::Error;
+use reqwasm::http::{Request, Response};
 use web_sys::HtmlInputElement;
-use yew::{
-    format::Nothing,
-    html, initialize, run_loop,
-    services::{
-        console::ConsoleService,
-        fetch::{FetchService, FetchTask, Request, Response},
-    },
-    App, Component, ComponentLink, Html,
-};
-use yew_mdc_widgets::{auto_init, utils::dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
+use yew::{html, Component, Context, Html};
+use yew_mdc_widgets::{auto_init, console, dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
 
 struct Root {
-    link: ComponentLink<Self>,
-    fetch_task: Option<FetchTask>,
     responses: Vec<String>,
 }
 
 enum Msg {
     Submit,
     Fetch(String),
-    Error,
+    Error(String),
 }
 
 impl Component for Root {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        Self {
-            link,
-            fetch_task: None,
-            responses: Vec::new(),
-        }
+    fn create(_ctx: &Context<Self>) -> Self {
+        Self { responses: Vec::new() }
     }
 
-    fn update(&mut self, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Submit => {
-                if self.fetch_task.is_none() {
-                    let uri = dom::select_exist_element::<HtmlInputElement>("#uri > input").value();
-                    if let Ok(request) = Request::get(format!("/echo/{}", uri)).body(Nothing) {
-                        if let Ok(task) = FetchService::fetch(
-                            request,
-                            self.link.callback(|response: Response<Result<String, Error>>| {
-                                if response.status().is_success() {
-                                    Msg::Fetch(response.into_body().unwrap_or_else(|_| String::new()))
-                                } else {
-                                    ConsoleService::error(&format!(
-                                        "Fetch status: {:?}, body: {:?}",
-                                        response.status(),
-                                        response.into_body()
-                                    ));
-                                    Msg::Error
-                                }
-                            }),
-                        )
-                        .map_err(|err| ConsoleService::error(&format!("Fetch error: {:?}", err)))
-                        {
-                            self.fetch_task.replace(task);
-                        }
-                    }
-                }
+                let uri = dom::existing::select_element::<HtmlInputElement>("#uri > input").value();
+                let request = Request::get(&format!("/echo/{}", uri));
+                let callback = ctx
+                    .link()
+                    .callback(|result: Result<(Response, String), reqwasm::Error>| match result {
+                        Ok((response, body)) => {
+                            if response.status() == 200 {
+                                Msg::Fetch(body)
+                            } else {
+                                Msg::Error(format!("Fetch status: {:?}, body: {:?}", response.status(), body,))
+                            }
+                        },
+                        Err(err) => Msg::Error(format!("Fetch error: {:?}", err)),
+                    });
+                wasm_bindgen_futures::spawn_local(async move {
+                    callback.emit(fetch(request).await);
+                });
                 false
             },
             Msg::Fetch(data) => {
-                self.fetch_task = None;
                 self.responses.push(data);
                 true
             },
-            Msg::Error => false,
+            Msg::Error(error) => {
+                console::error!(&error);
+                false
+            },
         }
     }
 
-    fn change(&mut self, _props: Self::Properties) -> bool {
-        false
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
             .title("Echo lapp")
@@ -103,7 +80,7 @@ impl Component for Root {
                                         { TextField::filled().id("uri").class("expand").label("URI") }
                                     </div>
                                     <div class = "mdc-layout-grid__cell mdc-layout-grid__cell--span-1 mdc-layout-grid__cell--align-bottom">
-                                        { Button::raised().label("submit").on_click(self.link.callback(|_| Msg::Submit)) }
+                                        { Button::raised().label("submit").on_click(ctx.link().callback(|_| Msg::Submit)) }
                                     </div>
                                 </div>
                             </div>
@@ -115,17 +92,18 @@ impl Component for Root {
         }
     }
 
-    fn rendered(&mut self, _first_render: bool) {
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         auto_init();
     }
 }
 
+async fn fetch(request: Request) -> Result<(Response, String), reqwasm::Error> {
+    let response = request.send().await?;
+    let body = response.text().await?;
+    Ok((response, body))
+}
+
 fn main() {
-    initialize();
-    if let Ok(Some(root)) = yew::utils::document().query_selector("#root") {
-        App::<Root>::new().mount_with_props(root, ());
-        run_loop();
-    } else {
-        ConsoleService::error("Can't get root node for rendering");
-    }
+    let root = dom::existing::get_element_by_id("root");
+    yew::start_app_in_element::<Root>(root);
 }

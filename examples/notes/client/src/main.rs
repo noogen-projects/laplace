@@ -2,18 +2,20 @@
 
 use std::ops::Deref;
 
-use anyhow::{anyhow, Context, Error};
-use laplace_yew::{JsonFetcher, MsgError, RawHtml};
+use anyhow::{anyhow, Error};
+use laplace_yew::RawHtml;
 use lew::SimpleEditor;
 use notes_common::{Note, NoteContent, Response};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
-use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
-use yew::{
-    html, initialize, run_loop, services::console::ConsoleService, App, Component, ComponentLink, Html, InputData,
+use wasm_web_helpers::{
+    error::Result,
+    fetch::{JsonFetcher, Response as WebResponse},
 };
+use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
+use yew::{html, Callback, Component, Context, Html, InputEvent};
 use yew_mdc_widgets::{
-    auto_init,
-    utils::dom::{self, JsObjectAccess},
+    auto_init, console,
+    dom::{self, existing::JsObjectAccess},
     Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, ListItem, MdcWidget, Menu, TextField, TopAppBar,
 };
 
@@ -64,8 +66,6 @@ impl Deref for FullNote {
 }
 
 struct Root {
-    link: ComponentLink<Self>,
-    fetcher: JsonFetcher,
     notes: Vec<FullNote>,
     current_note_index: Option<usize>,
     current_mode: Option<Mode>,
@@ -81,7 +81,7 @@ enum Msg {
     GetInitialNote(String),
     OpenNote(String, Mode),
     OpenCurrentNote(Mode),
-    EditContent(String),
+    EditContent,
     Updated,
     SaveChanges,
     DiscardChanges,
@@ -102,32 +102,26 @@ impl Component for Root {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let mut fetcher = JsonFetcher::new();
-        fetcher
-            .send_get("/notes/list", JsonFetcher::callback(&link, Msg::Fetch, Msg::Error))
-            .context("Get notes list error")
-            .msg_error(&link);
+    fn create(ctx: &Context<Self>) -> Self {
+        JsonFetcher::send_get("/notes/list", {
+            let callback = callback(ctx);
+            move |response_result| callback.emit(response_result)
+        });
 
         Self {
-            link,
-            fetcher,
             notes: Vec::new(),
             current_note_index: None,
             current_mode: None,
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::GetInitialNote(name) => {
-                self.fetcher
-                    .send_get(
-                        format!("/notes/note/{}", name),
-                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                    )
-                    .context("Get note error")
-                    .msg_error(&self.link);
+                JsonFetcher::send_get(format!("/notes/note/{}", name), {
+                    let callback = callback(ctx);
+                    move |response_result| callback.emit(response_result)
+                });
                 false
             },
             Msg::OpenNote(name, mode) => {
@@ -136,26 +130,26 @@ impl Component for Root {
                 if let Some(index) = self.notes.iter().position(|note| note.name == name) {
                     if self.notes[index].is_modified() {
                         self.current_note_index = Some(index);
-                        self.link.send_message(Msg::OpenCurrentNote(mode));
+                        ctx.link().send_message(Msg::OpenCurrentNote(mode));
                         return false;
                     }
                 }
 
-                self.link.send_message(Msg::GetInitialNote(name));
+                ctx.link().send_message(Msg::GetInitialNote(name));
                 false
             },
             Msg::OpenCurrentNote(mode) => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
                     match mode {
                         Mode::View => {
-                            dom::get_exist_element_by_id::<HtmlElement>("note-dialog__view").set_inner_html(
+                            dom::existing::get_element_by_id::<HtmlElement>("note-dialog__view").set_inner_html(
                                 &to_view_inner_html(note.content.content().expect("Content should be present")),
                             );
                             show_element("note-dialog__view");
                             hide_element("note-dialog__edit");
                         },
                         Mode::Edit => {
-                            dom::select_exist_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea")
+                            dom::existing::select_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea")
                                 .set_value(note.content.content().expect("Content should be present"));
                             show_element("note-dialog__edit");
                             hide_element("note-dialog__view");
@@ -175,12 +169,14 @@ impl Component for Root {
                 }
                 false
             },
-            Msg::EditContent(content) => {
+            Msg::EditContent => {
                 let index = self.current_note_index.expect("Index should be presented");
                 if !self.notes[index].is_modified() {
                     show_element("save-note-button");
                     show_element("discard-note-button");
                 }
+                let content =
+                    dom::existing::select_element::<HtmlTextAreaElement>("#note-dialog__edit > textarea").value();
                 self.notes[index].note_mut().content = NoteContent::FullBody(content);
                 false
             },
@@ -190,12 +186,12 @@ impl Component for Root {
                     if let Some(content) = note.content.content() {
                         let uri = format!("/notes/note/{}", note.name);
                         let body = content.to_string();
-                        self.fetcher
-                            .send_post(uri, body, JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
-                            .context("Get note error")
-                            .msg_error(&self.link);
+                        JsonFetcher::send_post(uri, body, {
+                            let callback = callback(ctx);
+                            move |response_result| callback.emit(response_result)
+                        });
                     } else {
-                        self.link
+                        ctx.link()
                             .send_message(Msg::Error(anyhow!("Note content does not exist")));
                     }
                 }
@@ -208,13 +204,13 @@ impl Component for Root {
                         self.notes.remove(index);
                         Dialog::close_existing("note-dialog");
                     } else {
-                        self.link.send_message(Msg::GetInitialNote(note.name.clone()));
+                        ctx.link().send_message(Msg::GetInitialNote(note.name.clone()));
                     }
                 }
                 false
             },
             Msg::NewNote => {
-                let name = dom::select_exist_element::<HtmlInputElement>("#new-note-name > input").value();
+                let name = dom::existing::select_element::<HtmlInputElement>("#new-note-name > input").value();
 
                 if !self.notes.iter().any(|note| note.name == name) {
                     self.notes.push(FullNote::new(Note {
@@ -226,24 +222,24 @@ impl Component for Root {
                     self.current_mode.replace(Mode::Edit);
 
                     Dialog::close_existing("add-note-dialog");
-                    self.link.send_message(Msg::OpenCurrentNote(Mode::Edit));
+                    ctx.link().send_message(Msg::OpenCurrentNote(Mode::Edit));
                 }
                 false
             },
             Msg::RenameNote(name, new_name) => {
                 let uri = format!("/notes/rename/{}", name);
-                self.fetcher
-                    .send_post(uri, new_name, JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
-                    .context("Rename note error")
-                    .msg_error(&self.link);
+                JsonFetcher::send_post(uri, new_name, {
+                    let callback = callback(ctx);
+                    move |response_result| callback.emit(response_result)
+                });
                 false
             },
             Msg::DeleteNote(name) => {
                 let uri = format!("/notes/delete/{}", name);
-                self.fetcher
-                    .send_post(uri, "", JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error))
-                    .context("Delete note error")
-                    .msg_error(&self.link);
+                JsonFetcher::send_post(uri, "", {
+                    let callback = callback(ctx);
+                    move |response_result| callback.emit(response_result)
+                });
                 false
             },
             Msg::Fetch(Response::Notes(notes)) => {
@@ -260,28 +256,24 @@ impl Component for Root {
                 }
                 match self.current_mode {
                     Some(mode) => {
-                        self.link.send_message(Msg::OpenCurrentNote(mode));
+                        ctx.link().send_message(Msg::OpenCurrentNote(mode));
                         false
                     },
                     None => true,
                 }
             },
             Msg::Fetch(Response::Error(err)) => {
-                self.link.send_message(Msg::Error(anyhow!("{}", err)));
+                ctx.link().send_message(Msg::Error(anyhow!("{}", err)));
                 false
             },
             Msg::Error(err) => {
-                ConsoleService::error(&format!("{}", err));
+                console::error!(&format!("{}", err));
                 true
             },
         }
     }
 
-    fn change(&mut self, _props: Self::Properties) -> bool {
-        false
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
             .title("Notes lapp example")
@@ -294,7 +286,7 @@ impl Component for Root {
                 .item(ListItem::new().text("Rename").on_click({
                     let note_name = note.name.clone();
                     move |_| {
-                        let input = dom::select_exist_element::<HtmlInputElement>("#note-new-name > input");
+                        let input = dom::existing::select_element::<HtmlInputElement>("#note-new-name > input");
                         input.set_value(&note_name);
                         input.dataset().set("note_name", &note_name).ok();
                         Dialog::open_existing("rename-note-dialog");
@@ -304,7 +296,7 @@ impl Component for Root {
                 .item(ListItem::new().text("Delete").on_click({
                     let note_name = note.name.clone();
                     move |_| {
-                        dom::get_exist_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
+                        dom::existing::get_element_by_id::<HtmlElement>("delete-note_name").set_inner_html(&note_name);
                         Dialog::open_existing("confirm-delete-note-dialog");
                     }
                 }));
@@ -312,7 +304,7 @@ impl Component for Root {
             let edit_button = IconButton::new()
                 .class(CardContent::ACTION_ICON_CLASSES)
                 .icon("edit")
-                .on_click(self.link.callback({
+                .on_click(ctx.link().callback({
                     let name = note.name.clone();
                     move |_| Msg::OpenNote(name.clone(), Mode::Edit)
                 }));
@@ -323,22 +315,22 @@ impl Component for Root {
 
             Card::new(&note.name)
                 .content(CardContent::primary_action(html! {
-                    <div class = "note-card__content" onclick = self.link.callback({
+                    <div class = "note-card__content" onclick = { ctx.link().callback({
                         let name = note.name.clone();
                         move |_| Msg::OpenNote(name.clone(), Mode::View)
-                    })>
+                    }) } >
                         { to_preview_html(&note.content) }
                     </div>
                 }))
                 .content(CardContent::actions().action_icons(html! { <>
-                    { edit_button } <div class = Menu::ANCHOR_CLASS>{ menu_button } { menu }</div>
+                    { edit_button } <div class = { Menu::ANCHOR_CLASS }>{ menu_button } { menu }</div>
                 </> }))
         });
 
-        let view_note_dialog = self.view_note_dialog();
-        let add_note_dialog = self.add_note_dialog();
-        let confirm_delete_note_dialog = self.confirm_delete_note_dialog();
-        let rename_note_dialog = self.rename_note_dialog();
+        let view_note_dialog = self.view_note_dialog(ctx);
+        let add_note_dialog = self.add_note_dialog(ctx);
+        let confirm_delete_note_dialog = self.confirm_delete_note_dialog(ctx);
+        let rename_note_dialog = self.rename_note_dialog(ctx);
         let add_note_button = Fab::new()
             .id("add-note-button")
             .icon("add")
@@ -369,18 +361,18 @@ impl Component for Root {
         }
     }
 
-    fn rendered(&mut self, _first_render: bool) {
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         auto_init();
     }
 }
 
 impl Root {
-    fn view_note_dialog(&self) -> Html {
+    fn view_note_dialog(&self, ctx: &Context<Self>) -> Html {
         let switch_mode_button = IconButton::new()
             .id("edit_mode")
             .class(CardContent::ACTION_ICON_CLASSES)
             .toggle("visibility", "edit")
-            .on_change(self.link.callback(|event: CustomEvent| {
+            .on_change(ctx.link().callback(|event: CustomEvent| {
                 if event.detail().get("isOn").as_bool().unwrap_or(false) {
                     Msg::OpenCurrentNote(Mode::Edit)
                 } else {
@@ -395,7 +387,7 @@ impl Root {
                     { switch_mode_button }
                     <div id = "note-dialog__view" class = "hidden"></div>
                     <SimpleEditor id = "note-dialog__edit" class = "lew-simple hidden" placeholder = "Leave a content"
-                            cols = 40 oninput = self.link.callback(|data: InputData| Msg::EditContent(data.value)) />
+                            cols = 40 oninput = { ctx.link().callback(|_: InputEvent| Msg::EditContent) } />
                 </>
             })
             .action(
@@ -404,7 +396,7 @@ impl Root {
                     .class("hidden")
                     .label("Save")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.link.callback(|_| Msg::SaveChanges)),
+                    .on_click(ctx.link().callback(|_| Msg::SaveChanges)),
             )
             .action(
                 Button::new()
@@ -412,13 +404,13 @@ impl Root {
                     .class("hidden")
                     .label("Discard")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.link.callback(|_| Msg::DiscardChanges)),
+                    .on_click(ctx.link().callback(|_| Msg::DiscardChanges)),
             )
-            .on_closed(self.link.callback(|_| Msg::Updated))
+            .on_closed(ctx.link().callback(|_| Msg::Updated))
             .into()
     }
 
-    fn add_note_dialog(&self) -> Html {
+    fn add_note_dialog(&self, ctx: &Context<Self>) -> Html {
         Dialog::new()
             .id("add-note-dialog")
             .content_item(TextField::filled().id("new-note-name").label("Note name"))
@@ -427,7 +419,7 @@ impl Root {
                     .id("save-note-button")
                     .label("Add")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.link.callback(|_| Msg::NewNote)),
+                    .on_click(ctx.link().callback(|_| Msg::NewNote)),
             )
             .action(
                 Button::new()
@@ -436,11 +428,11 @@ impl Root {
                     .class(Dialog::BUTTON_CLASS)
                     .on_click(|_| Dialog::close_existing("add-note-dialog")),
             )
-            .on_closed(self.link.callback(|_| Msg::Updated))
+            .on_closed(ctx.link().callback(|_| Msg::Updated))
             .into()
     }
 
-    fn confirm_delete_note_dialog(&self) -> Html {
+    fn confirm_delete_note_dialog(&self, ctx: &Context<Self>) -> Html {
         Dialog::new()
             .id("confirm-delete-note-dialog")
             .title(html! { <h2> { "Delete confirmation" } </h2> })
@@ -451,8 +443,8 @@ impl Root {
                 Button::new()
                     .label("Yes")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.link.callback(|_| {
-                        let name = dom::get_exist_element_by_id::<HtmlElement>("delete-note_name").inner_html();
+                    .on_click(ctx.link().callback(|_| {
+                        let name = dom::existing::get_element_by_id::<HtmlElement>("delete-note_name").inner_html();
                         Dialog::close_existing("confirm-delete-note-dialog");
                         Msg::DeleteNote(name)
                     })),
@@ -466,7 +458,7 @@ impl Root {
             .into()
     }
 
-    fn rename_note_dialog(&self) -> Html {
+    fn rename_note_dialog(&self, ctx: &Context<Self>) -> Html {
         Dialog::new()
             .id("rename-note-dialog")
             .content_item(TextField::filled().id("note-new-name").label("Note name"))
@@ -475,8 +467,8 @@ impl Root {
                     .id("rename-note-button")
                     .label("Rename")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.link.callback(|_| {
-                        let input = dom::select_exist_element::<HtmlInputElement>("#note-new-name > input");
+                    .on_click(ctx.link().callback(|_| {
+                        let input = dom::existing::select_element::<HtmlInputElement>("#note-new-name > input");
 
                         if let Some(name) = input.dataset().get("note_name") {
                             let new_name = input.value();
@@ -508,7 +500,7 @@ fn to_view_inner_html(content: &str) -> String {
 
 fn to_preview_html(content: &NoteContent) -> Html {
     let preview = content.make_preview();
-    html! { <RawHtml inner_html = to_view_inner_html(&preview) /> }
+    html! { <RawHtml inner_html = { to_view_inner_html(&preview) } /> }
 }
 
 fn new_cmark_parser(source: &str) -> Parser {
@@ -520,25 +512,35 @@ fn new_cmark_parser(source: &str) -> Parser {
 }
 
 fn show_element(id: impl AsRef<str>) {
-    dom::get_exist_element_by_id::<Element>(id.as_ref())
+    dom::existing::get_element_by_id::<Element>(id.as_ref())
         .class_list()
         .remove_1("hidden")
         .ok();
 }
 
 fn hide_element(id: impl AsRef<str>) {
-    let element = dom::get_exist_element_by_id::<Element>(id.as_ref());
+    let element = dom::existing::get_element_by_id::<Element>(id.as_ref());
     if !element.class_list().contains("hidden") {
         element.class_list().add_1("hidden").ok();
     }
 }
 
+fn callback(ctx: &Context<Root>) -> Callback<Result<(WebResponse, Option<Response>)>> {
+    ctx.link()
+        .callback(|response_result: Result<(WebResponse, Option<Response>)>| {
+            response_result
+                .map(|(_, body)| {
+                    if let Some(body) = body {
+                        Msg::Fetch(body)
+                    } else {
+                        Msg::Error(anyhow!("Response body is None"))
+                    }
+                })
+                .unwrap_or_else(|err| Msg::Error(err.into()))
+        })
+}
+
 fn main() {
-    initialize();
-    if let Ok(Some(root)) = yew::utils::document().query_selector("#root") {
-        App::<Root>::new().mount_with_props(root, ());
-        run_loop();
-    } else {
-        ConsoleService::error("Can't get root node for rendering");
-    }
+    let root = dom::existing::get_element_by_id("root");
+    yew::start_app_in_element::<Root>(root);
 }

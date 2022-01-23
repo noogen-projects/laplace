@@ -1,6 +1,6 @@
 use actix_web::{
     cookie::Cookie,
-    dev::{AnyBody, Service, ServiceRequest, ServiceResponse},
+    dev::{Service, ServiceRequest, ServiceResponse},
     error::Error,
     http, HttpResponse,
 };
@@ -11,14 +11,14 @@ use crate::{
     lapps::{Lapp, LappsProvider},
 };
 
-pub type AccessServiceResult = Result<ServiceResponse<AnyBody>, Error>;
+pub type AccessServiceResult = Result<ServiceResponse, Error>;
 
 pub fn create_check_access_middleware<S>(
     lapps_provider: LappsProvider,
     laplace_access_token: impl Into<String>,
 ) -> impl Fn(ServiceRequest, &S) -> Either<S::Future, Ready<AccessServiceResult>> + Clone
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<AnyBody>, Error = Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = Error>,
 {
     let laplace_access_token = laplace_access_token.into();
 
@@ -65,7 +65,7 @@ where
     }
 }
 
-pub fn query_access_token_redirect(request: ServiceRequest) -> Result<ServiceResponse<AnyBody>, ServiceRequest> {
+pub fn query_access_token_redirect(request: ServiceRequest) -> Result<ServiceResponse, ServiceRequest> {
     let uri = request.uri().clone();
     let query = uri.query().unwrap_or_default();
 

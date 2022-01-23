@@ -12,7 +12,8 @@ repository = "https://github.com/noogen-projects/laplace"
 description = "The Echo lapp example"
 
 [dependencies]
-anyhow = "1.0"
-yew = { version = "0.18", features = ["web_sys"] }
+yew = { git = "https://github.com/XX/yew.git", branch = "extend_listener" }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
+reqwasm = "0.4"
+wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement"] }

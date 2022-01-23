@@ -46,7 +46,7 @@ pub async fn run(settings: Settings) -> io::Result<()> {
 
         let mut app = App::new()
             .app_data(web::Data::new(lapps_provider.clone()))
-            .wrap(middleware::DefaultHeaders::new().header("X-Version", "0.2"))
+            .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::NormalizePath::trim())
             .wrap_fn({
                 let lapps_provider = lapps_provider.clone();

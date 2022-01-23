@@ -13,10 +13,11 @@ description = "The Notes lapp example"
 
 [dependencies]
 anyhow = "1.0"
-yew = { version = "0.18", features = ["web_sys"] }
+yew = { git = "https://github.com/XX/yew.git", branch = "extend_listener" }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
 lew = { git = "https://github.com/noogen-projects/lew" }
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement", "HtmlElement", "HtmlTextAreaElement", "DomStringMap"] }
+wasm-web-helpers = "0.1"
 pulldown-cmark = "0.8"
 notes_common = { path = "../common" }
 laplace_yew = { path = "../../../laplace_yew" }

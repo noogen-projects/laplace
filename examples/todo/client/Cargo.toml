@@ -14,7 +14,10 @@ description = "The Todo lapp example"
 [dependencies]
 anyhow = "1.0"
 strum = { version = "0.23", features = ["derive"] }
-yew = { version = "0.18", features = ["web_sys"] }
+yew = { git = "https://github.com/XX/yew.git", branch = "extend_listener" }
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
+wasm-dom = "0.1"
+wasm-web-helpers = "0.1"
+gloo-console = "0.2"
 todo_common = { path = "../common" }
 laplace_yew = { path = "../../../laplace_yew" }

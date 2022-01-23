@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
-use actix_web_actors::ws;
+use actix_web_actors::ws::WsResponseBuilder;
 use borsh::{BorshDeserialize, BorshSerialize};
 use futures::{future, TryFutureExt};
 
@@ -98,7 +98,8 @@ async fn process_ws_start(
     request: HttpRequest,
     stream: web::Payload,
 ) -> ServerResult<HttpResponse> {
-    let (addr, response) = ws::start_with_addr(WebSocketService::new(lapp_service_sender.clone()), &request, stream)?;
+    let (addr, response) = WsResponseBuilder::new(WebSocketService::new(lapp_service_sender.clone()), &request, stream)
+        .start_with_addr()?;
 
     lapp_service_sender
         .send(service::lapp::Message::NewWebSocket(addr))

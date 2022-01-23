@@ -2,26 +2,22 @@
 
 use std::cell::RefCell;
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context as _, Error};
 use chat_common::{Peer, WsMessage, WsResponse};
-use laplace_yew::{JsonFetcher, MsgError, RawHtml, StringResponse};
+use laplace_yew::{MsgError, RawHtml};
 use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
-use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
-use yew::{
-    classes,
-    format::Json,
-    html, initialize, run_loop,
-    services::{
-        console::ConsoleService,
-        websocket::{WebSocketService, WebSocketStatus, WebSocketTask},
-    },
-    App, Component, ComponentLink, Html, InputData, KeyboardEvent, MouseEvent,
+use wasm_web_helpers::{
+    error::Result as WebResult,
+    fetch::{JsonFetcher, MissingBody, Response},
+    websocket::{self, WebSocketError, WebSocketService},
 };
+use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
+use yew::{classes, html, html::Scope, Component, Context, Html, KeyboardEvent, MouseEvent};
 use yew_mdc_widgets::{
-    auto_init, drawer,
-    utils::dom::{self, JsObjectAccess},
-    Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
+    auto_init, console,
+    dom::{self, existing::JsObjectAccess},
+    drawer, Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
 };
 
 use self::addresses::Addresses;
@@ -38,7 +34,7 @@ struct Chat {
     keys: Keys,
     peer_id: PeerId,
     resize_data: ResizeData,
-    ws: WebSocketTask,
+    ws: WebSocketService,
     channels: Vec<Channel>,
     active_channel_idx: usize,
 }
@@ -73,20 +69,17 @@ struct Channel {
 }
 
 struct Root {
-    this_link: ComponentLink<Self>,
-    addresses_link: Option<ComponentLink<Addresses>>,
-    fetcher: JsonFetcher,
+    addresses_link: Option<Scope<Addresses>>,
     state: State,
 }
 
 enum WsAction {
     SendData(String),
     ReceiveData(WsResponse),
-    Lost,
 }
 
 enum Msg {
-    LinkAddresses(ComponentLink<Addresses>),
+    LinkAddresses(Scope<Addresses>),
     SignIn,
     InitChat { keys: Keys, peer_id: PeerId },
     ChatScreenMouseMove(MouseEvent),
@@ -116,16 +109,14 @@ impl Component for Root {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
-            this_link: link,
             addresses_link: None,
-            fetcher: JsonFetcher::new(),
             state: State::SignIn,
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::LinkAddresses(link) => {
                 self.addresses_link = Some(link);
@@ -146,7 +137,7 @@ impl Component for Root {
                     );
                     Keypair::decode(&mut bytes).context("Decode keypair error")
                 })()
-                .msg_error_map(&self.this_link)
+                .msg_error_map(ctx.link())
                 {
                     let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
                     let body = serde_json::to_string(&Peer {
@@ -160,43 +151,62 @@ impl Component for Root {
                         peer_id,
                     }));
 
-                    self.fetcher
-                        .send_post_json(
-                            "/chat/p2p",
-                            body,
-                            self.this_link.callback(move |response: StringResponse| {
-                                if response.status().is_success() {
-                                    success_msg
-                                        .borrow_mut()
-                                        .take()
-                                        .unwrap_or_else(|| Msg::Error(anyhow!("Multiple success fetch received")))
-                                } else {
-                                    Msg::Error(anyhow!(
-                                        "Fetch status: {:?}, body: {:?}",
-                                        response.status(),
-                                        response.into_body(),
-                                    ))
-                                }
-                            }),
-                        )
-                        .context("Start P2P error")
-                        .msg_error(&self.this_link);
+                    JsonFetcher::send_post_json("/chat/p2p", body, {
+                        let callback =
+                            ctx.link()
+                                .callback(move |response_result: WebResult<(Response, Option<MissingBody>)>| {
+                                    response_result
+                                        .map(|(..)| {
+                                            success_msg.borrow_mut().take().unwrap_or_else(|| {
+                                                Msg::Error(anyhow!("Multiple success fetch received"))
+                                            })
+                                        })
+                                        .unwrap_or_else(|err| Msg::Error(err.into()))
+                                });
+                        move |response_result| callback.emit(response_result)
+                    });
                 }
                 true
             },
             Msg::InitChat { keys, peer_id } => {
-                let location = dom::document().location().expect("Location should be existing");
+                let location = dom::existing::document()
+                    .location()
+                    .expect("Location should be existing");
                 let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
-                let callback = self.this_link.callback(|Json(response)| match response {
-                    Ok(data) => Msg::Ws(WsAction::ReceiveData(data)),
-                    Err(err) => Msg::Error(err),
+                let send_callback = ctx.link().batch_callback(|send_result: Result<(), WebSocketError>| {
+                    send_result.err().map(|err| Msg::Error(anyhow!("{}", err)))
                 });
-                let notification = self.this_link.batch_callback(|status| match status {
-                    WebSocketStatus::Opened => vec![],
-                    WebSocketStatus::Closed | WebSocketStatus::Error => vec![WsAction::Lost.into()],
-                });
-                let ws = WebSocketService::connect(&url, callback, notification)
-                    .unwrap_or_else(|err| panic!("WS should be created for URL {}: {:?}", url, err));
+                let receive_callback =
+                    ctx.link()
+                        .callback(
+                            |receive_result: Result<websocket::Message, WebSocketError>| match receive_result {
+                                Ok(msg) => {
+                                    match match msg {
+                                        websocket::Message::Text(text) => serde_json::from_str(&text),
+                                        websocket::Message::Bytes(bytes) => serde_json::from_slice(&bytes),
+                                    } {
+                                        Ok(response) => Msg::Ws(WsAction::ReceiveData(response)),
+                                        Err(err) => Msg::Error(err.into()),
+                                    }
+                                },
+                                Err(err) => Msg::Error(anyhow!("{}", err)),
+                            },
+                        );
+                let close_send_callback = ctx
+                    .link()
+                    .callback(|_| Msg::Error(anyhow!("WebSocket connection close")));
+                let close_receive_callback = ctx
+                    .link()
+                    .callback(|_| Msg::Error(anyhow!("WebSocket connection close")));
+
+                let ws = WebSocketService::open(
+                    &url,
+                    move |send_result| send_callback.emit(send_result),
+                    move |receive_result| receive_callback.emit(receive_result),
+                    move || close_send_callback.emit(()),
+                    move || close_receive_callback.emit(()),
+                )
+                .unwrap_or_else(|err| panic!("WS should be created for URL {}: {:?}", url, err));
 
                 self.state = State::Chat(Chat {
                     keys,
@@ -281,7 +291,11 @@ impl Component for Root {
                         correspondent_name: "<Unnamed>".to_string(),
                         thread: vec![],
                     });
-                    state.ws.send(Json(&WsMessage::AddPeer(peer_id)));
+                    state
+                        .ws
+                        .send(to_websocket_message(&WsMessage::AddPeer(peer_id)))
+                        .context("Send AddPeer message error")
+                        .msg_error(ctx.link());
                     true
                 } else {
                     false
@@ -289,7 +303,11 @@ impl Component for Root {
             },
             Msg::AddAddress(address) => {
                 if let State::Chat(state) = &mut self.state {
-                    state.ws.send(Json(&WsMessage::AddAddress(address)));
+                    state
+                        .ws
+                        .send(to_websocket_message(&WsMessage::AddAddress(address)))
+                        .context("Send AddAddress message error")
+                        .msg_error(ctx.link());
                 }
                 false
             },
@@ -310,10 +328,14 @@ impl Component for Root {
                                 is_mine: true,
                                 body: request.clone(),
                             });
-                            state.ws.send(Json(&WsMessage::Text {
-                                peer_id: channel.correspondent_id.clone(),
-                                msg: request,
-                            }));
+                            state
+                                .ws
+                                .send(to_websocket_message(&WsMessage::Text {
+                                    peer_id: channel.correspondent_id.clone(),
+                                    msg: request,
+                                }))
+                                .context("Send Text message error")
+                                .msg_error(ctx.link());
                         }
                     }
                     true
@@ -340,31 +362,26 @@ impl Component for Root {
                                 link.send_message(addresses::Msg::Add(address));
                             }
                         },
-                        msg => self.this_link.send_message(Msg::Error(anyhow!("{:?}", msg))),
+                        msg => ctx.link().send_message(Msg::Error(anyhow!("{:?}", msg))),
                     }
                     false
                 },
-                WsAction::Lost => true,
             },
             Msg::Error(err) => {
-                ConsoleService::error(&format!("{}", err));
+                console::error!(&err.to_string());
                 true
             },
             Msg::None => false,
         }
     }
 
-    fn change(&mut self, _props: Self::Properties) -> bool {
-        false
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let top_app_bar = TopAppBar::new()
             .id("top-app-bar")
             .title("Chat lapp")
             .navigation_item(IconButton::new().icon("menu"))
             .on_navigation(|_| {
-                let drawer = dom::select_exist_element::<Element>("#chat-drawer").get(drawer::mdc::TYPE_NAME);
+                let drawer = dom::existing::select_element::<Element>("#chat-drawer").get(drawer::mdc::TYPE_NAME);
                 let opened = drawer.get("open").as_bool().unwrap_or(false);
                 drawer.set("open", !opened);
             });
@@ -375,7 +392,7 @@ impl Component for Root {
         let mut dialogs = html! {};
 
         let content = match &self.state {
-            State::SignIn => self.view_sign_in(),
+            State::SignIn => self.view_sign_in(ctx),
             State::Chat(state) => {
                 drawer = drawer
                     .title(html! { <h3 contenteditable = "true">{ "User" }</h3> })
@@ -422,11 +439,11 @@ impl Component for Root {
                     <>
                         { peer_dialog }
                         { keys_dialog }
-                        <Addresses root = self.this_link.clone() list = vec![] />
+                        <Addresses root = { ctx.link().clone() } list = { Vec::new() } />
                     </>
                 };
 
-                self.view_chat(state)
+                self.view_chat(ctx, state)
             },
         };
 
@@ -436,7 +453,7 @@ impl Component for Root {
                 <div class = "mdc-drawer-scrim"></div>
                 { dialogs }
 
-                <div class = classes!("app-content", Drawer::APP_CONTENT_CLASS)>
+                <div class = { classes!("app-content", Drawer::APP_CONTENT_CLASS) } >
                     { top_app_bar }
                     <div class = "mdc-top-app-bar--fixed-adjust content-container">
                         { content }
@@ -446,13 +463,13 @@ impl Component for Root {
         }
     }
 
-    fn rendered(&mut self, _first_render: bool) {
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         auto_init();
     }
 }
 
 impl Root {
-    fn view_sign_in(&self) -> Html {
+    fn view_sign_in(&self, ctx: &Context<Self>) -> Html {
         let generate_keypair_button = Button::new().id("generate-key-button").label("Generate").on_click(|_| {
             let keypair = Keypair::generate();
             let public_key = bs58::encode(keypair.public().encode()).into_string();
@@ -461,10 +478,10 @@ impl Root {
             TextField::set_value("public-key", &public_key);
             TextField::set_value("secret-key", &secret_key);
 
-            let sign_in_button = dom::get_exist_element_by_id::<HtmlElement>("sign-in-button");
+            let sign_in_button = dom::existing::get_element_by_id::<HtmlElement>("sign-in-button");
             sign_in_button.remove_attribute("disabled").ok();
             sign_in_button.focus().ok();
-            dom::get_exist_element_by_id::<HtmlElement>("generate-key-button")
+            dom::existing::get_element_by_id::<HtmlElement>("generate-key-button")
                 .set_attribute("disabled", "")
                 .ok();
         });
@@ -473,7 +490,19 @@ impl Root {
             .id("sign-in-button")
             .label("Sign In")
             .disabled()
-            .on_click(self.this_link.callback(|_| Msg::SignIn));
+            .on_click(ctx.link().callback(|_| Msg::SignIn));
+        let switch_buttons = |_| {
+            let generate_key_button = dom::existing::get_element_by_id::<HtmlElement>("generate-key-button");
+            let sign_in_button = dom::existing::get_element_by_id::<HtmlElement>("sign-in-button");
+
+            if TextField::get_value("public-key").is_empty() && TextField::get_value("secret-key").is_empty() {
+                generate_key_button.remove_attribute("disabled").ok();
+                sign_in_button.set_attribute("disabled", "").ok();
+            } else if generate_key_button.get_attribute("disabled").is_none() {
+                generate_key_button.set_attribute("disabled", "").ok();
+                sign_in_button.remove_attribute("disabled").ok();
+            }
+        };
 
         let sign_in_form = List::simple_ul().items(vec![
             ListItem::simple().child(html! {
@@ -484,36 +513,14 @@ impl Root {
                     .id("public-key")
                     .class("expand")
                     .label("Public key")
-                    .on_input(|input: InputData| {
-                        let generate_key_button = dom::get_exist_element_by_id::<HtmlElement>("generate-key-button");
-                        let sign_in_button = dom::get_exist_element_by_id::<HtmlElement>("sign-in-button");
-
-                        if input.value.is_empty() && TextField::get_value("secret-key").is_empty() {
-                            generate_key_button.remove_attribute("disabled").ok();
-                            sign_in_button.set_attribute("disabled", "").ok();
-                        } else if generate_key_button.get_attribute("disabled").is_none() {
-                            generate_key_button.set_attribute("disabled", "").ok();
-                            sign_in_button.remove_attribute("disabled").ok();
-                        }
-                    }),
+                    .on_input(switch_buttons),
             ),
             ListItem::simple().child(
                 TextField::outlined()
                     .id("secret-key")
                     .class("expand")
                     .label("Secret key")
-                    .on_input(|input: InputData| {
-                        let generate_key_button = dom::get_exist_element_by_id::<HtmlElement>("generate-key-button");
-                        let sign_in_button = dom::get_exist_element_by_id::<HtmlElement>("sign-in-button");
-
-                        if input.value.is_empty() && TextField::get_value("public-key").is_empty() {
-                            generate_key_button.remove_attribute("disabled").ok();
-                            sign_in_button.set_attribute("disabled", "").ok();
-                        } else if generate_key_button.get_attribute("disabled").is_none() {
-                            generate_key_button.set_attribute("disabled", "").ok();
-                            sign_in_button.remove_attribute("disabled").ok();
-                        }
-                    }),
+                    .on_input(switch_buttons),
             ),
             ListItem::simple().child(html! {
                 <div class = "sign-in-actions">
@@ -530,7 +537,7 @@ impl Root {
         }
     }
 
-    fn view_chat(&self, state: &Chat) -> Html {
+    fn view_chat(&self, ctx: &Context<Self>, state: &Chat) -> Html {
         let mut channels = List::nav().two_line().divider();
         let mut messages = html! {};
         for (idx, channel) in state.channels.iter().enumerate() {
@@ -538,14 +545,14 @@ impl Root {
                 .icon("person")
                 .text(&channel.correspondent_name)
                 .text(&channel.correspondent_id)
-                .on_click(self.this_link.callback(move |_| Msg::SwitchChannel(idx)));
+                .on_click(ctx.link().callback(move |_| Msg::SwitchChannel(idx)));
 
             if idx == state.active_channel_idx {
                 item = item.selected(true).attr("tabindex", "0");
                 messages = html! { {
                     for channel.thread.iter().map(|msg| {
                         let msg_class = if msg.is_mine { "mine-message" } else { "message" };
-                        html! { <div class = msg_class><RawHtml inner_html = to_view_inner_html(&msg.body) /></div> }
+                        html! { <div class = { msg_class } ><RawHtml inner_html = { to_view_inner_html(&msg.body) } /></div> }
                     })
                 } };
             }
@@ -553,15 +560,15 @@ impl Root {
         }
         channels = channels.markup_only();
 
-        let add_peer_dialog = self.view_add_peer_dialog();
+        let add_peer_dialog = self.view_add_peer_dialog(ctx);
         let add_peer_button = IconButton::new()
             .icon("add")
             .class("centered-hor")
             .on_click(|_| Dialog::open_existing("add-peer-dialog"));
 
-        let sender = self.this_link.callback(|event: KeyboardEvent| {
+        let sender = ctx.link().callback(|event: KeyboardEvent| {
             if event.key() == "Enter" && event.ctrl_key() {
-                let editor = dom::get_exist_element_by_id::<HtmlTextAreaElement>("editor");
+                let editor = dom::existing::get_element_by_id::<HtmlTextAreaElement>("editor");
                 let message = editor.value();
                 editor.set_value("");
 
@@ -573,12 +580,12 @@ impl Root {
         let editor = html! {
             <label class = "mdc-text-field mdc-text-field--textarea mdc-text-field--no-label">
                 <textarea id = "editor" class = "mdc-text-field__input" rows = "3" aria-label = "Label"
-                    placeholder = "Type your message here..." onkeypress = sender></textarea>
+                    placeholder = "Type your message here..." onkeypress = { sender }></textarea>
             </label>
         };
 
         html! {
-            <div class = "chat-screen" onmousemove = self.this_link.callback(Msg::ChatScreenMouseMove)>
+            <div class = "chat-screen" onmousemove = { ctx.link().callback(Msg::ChatScreenMouseMove) }>
                 <aside class = "chat-sidebar">
                     <div class = "chat-flex-container scrollable-content">
                         { channels }
@@ -587,15 +594,15 @@ impl Root {
                     </div>
                 </aside>
                 <div class = "chat-sidebar-split-handle resize-hor-cursor"
-                        onmousedown = self.this_link.callback(Msg::ToggleChatSidebarSplitHandle)></div>
+                        onmousedown = { ctx.link().callback(Msg::ToggleChatSidebarSplitHandle) }></div>
                 <div class = "chat-main">
                     <div class = "chat-flex-container">
                         <div id = "messages" class = "chat-messages">
                             { messages }
                         </div>
-                        <div class = "chat-editor-split-handle resize-ver-cursor" onmousedown = self.this_link.callback(|event| {
+                        <div class = "chat-editor-split-handle resize-ver-cursor" onmousedown = { ctx.link().callback(|event| {
                             Msg::ToggleChatEditorSplitHandle(event)
-                        })></div>
+                        }) }></div>
                         <div class = "chat-editor">
                             { editor }
                         </div>
@@ -605,7 +612,7 @@ impl Root {
         }
     }
 
-    fn view_add_peer_dialog(&self) -> Html {
+    fn view_add_peer_dialog(&self, ctx: &Context<Self>) -> Html {
         Dialog::new()
             .id("add-peer-dialog")
             .content_item(
@@ -619,8 +626,8 @@ impl Root {
                     .id("add-peer-button")
                     .label("Add")
                     .class(Dialog::BUTTON_CLASS)
-                    .on_click(self.this_link.callback(|_| {
-                        let id = dom::select_exist_element::<HtmlInputElement>("#new-peer-id > input").value();
+                    .on_click(ctx.link().callback(|_| {
+                        let id = dom::existing::select_element::<HtmlInputElement>("#new-peer-id > input").value();
                         Dialog::close_existing("add-peer-dialog");
                         Msg::AddPeer(id)
                     })),
@@ -653,7 +660,7 @@ fn new_cmark_parser(source: &str) -> Parser {
 }
 
 pub fn select_exist_html_element(selector: &str) -> HtmlElement {
-    dom::select_exist_element::<HtmlElement>(selector)
+    dom::existing::select_element::<HtmlElement>(selector)
 }
 
 pub fn set_element_style(element: impl AsRef<HtmlElement>, property: &str, value: &str) {
@@ -694,12 +701,11 @@ pub fn remove_class_from_exist_html_element(selector: &str, class: &str) {
     remove_class_from_html_element(select_exist_html_element(selector), class);
 }
 
+fn to_websocket_message(msg: &WsMessage) -> websocket::Message {
+    websocket::Message::Text(serde_json::to_string(msg).expect("Can't serialize message"))
+}
+
 fn main() {
-    initialize();
-    if let Ok(Some(root)) = yew::utils::document().query_selector("#root") {
-        App::<Root>::new().mount_with_props(root, ());
-        run_loop();
-    } else {
-        ConsoleService::error("Can't get root node for rendering");
-    }
+    let root = dom::existing::get_element_by_id("root");
+    yew::start_app_in_element::<Root>(root);
 }

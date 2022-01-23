@@ -1,13 +1,16 @@
 #![recursion_limit = "512"]
 
-use anyhow::{anyhow, Context as _, Error};
-use laplace_yew::{JsonFetcher, MsgError};
+use anyhow::{anyhow, Error};
+use gloo_console as console;
+use laplace_yew::MsgError;
 use strum::{Display, EnumIter, IntoEnumIterator};
 use todo_common::{Response, Task};
-use web_sys::HtmlInputElement;
-use yew::{
-    classes, html, services::console::ConsoleService, Component, ComponentLink, Html, InputData, KeyboardEvent, NodeRef,
+use wasm_web_helpers::{
+    error::Result,
+    fetch::{JsonFetcher, Response as WebResponse},
 };
+use web_sys::HtmlInputElement;
+use yew::{classes, html, Callback, Component, Context, Html, InputEvent, KeyboardEvent, NodeRef};
 
 #[derive(EnumIter, Display, Clone, Copy, PartialEq)]
 enum Filter {
@@ -92,8 +95,8 @@ impl TodoState {
 enum Msg {
     Add,
     Edit,
-    TypeNew(String),
-    TypeEdit(String),
+    TypeNew,
+    TypeEdit(usize),
     Save(usize),
     Remove(usize),
     SetFilter(Filter),
@@ -114,8 +117,6 @@ impl From<Error> for Msg {
 }
 
 struct Root {
-    link: ComponentLink<Self>,
-    fetcher: JsonFetcher,
     state: TodoState,
     focus_ref: NodeRef,
 }
@@ -124,34 +125,31 @@ impl Component for Root {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let mut fetcher = JsonFetcher::new();
-        fetcher
-            .send_get("/todo/list", JsonFetcher::callback(&link, Msg::Fetch, Msg::Error))
-            .context("Get todo list error")
-            .msg_error(&link);
+    fn create(ctx: &Context<Self>) -> Self {
+        JsonFetcher::send_get("/todo/list", {
+            let callback = callback(ctx);
+            move |response_result| callback.emit(response_result)
+        });
 
         Self {
-            link,
-            fetcher,
             state: Default::default(),
             focus_ref: Default::default(),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Add => {
                 let description = self.state.value.trim();
                 if !description.is_empty() {
-                    self.fetcher
-                        .send_post(
-                            "/todo/add",
-                            format!(r#"{{"description":"{}","completed":false}}"#, description),
-                            JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                        )
-                        .context("Add task error")
-                        .msg_error(&self.link);
+                    JsonFetcher::send_post(
+                        "/todo/add",
+                        format!(r#"{{"description":"{}","completed":false}}"#, description),
+                        {
+                            let callback = callback(ctx);
+                            move |response_result| callback.emit(response_result)
+                        },
+                    );
                 }
                 self.state.value.clear();
                 false
@@ -167,45 +165,45 @@ impl Component for Root {
                     } else {
                         Msg::Remove(idx)
                     };
-                    self.link.send_message(msg);
+                    ctx.link().send_message(msg);
                 }
                 false
             },
-            Msg::TypeNew(value) => {
+            Msg::TypeNew => {
+                let value = wasm_dom::existing::get_element_by_id::<HtmlInputElement>("new-task-input").value();
                 self.state.value = value;
                 false
             },
-            Msg::TypeEdit(value) => {
+            Msg::TypeEdit(idx) => {
                 if let Some(edit) = &mut self.state.edit {
+                    let value =
+                        wasm_dom::existing::get_element_by_id::<HtmlInputElement>(&format!("edit-task-{}", idx))
+                            .value();
                     edit.value = value;
                 }
                 false
             },
             Msg::Save(idx) => {
                 let task = &self.state.list[idx];
-                self.fetcher
-                    .send_post(
-                        format!("/todo/update/{}", idx + 1),
-                        format!(
-                            r#"{{"description":"{}","completed":{}}}"#,
-                            task.description, task.completed
-                        ),
-                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                    )
-                    .context("Save task error")
-                    .msg_error(&self.link);
+                JsonFetcher::send_post(
+                    format!("/todo/update/{}", idx + 1),
+                    format!(
+                        r#"{{"description":"{}","completed":{}}}"#,
+                        task.description, task.completed
+                    ),
+                    {
+                        let callback = callback(ctx);
+                        move |response_result| callback.emit(response_result)
+                    },
+                );
                 false
             },
             Msg::Remove(idx) => {
                 let idx = self.state.remove(idx);
-                self.fetcher
-                    .send_post(
-                        format!("/todo/delete/{}", idx + 1),
-                        "",
-                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                    )
-                    .context("Remove task error")
-                    .msg_error(&self.link);
+                JsonFetcher::send_post(format!("/todo/delete/{}", idx + 1), "", {
+                    let callback = callback(ctx);
+                    move |response_result| callback.emit(response_result)
+                });
                 false
             },
             Msg::SetFilter(filter) => {
@@ -224,25 +222,21 @@ impl Component for Root {
                 for (idx, task) in self.state.list.iter_mut().enumerate() {
                     if self.state.filter.fit(task) && task.completed != status {
                         task.completed = status;
-                        self.link.send_message(Msg::Save(idx));
+                        ctx.link().send_message(Msg::Save(idx));
                     }
                 }
                 false
             },
             Msg::Toggle(idx) => {
                 let idx = self.state.toggle(idx);
-                self.link.send_message(Msg::Save(idx));
+                ctx.link().send_message(Msg::Save(idx));
                 false
             },
             Msg::ClearCompleted => {
-                self.fetcher
-                    .send_post(
-                        "/todo/clear_completed",
-                        "",
-                        JsonFetcher::callback(&self.link, Msg::Fetch, Msg::Error),
-                    )
-                    .context("Clear completed tasks error")
-                    .msg_error(&self.link);
+                JsonFetcher::send_post("/todo/clear_completed", "", {
+                    let callback = callback(ctx);
+                    move |response_result| callback.emit(response_result)
+                });
                 false
             },
             Msg::Focus => {
@@ -250,7 +244,7 @@ impl Component for Root {
                     input
                         .focus()
                         .map_err(|err| anyhow!("Input focus error: {:?}", err))
-                        .msg_error(&self.link);
+                        .msg_error(ctx.link());
                 }
                 false
             },
@@ -264,51 +258,47 @@ impl Component for Root {
             },
             Msg::Fetch(Response::Empty) => true,
             Msg::Fetch(Response::Error(err)) => {
-                self.link.send_message(Msg::Error(anyhow!("{}", err)));
+                ctx.link().send_message(Msg::Error(anyhow!("{}", err)));
                 false
             },
             Msg::Error(err) => {
-                ConsoleService::error(&format!("{}", err));
+                console::error!(&format!("{}", err));
                 true
             },
             Msg::Nope => false,
         }
     }
 
-    fn change(&mut self, _props: Self::Properties) -> bool {
-        false
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         let hidden_class = if self.state.list.is_empty() { "hidden" } else { "" };
         html! {
             <div class = "todomvc-wrapper">
                 <section class = "todoapp">
                     <header class = "header">
                         <h1>{ "todos" }</h1>
-                        { self.view_input() }
+                        { self.view_input(ctx) }
                     </header>
-                    <section class = classes!("main", hidden_class)>
+                    <section class = { classes!("main", hidden_class) }>
                         <input
                             type = "checkbox"
                             class = "toggle-all"
                             id = "toggle-all"
-                            checked = self.state.is_all_completed()
-                            onclick = self.link.callback(|_| Msg::ToggleAll) />
+                            checked = { self.state.is_all_completed() }
+                            onclick = { ctx.link().callback(|_| Msg::ToggleAll) } />
                         <label for = "toggle-all" />
                         <ul class = "todo-list">
-                            { for self.state.list.iter().filter(|task| self.state.filter.fit(task)).enumerate().map(|task| self.view_task(task)) }
+                            { for self.state.list.iter().filter(|task| self.state.filter.fit(task)).enumerate().map(|task| self.view_task(ctx, task)) }
                         </ul>
                     </section>
-                    <footer class = classes!("footer", hidden_class)>
+                    <footer class = { classes!("footer", hidden_class) }>
                         <span class = "todo-count">
                             <strong>{ self.state.total() }</strong>
                             { " item(s) left" }
                         </span>
                         <ul class = "filters">
-                            { for Filter::iter().map(|filter| self.view_filter(filter)) }
+                            { for Filter::iter().map(|filter| self.view_filter(ctx, filter)) }
                         </ul>
-                        <button class = "clear-completed" onclick = self.link.callback(|_| Msg::ClearCompleted)>
+                        <button class = "clear-completed" onclick = { ctx.link().callback(|_| Msg::ClearCompleted) }>
                             { format!("Clear completed ({})", self.state.total_completed()) }
                         </button>
                     </footer>
@@ -323,30 +313,30 @@ impl Component for Root {
 }
 
 impl Root {
-    fn view_filter(&self, filter: Filter) -> Html {
+    fn view_filter(&self, ctx: &Context<Self>, filter: Filter) -> Html {
         html! {
             <li>
-                <a class = if self.state.filter == filter { "selected" } else { "not-selected" }
-                        href = filter.to_string()
-                        onclick = self.link.callback(move |_| Msg::SetFilter(filter))>
+                <a class = { if self.state.filter == filter { "selected" } else { "not-selected" } }
+                        href = { filter.to_string() }
+                        onclick = { ctx.link().callback(move |_| Msg::SetFilter(filter)) }>
                     { filter }
                 </a>
             </li>
         }
     }
 
-    fn view_input(&self) -> Html {
+    fn view_input(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <input class = "new-todo" placeholder = "What needs to be done?"
-                    value = self.state.value.clone()
-                    oninput = self.link.callback(|event: InputData| Msg::TypeNew(event.value))
-                    onkeypress = self.link.callback(|event: KeyboardEvent| {
+            <input id = "new-task-input" class = "new-todo" placeholder = "What needs to be done?"
+                    value = { self.state.value.clone() }
+                    oninput = { ctx.link().callback(|_: InputEvent| Msg::TypeNew) }
+                    onkeypress = { ctx.link().callback(|event: KeyboardEvent| {
                         if event.key() == "Enter" { Msg::Add } else { Msg::Nope }
-                   }) />
+                   }) } />
         }
     }
 
-    fn view_task(&self, (idx, task): (usize, &Task)) -> Html {
+    fn view_task(&self, ctx: &Context<Self>, (idx, task): (usize, &Task)) -> Html {
         let mut classes = vec!["todo"];
         if self
             .state
@@ -361,34 +351,49 @@ impl Root {
             classes.push("completed");
         }
         html! {
-            <li class = classes>
+            <li class = { classes }>
                 <div class = "view">
-                    <input type = "checkbox" class = "toggle" checked = task.completed
-                            onclick = self.link.callback(move |_| Msg::Toggle(idx)) />
-                    <label ondblclick = self.link.callback(move |_| Msg::ToggleEdit(idx))>{ &task.description }</label>
-                    <button class = "destroy" onclick = self.link.callback(move |_| Msg::Remove(idx)) />
+                    <input type = "checkbox" class = "toggle" checked = { task.completed }
+                            onclick = { ctx.link().callback(move |_| Msg::Toggle(idx)) } />
+                    <label ondblclick = { ctx.link().callback(move |_| Msg::ToggleEdit(idx)) } >{ &task.description }</label>
+                    <button class = "destroy" onclick = { ctx.link().callback(move |_| Msg::Remove(idx)) } />
                 </div>
-                { self.view_task_edit_input(idx) }
+                { self.view_task_edit_input(ctx, idx) }
             </li>
         }
     }
 
-    fn view_task_edit_input(&self, idx: usize) -> Html {
+    fn view_task_edit_input(&self, ctx: &Context<Self>, idx: usize) -> Html {
         if let Some(Edit { value, task_idx }) = &self.state.edit {
             if *task_idx == idx {
                 return html! {
-                    <input class = "edit" type = "text" ref = self.focus_ref.clone() value = value.clone()
-                            onmouseover = self.link.callback(|_| Msg::Focus)
-                            oninput = self.link.callback(|event: InputData| Msg::TypeEdit(event.value))
-                            onblur = self.link.callback(move |_| Msg::Edit)
-                            onkeypress = self.link.callback(move |event: KeyboardEvent| {
+                    <input id = { format!("edit-task-{}", idx) } class = "edit" type = "text" ref = { self.focus_ref.clone() } value = { value.clone() }
+                            onmouseover = { ctx.link().callback(|_| Msg::Focus) }
+                            oninput = { ctx.link().callback(move |_: InputEvent| Msg::TypeEdit(idx)) }
+                            onblur = { ctx.link().callback(move |_| Msg::Edit) }
+                            onkeypress = { ctx.link().callback(move |event: KeyboardEvent| {
                                 if event.key() == "Enter" { Msg::Edit } else { Msg::Nope }
-                            }) />
+                            }) } />
                 };
             }
         }
         html! { <input type = "hidden" /> }
     }
+}
+
+fn callback(ctx: &Context<Root>) -> Callback<Result<(WebResponse, Option<Response>)>> {
+    ctx.link()
+        .callback(|response_result: Result<(WebResponse, Option<Response>)>| {
+            response_result
+                .map(|(_, body)| {
+                    if let Some(body) = body {
+                        Msg::Fetch(body)
+                    } else {
+                        Msg::Error(anyhow!("Response body is None"))
+                    }
+                })
+                .unwrap_or_else(|err| Msg::Error(err.into()))
+        })
 }
 
 fn main() {
