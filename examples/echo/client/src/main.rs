@@ -27,22 +27,24 @@ impl Component for Root {
         match msg {
             Msg::Submit => {
                 let uri = dom::existing::select_element::<HtmlInputElement>("#uri > input").value();
-                let request = Request::get(&format!("/echo/{}", uri));
-                let callback = ctx
-                    .link()
-                    .callback(|result: Result<(Response, String), reqwasm::Error>| match result {
-                        Ok((response, body)) => {
-                            if response.status() == 200 {
-                                Msg::Fetch(body)
-                            } else {
-                                Msg::Error(format!("Fetch status: {:?}, body: {:?}", response.status(), body,))
-                            }
-                        },
-                        Err(err) => Msg::Error(format!("Fetch error: {:?}", err)),
+                if !uri.is_empty() {
+                    let request = Request::get(&format!("/echo/{}", uri));
+                    let callback =
+                        ctx.link()
+                            .callback(|result: Result<(Response, String), reqwasm::Error>| match result {
+                                Ok((response, body)) => {
+                                    if response.status() == 200 {
+                                        Msg::Fetch(body)
+                                    } else {
+                                        Msg::Error(format!("Fetch status: {:?}, body: {:?}", response.status(), body,))
+                                    }
+                                },
+                                Err(err) => Msg::Error(format!("Fetch error: {:?}", err)),
+                            });
+                    wasm_bindgen_futures::spawn_local(async move {
+                        callback.emit(fetch(request).await);
                     });
-                wasm_bindgen_futures::spawn_local(async move {
-                    callback.emit(fetch(request).await);
-                });
+                }
                 false
             },
             Msg::Fetch(data) => {
