@@ -83,7 +83,7 @@ impl Component for Root {
                     self.lapps = lapps.into_iter().map(|lapp| lapp.into_owned()).collect();
                     true
                 },
-                LappResponse::Updated(updated) => {
+                LappResponse::Updated { updated } => {
                     if let Some(lapp) = self.lapps.iter_mut().find(|lapp| lapp.name() == updated.lapp_name) {
                         let mut should_render = false;
 
@@ -258,16 +258,18 @@ impl Root {
     }
 }
 
-fn callback(ctx: &Context<Root>) -> Callback<Result<(Response, Option<LappResponse>)>> {
+fn callback(ctx: &Context<Root>) -> Callback<Result<(Response, Result<LappResponse>)>> {
     ctx.link()
-        .callback(|response_result: Result<(Response, Option<LappResponse>)>| {
+        .callback(|response_result: Result<(Response, Result<LappResponse>)>| {
             response_result
-                .map(|(_, body)| {
-                    if let Some(body) = body {
-                        Msg::Fetch(body)
-                    } else {
-                        Msg::Error(anyhow!("Response body is None"))
-                    }
+                .map(|(response, body)| {
+                    body.map(Msg::Fetch).unwrap_or_else(|err| {
+                        Msg::Error(anyhow!(
+                            "Parse response body error: {:?}, for request {}",
+                            err,
+                            response.url(),
+                        ))
+                    })
                 })
                 .unwrap_or_else(|err| Msg::Error(err.into()))
         })

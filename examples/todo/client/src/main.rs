@@ -381,16 +381,18 @@ impl Root {
     }
 }
 
-fn callback(ctx: &Context<Root>) -> Callback<Result<(WebResponse, Option<Response>)>> {
+fn callback(ctx: &Context<Root>) -> Callback<Result<(WebResponse, Result<Response>)>> {
     ctx.link()
-        .callback(|response_result: Result<(WebResponse, Option<Response>)>| {
+        .callback(|response_result: Result<(WebResponse, Result<Response>)>| {
             response_result
-                .map(|(_, body)| {
-                    if let Some(body) = body {
-                        Msg::Fetch(body)
-                    } else {
-                        Msg::Error(anyhow!("Response body is None"))
-                    }
+                .map(|(response, body)| {
+                    body.map(Msg::Fetch).unwrap_or_else(|err| {
+                        Msg::Error(anyhow!(
+                            "Parse response body error: {:?}, for request {}",
+                            err,
+                            response.url(),
+                        ))
+                    })
                 })
                 .unwrap_or_else(|err| Msg::Error(err.into()))
         })

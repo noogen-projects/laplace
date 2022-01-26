@@ -78,13 +78,18 @@ impl From<UpdateQuery> for UpdateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum Response<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> {
     Lapps {
         lapps: Vec<LappT>,
+
+        #[serde(skip)]
         _marker: PhantomData<&'a Lapp<PathT>>,
     },
 
-    Updated(UpdateQuery),
+    Updated {
+        updated: UpdateQuery,
+    },
 }
 
 impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> Response<'a, PathT, LappT> {
@@ -106,8 +111,8 @@ impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<Vec<LappT>>
 }
 
 impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<UpdateQuery> for Response<'a, PathT, LappT> {
-    fn from(update: UpdateQuery) -> Self {
-        Self::Updated(update)
+    fn from(updated: UpdateQuery) -> Self {
+        Self::Updated { updated }
     }
 }
 
@@ -153,29 +158,33 @@ mod tests {
     fn serialize_lapps_response() {
         let response = Response::<'_, String, &Lapp<String>>::from(vec![]);
         let json = serde_json::to_string(&response).unwrap();
-        assert_eq!(json, r#"{"Lapps":[]}"#);
+        assert_eq!(json, r#"{"lapps":[]}"#);
     }
 
     #[test]
     fn serialize_updated_response() {
-        let response = Response::<'_, String, &Lapp<String>>::Updated(UpdateQuery::new("test"));
+        let response = Response::Updated::<'_, String, &Lapp<String>> {
+            updated: UpdateQuery::new("test"),
+        };
         let json = serde_json::to_string(&response).unwrap();
-        assert_eq!(json, r#"{"Updated":{"lapp_name":"test"}}"#);
+        assert_eq!(json, r#"{"updated":{"lapp_name":"test"}}"#);
 
-        let response = Response::<'_, String, &Lapp<String>>::Updated(UpdateQuery::new("test").enabled(true));
+        let response = Response::Updated::<'_, String, &Lapp<String>> {
+            updated: UpdateQuery::new("test").enabled(true),
+        };
         let json = serde_json::to_string(&response).unwrap();
-        assert_eq!(json, r#"{"Updated":{"lapp_name":"test","enabled":true}}"#);
+        assert_eq!(json, r#"{"updated":{"lapp_name":"test","enabled":true}}"#);
 
-        let response = Response::<'_, String, &Lapp<String>>::Updated(
-            UpdateQuery::new("test")
+        let response = Response::Updated::<'_, String, &Lapp<String>> {
+            updated: UpdateQuery::new("test")
                 .enabled(true)
                 .allow_permission(Permission::Http)
                 .deny_permission(Permission::Tcp),
-        );
+        };
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(
             json,
-            r#"{"Updated":{"lapp_name":"test","enabled":true,"allow_permission":"http","deny_permission":"tcp"}}"#
+            r#"{"updated":{"lapp_name":"test","enabled":true,"allow_permission":"http","deny_permission":"tcp"}}"#
         );
     }
 }

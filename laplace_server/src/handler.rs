@@ -49,5 +49,5 @@ async fn process_update_lapp(lapps_manager: Arc<LappsManager>, body: String) -> 
             lapps_manager.unload(lapp.name()).await?;
         }
     }
-    Ok(HttpResponse::Ok().json(CommonLappResponse::Updated(updated)))
+    Ok(HttpResponse::Ok().json(CommonLappResponse::Updated { updated }))
 }

@@ -152,17 +152,18 @@ impl Component for Root {
                     }));
 
                     JsonFetcher::send_post_json("/chat/p2p", body, {
-                        let callback =
-                            ctx.link()
-                                .callback(move |response_result: WebResult<(Response, Option<MissingBody>)>| {
-                                    response_result
-                                        .map(|(..)| {
-                                            success_msg.borrow_mut().take().unwrap_or_else(|| {
-                                                Msg::Error(anyhow!("Multiple success fetch received"))
-                                            })
-                                        })
-                                        .unwrap_or_else(|err| Msg::Error(err.into()))
-                                });
+                        let callback = ctx.link().callback(
+                            move |response_result: WebResult<(Response, WebResult<MissingBody>)>| {
+                                response_result
+                                    .map(|(..)| {
+                                        success_msg
+                                            .borrow_mut()
+                                            .take()
+                                            .unwrap_or_else(|| Msg::Error(anyhow!("Multiple success fetch received")))
+                                    })
+                                    .unwrap_or_else(|err| Msg::Error(err.into()))
+                            },
+                        );
                         move |response_result| callback.emit(response_result)
                     });
                 }
