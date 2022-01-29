@@ -1,6 +1,10 @@
 #![recursion_limit = "256"]
 
-use reqwasm::http::{Request, Response};
+use wasm_web_helpers::{
+    error::Result,
+    fetch::{fetch_success_text, Request, Response},
+    spawn_local,
+};
 use web_sys::HtmlInputElement;
 use yew::{html, Component, Context, Html};
 use yew_mdc_widgets::{auto_init, console, dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
@@ -29,20 +33,14 @@ impl Component for Root {
                 let uri = dom::existing::select_element::<HtmlInputElement>("#uri > input").value();
                 if !uri.is_empty() {
                     let request = Request::get(&format!("/echo/{}", uri));
-                    let callback =
-                        ctx.link()
-                            .callback(|result: Result<(Response, String), reqwasm::Error>| match result {
-                                Ok((response, body)) => {
-                                    if response.status() == 200 {
-                                        Msg::Fetch(body)
-                                    } else {
-                                        Msg::Error(format!("Fetch status: {:?}, body: {:?}", response.status(), body,))
-                                    }
-                                },
-                                Err(err) => Msg::Error(format!("Fetch error: {:?}", err)),
-                            });
-                    wasm_bindgen_futures::spawn_local(async move {
-                        callback.emit(fetch(request).await);
+                    let callback = ctx.link().callback(|result: Result<(Response, Result<String>)>| {
+                        match result.and_then(|(_, body)| body) {
+                            Ok(body) => Msg::Fetch(body),
+                            Err(err) => Msg::Error(format!("Fetch error: {:?}", err)),
+                        }
+                    });
+                    spawn_local(async move {
+                        callback.emit(fetch_success_text(request).await);
                     });
                 }
                 false
@@ -97,12 +95,6 @@ impl Component for Root {
     fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         auto_init();
     }
-}
-
-async fn fetch(request: Request) -> Result<(Response, String), reqwasm::Error> {
-    let response = request.send().await?;
-    let body = response.text().await?;
-    Ok((response, body))
 }
 
 fn main() {
