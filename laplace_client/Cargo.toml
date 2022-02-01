@@ -12,7 +12,7 @@ description = "The WASM client of the local-firs web-application platform"
 
 [dependencies]
 anyhow = "1.0"
-yew = { git = "https://github.com/XX/yew.git", branch = "other_listener_kind" }
+yew = { git = "https://github.com/yewstack/yew.git" }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
 wasm-web-helpers = "0.1"
 serde = { version = "1.0", features = ["derive"] }

@@ -14,7 +14,7 @@ description = "The Todo lapp example"
 [dependencies]
 anyhow = "1.0"
 strum = { version = "0.23", features = ["derive"] }
-yew = { git = "https://github.com/XX/yew.git", branch = "other_listener_kind" }
+yew = { git = "https://github.com/yewstack/yew.git" }
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
 wasm-dom = "0.1"
 wasm-web-helpers = "0.1"

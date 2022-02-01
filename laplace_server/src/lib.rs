@@ -1,8 +1,9 @@
+pub use actix_files;
+pub use actix_web;
+
 use std::io;
 
-pub use actix_files;
 use actix_files::{Files, NamedFile};
-pub use actix_web;
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 
 use self::{
@@ -61,9 +62,10 @@ pub async fn run(settings: Settings) -> io::Result<()> {
                 web::route().to({
                     let laplace_uri = laplace_uri.clone();
                     move || {
-                        HttpResponse::Found()
+                        let redirect = HttpResponse::Found()
                             .append_header((http::header::LOCATION, laplace_uri.as_str()))
-                            .finish()
+                            .finish();
+                        async { redirect }
                     }
                 }),
             )
