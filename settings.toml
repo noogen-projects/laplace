@@ -4,6 +4,11 @@ port = 8080
 access_token = "24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR"
 print_url = true
 
+[ssl]
+enabled = true
+private_key_path = "cert/key.pem"
+certificate_path = "cert/cert.pem"
+
 [p2p]
 mdns_discovery_enabled = true
 

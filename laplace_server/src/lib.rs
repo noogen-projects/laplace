@@ -1,12 +1,14 @@
 pub use actix_files;
 pub use actix_web;
 
-use std::io;
+use std::{fs::File, io::Write};
 
 use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 
 use self::{
+    error::AppResult,
     lapps::{Lapp, LappsProvider},
     settings::Settings,
 };
@@ -19,7 +21,7 @@ pub mod lapps;
 pub mod service;
 pub mod settings;
 
-pub async fn run(settings: Settings) -> io::Result<()> {
+pub async fn run(settings: Settings) -> AppResult<()> {
     let lapps_path = settings.lapps.path.clone();
     let lapps_provider = web::block(move || LappsProvider::new(lapps_path))
         .await
@@ -34,14 +36,15 @@ pub async fn run(settings: Settings) -> io::Result<()> {
             "".into()
         };
         log::info!(
-            "Laplace URL: http://{}:{}/{}",
+            "Laplace URL: {}://{}:{}/{}",
+            if settings.ssl.enabled { "https" } else { "http" },
             settings.http.host,
             settings.http.port,
             access_query
         );
     }
 
-    HttpServer::new(move || {
+    let http_server = HttpServer::new(move || {
         let static_dir = web_root.join(Lapp::static_dir_name());
         let laplace_uri = format!("/{}", Lapp::main_name());
 
@@ -84,8 +87,28 @@ pub async fn run(settings: Settings) -> io::Result<()> {
             app = app.configure(lapp.read().expect("Lapp is not readable").http_configure());
         }
         app
-    })
-    .bind((settings.http.host.as_str(), settings.http.port))?
-    .run()
-    .await
+    });
+
+    let http_server_addr = (settings.http.host.as_str(), settings.http.port);
+    let http_server = if settings.ssl.enabled {
+        let private_key_path = &settings.ssl.private_key_path;
+        let certificate_path = &settings.ssl.certificate_path;
+
+        if !certificate_path.exists() && !private_key_path.exists() {
+            let certificate = rcgen::generate_simple_self_signed(vec![settings.http.host.clone()])?;
+
+            File::create(private_key_path)?.write_all(certificate.serialize_private_key_pem().as_bytes())?;
+            File::create(certificate_path)?.write_all(certificate.serialize_pem()?.as_bytes())?;
+        }
+
+        let mut ssl_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls())?;
+        ssl_builder.set_private_key_file(private_key_path, SslFiletype::PEM)?;
+        ssl_builder.set_certificate_chain_file(certificate_path)?;
+
+        http_server.bind_openssl(http_server_addr, ssl_builder)?
+    } else {
+        http_server.bind(http_server_addr)?
+    };
+
+    Ok(http_server.run().await?)
 }

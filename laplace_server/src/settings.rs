@@ -25,6 +25,36 @@ impl Default for HttpSettings {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SslSettings {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default = "private_key_path_default")]
+    pub private_key_path: PathBuf,
+
+    #[serde(default = "certificate_path_default")]
+    pub certificate_path: PathBuf,
+}
+
+impl Default for SslSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            private_key_path: private_key_path_default(),
+            certificate_path: certificate_path_default(),
+        }
+    }
+}
+
+fn private_key_path_default() -> PathBuf {
+    PathBuf::from("key.pem")
+}
+
+fn certificate_path_default() -> PathBuf {
+    PathBuf::from("cert.pem")
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct P2pSettings {
@@ -65,6 +95,7 @@ impl Default for LappsSettings {
 #[serde(default)]
 pub struct Settings {
     pub http: HttpSettings,
+    pub ssl: SslSettings,
     pub p2p: P2pSettings,
     pub log: LoggerSettings,
     pub lapps: LappsSettings,

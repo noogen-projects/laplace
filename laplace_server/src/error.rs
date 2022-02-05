@@ -1,6 +1,8 @@
 use std::{fmt, io};
 
 use actix_web::{HttpResponse, ResponseError};
+use openssl::error::ErrorStack;
+use rcgen::RcgenError;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
@@ -12,6 +14,20 @@ use crate::{
     lapps::{LappInstanceError, LappSettingsError},
     service::gossipsub,
 };
+
+pub type AppResult<T> = Result<T, AppError>;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+
+    #[error("SSL error: {0:?}")]
+    ErrorStack(#[from] ErrorStack),
+
+    #[error("Certificate generation error: {0:?}")]
+    RcgenError(#[from] RcgenError),
+}
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
