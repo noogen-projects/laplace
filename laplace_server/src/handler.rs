@@ -44,9 +44,9 @@ async fn process_update_lapp(lapps_manager: Arc<LappsManager>, body: String) -> 
     let updated = lapp.update(update_query)?;
     if updated.enabled.is_some() {
         if lapp.enabled() {
-            lapps_manager.load(lapp.name())?;
+            lapps_manager.load(lapp)?;
         } else {
-            lapps_manager.unload(lapp.name()).await?;
+            lapps_manager.unload(lapp).await?;
         }
     }
     Ok(HttpResponse::Ok().json(CommonLappResponse::Updated { updated }))

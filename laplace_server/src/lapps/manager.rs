@@ -37,14 +37,12 @@ impl LappsManager {
             })
     }
 
-    pub fn load(&self, lapp_name: impl AsRef<str> + ToString) -> ServerResult<()> {
-        let lapp_name = lapp_name.as_ref();
+    pub fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         let http_client = self.http_client.clone();
-        self.lapp_mut(lapp_name)?.instantiate(http_client)
+        lapp.instantiate(http_client)
     }
 
-    pub async fn unload(&self, lapp_name: impl AsRef<str> + ToString) -> ServerResult<()> {
-        let mut lapp = self.lapp_mut(lapp_name)?;
+    pub async fn unload(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         lapp.take_instance();
         lapp.service_stop().await;
 
