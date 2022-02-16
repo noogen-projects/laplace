@@ -290,8 +290,8 @@ pub struct LappOutgoingRequestSettings {
 #[serde(default)]
 pub struct LappRequestsSettings {
     pub lapp_name: String,
-    pub incoming: Vec<LappIncomingRequestSettings>,
-    pub outgoing: Vec<LappOutgoingRequestSettings>,
+    pub incoming: Option<Vec<LappIncomingRequestSettings>>,
+    pub outgoing: Option<Vec<LappOutgoingRequestSettings>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
