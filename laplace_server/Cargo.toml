@@ -12,10 +12,10 @@ description = "The server of the local-firs web-application platform"
 
 [dependencies]
 async-std = "1.9"
-actix = "0.12"
-actix-web = { version = "=4.0.0-rc.1", features = ["openssl"] }
-actix-web-actors = "=4.0.0-beta.11"
-actix-files = "=0.6.0-beta.16"
+actix = "0.13"
+actix-web = { version = "4.0.1", features = ["openssl"] }
+actix-web-actors = "4.1.0"
+actix-files = "0.6.0"
 openssl = "0.10"
 rcgen = "0.9"
 arc-swap = "1.5"

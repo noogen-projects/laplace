@@ -2,6 +2,10 @@
     margin-bottom: 0;
 }
 
+.sig-in-field {
+    padding: 10px;
+}
+
 .expand {
     width: 100%;
 }

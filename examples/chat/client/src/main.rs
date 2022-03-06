@@ -509,14 +509,14 @@ impl Root {
             ListItem::simple().child(html! {
                 <span class = "mdc-typography--overline">{ "Enter or generate a keypair" }</span>
             }),
-            ListItem::simple().child(
+            ListItem::simple().class("sig-in-field").child(
                 TextField::outlined()
                     .id("public-key")
                     .class("expand")
                     .label("Public key")
                     .on_input(switch_buttons),
             ),
-            ListItem::simple().child(
+            ListItem::simple().class("sig-in-field").child(
                 TextField::outlined()
                     .id("secret-key")
                     .class("expand")
