@@ -8,7 +8,7 @@ authors = [
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/noogen-projects/laplace"
-description = "The server of the local-firs web-application platform"
+description = "The server of the local-first web-application platform"
 
 [dependencies]
 async-std = "1.9"

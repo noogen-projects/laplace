@@ -1,6 +1,6 @@
 # Laplace
 
-The local-firs web-application platform for the decentralized web.
+The local-first web-application platform for the decentralized web.
 
 ## Build
 
