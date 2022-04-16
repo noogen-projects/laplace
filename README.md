@@ -2,6 +2,12 @@
 
 The local-first web-application platform for the decentralized web.
 
+Look at the traditional centralized web-applications architecture vs. the local-first web-applications architecture:
+![<img src="doc/web_apps_arch.jpg" alt="traditional and local-first web-applications architecture" width="50%"/>](doc/web_apps_arch.jpg)
+
+The Laplace high-level architecture is shown in the diagram below:
+![laplace architecture](doc/laplace_arch.jpg)
+
 ## Build
 
 Building Laplace requires the latest `stable` and `nightly` Rust toolchains, the `wasm32` targets and `cargo-make` and
