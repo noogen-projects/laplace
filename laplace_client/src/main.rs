@@ -10,7 +10,7 @@ use wasm_web_helpers::{
     error::Result,
     fetch::{JsonFetcher, Response},
 };
-use yew::{self, classes, html, start_app_in_element, Callback, Component, Context, Html};
+use yew::{self, classes, html, Callback, Component, Context, Html};
 use yew_mdc_widgets::{
     auto_init, console,
     dom::{self, existing::JsObjectAccess, JsValue},
@@ -277,5 +277,5 @@ fn callback(ctx: &Context<Root>) -> Callback<Result<(Response, Result<LappRespon
 
 fn main() {
     let root = dom::existing::get_element_by_id("root");
-    start_app_in_element::<Root>(root);
+    yew::Renderer::<Root>::with_root(root).render();
 }

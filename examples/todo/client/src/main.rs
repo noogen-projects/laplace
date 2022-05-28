@@ -399,5 +399,5 @@ fn callback(ctx: &Context<Root>) -> Callback<Result<(WebResponse, Result<Respons
 }
 
 fn main() {
-    yew::start_app::<Root>();
+    yew::Renderer::<Root>::new().render();
 }

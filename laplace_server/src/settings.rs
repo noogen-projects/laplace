@@ -103,12 +103,12 @@ pub struct Settings {
 
 impl Settings {
     pub fn new(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
-        let mut settings = Config::new();
-        settings
-            .merge(File::from(path.as_ref()))?
+        let config = Config::builder()
+            .add_source(File::from(path.as_ref()))
             // Add in settings from the environment (with a prefix of LAPLACE)
-            // Eg.. `LAPLACE_HTTP.PORT=8090 laplace_server` would set the `http.port` key
-            .merge(Environment::with_prefix("LAPLACE").separator("."))?;
-        settings.try_into()
+            // Eg.. `LAPLACE_HTTP.PORT=8090 laplace_server` would set the `http.newport` key
+            .add_source(Environment::with_prefix("LAPLACE").separator("."))
+            .build()?;
+        config.try_deserialize()
     }
 }

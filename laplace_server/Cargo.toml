@@ -23,7 +23,7 @@ bs58 = "0.4"
 clap = { version = "3.0", features = ["derive"] }
 borsh = "0.9"
 futures = "0.3"
-libp2p = { version = "0.42", features = ["tcp-tokio", "mdns"] }
+libp2p = { version = "0.44", features = ["tcp-tokio", "mdns"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
@@ -31,11 +31,11 @@ thiserror = "1.0"
 derive_more = "0.99"
 log = "0.4"
 flexi_logger = "0.22"
-config = "0.11"
+config = "0.13"
 toml = "0.5"
 wasmer = "2.1"
 wasmer-wasi = "2.1"
-rusqlite = { version = "0.26", features = ["bundled"] }
+rusqlite = { version = "0.27", features = ["bundled"] }
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls"] }
 laplace_common = { path = "../laplace_common" }
 laplace_wasm = { path = "../laplace_wasm" }

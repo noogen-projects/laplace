@@ -544,5 +544,5 @@ fn callback(ctx: &Context<Root>) -> Callback<Result<(WebResponse, Result<Respons
 
 fn main() {
     let root = dom::existing::get_element_by_id("root");
-    yew::start_app_in_element::<Root>(root);
+    yew::Renderer::<Root>::with_root(root).render();
 }

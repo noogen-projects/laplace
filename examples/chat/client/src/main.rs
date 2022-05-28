@@ -708,5 +708,5 @@ fn to_websocket_message(msg: &WsMessage) -> websocket::Message {
 
 fn main() {
     let root = dom::existing::get_element_by_id("root");
-    yew::start_app_in_element::<Root>(root);
+    yew::Renderer::<Root>::with_root(root).render();
 }
