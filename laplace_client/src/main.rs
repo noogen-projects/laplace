@@ -1,4 +1,4 @@
-use std::{borrow::Cow, convert::TryFrom};
+use std::{borrow::Cow, collections::HashMap, convert::TryFrom};
 
 use anyhow::{anyhow, Context as _, Error};
 use laplace_common::{
@@ -14,8 +14,16 @@ use yew::{self, classes, html, Callback, Component, Context, Html};
 use yew_mdc_widgets::{
     auto_init, console,
     dom::{self, existing::JsObjectAccess, JsValue},
+    wasm_bindgen::{
+        self,
+        prelude::{wasm_bindgen, JsError},
+    },
     Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
 };
+
+use self::i18n::label::*;
+
+mod i18n;
 
 type Lapp = CommonLapp<String>;
 type LappResponse = CommonLappResponse<'static, String, Cow<'static, CommonLapp<String>>>;
@@ -156,9 +164,11 @@ impl Component for Root {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let i18n = i18n::load();
+
         let drawer = Drawer::new()
             .id("app-drawer")
-            .title(html! { <h3 tabindex = 0>{ "Settings" }</h3> })
+            .title(html! { <h3 tabindex = 0>{ i18n.text(SETTINGS) }</h3> })
             .modal();
 
         let top_app_bar = TopAppBar::new()
@@ -182,7 +192,7 @@ impl Component for Root {
 
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
-                            <h1 class = "title mdc-typography--headline5">{ "Applications" }</h1>
+                            <h1 class = "title mdc-typography--headline5">{ i18n.text(APPLICATIONS) }</h1>
                             <div class = "lapps-table">
                                 { self.lapps.iter().map(|lapp| self.view_lapp(ctx, lapp)).collect::<Html>() }
                             </div>
@@ -278,4 +288,16 @@ fn callback(ctx: &Context<Root>) -> Callback<Result<(Response, Result<LappRespon
 fn main() {
     let root = dom::existing::get_element_by_id("root");
     yew::Renderer::<Root>::with_root(root).render();
+}
+
+#[wasm_bindgen]
+pub fn add_translations(translations: JsValue) -> std::result::Result<(), JsError> {
+    let translations: Vec<(String, HashMap<String, String>)> = translations.into_serde()?;
+    i18n::add_translations(translations);
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn switch_lang(lang: &str) -> bool {
+    i18n::switch_lang(lang)
 }

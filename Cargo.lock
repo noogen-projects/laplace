@@ -2461,8 +2461,10 @@ name = "laplace_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "laplace_common",
  "laplace_yew",
+ "lazy_static",
  "serde",
  "serde_json",
  "wasm-web-helpers",
