@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 
 pub type TextMap = HashMap<String, String>;
 
-pub const DEFAULT_LANG: &'static str = "en";
+pub const DEFAULT_LANG: &str = "en";
 
 lazy_static! {
     static ref CURRENT_LANG: ArcSwap<String> = ArcSwap::from_pointee(DEFAULT_LANG.to_string());
@@ -13,9 +13,9 @@ lazy_static! {
 }
 
 pub mod label {
-    pub const SETTINGS: &'static str = "Settings";
-    pub const APPLICATIONS: &'static str = "Applications";
-    pub const ADD_LAPP: &'static str = "Add lapp";
+    pub const SETTINGS: &str = "Settings";
+    pub const APPLICATIONS: &str = "Applications";
+    pub const ADD_LAPP: &str = "Add lapp";
 }
 
 pub fn default_translations() -> HashMap<String, TextMap> {
@@ -53,7 +53,7 @@ pub fn switch_lang(lang: impl Into<String>) -> bool {
 
 pub fn add_translations(translations: Vec<(String, TextMap)>) {
     TRANSLATIONS.rcu(|old_translations| {
-        let mut new_translations = HashMap::clone(&old_translations);
+        let mut new_translations = HashMap::clone(old_translations);
         for (lang, text_map) in &translations {
             new_translations.insert(lang.clone(), text_map.clone());
         }
@@ -68,7 +68,7 @@ pub struct I18n {
 
 impl I18n {
     pub fn text<'a>(&'a self, label: &'a str) -> &'a str {
-        self.translate(label).unwrap_or_else(|| label)
+        self.translate(label).unwrap_or(label)
     }
 
     fn translate(&self, label: &str) -> Option<&str> {
