@@ -3,6 +3,7 @@ pub use actix_web;
 
 use std::{fs::File, io::Write};
 
+use actix_easy_multipart::extractor::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
@@ -28,6 +29,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         .expect("Lapps provider should be constructed")?;
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = settings.http.access_token.clone().unwrap_or_default();
+    let upload_file_limit = settings.http.upload_file_limit;
 
     if settings.http.print_url {
         let access_query = if !laplace_access_token.is_empty() {
@@ -50,6 +52,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
 
         let mut app = App::new()
             .app_data(web::Data::new(lapps_provider.clone()))
+            .app_data(MultipartFormConfig::default().file_limit(upload_file_limit))
             .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::NormalizePath::trim())
             .wrap_fn({
@@ -80,7 +83,8 @@ pub async fn run(settings: Settings) -> AppResult<()> {
                 }),
             )
             .route(&Lapp::main_uri("lapps"), web::get().to(handler::get_lapps))
-            .route(&Lapp::main_uri("lapp"), web::post().to(handler::update_lapp));
+            .route(&Lapp::main_uri("lapp/add"), web::post().to(handler::add_lapp))
+            .route(&Lapp::main_uri("lapp/update"), web::post().to(handler::update_lapp));
 
         lapps_provider.load_lapps();
         for lapp in lapps_provider.lapps_iter() {

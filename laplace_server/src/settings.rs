@@ -10,6 +10,7 @@ pub struct HttpSettings {
     pub port: u16,
     pub web_root: PathBuf,
     pub access_token: Option<String>,
+    pub upload_file_limit: usize,
     pub print_url: bool,
 }
 
@@ -20,6 +21,7 @@ impl Default for HttpSettings {
             port: 8080,
             web_root: PathBuf::new(),
             access_token: None,
+            upload_file_limit: 2 * 1024 * 1024 * 1024,
             print_url: true,
         }
     }

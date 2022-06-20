@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs, io,
-    path::Path,
+    path::PathBuf,
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
@@ -15,12 +15,14 @@ use crate::{
 
 pub struct LappsManager {
     lapps: HashMap<String, RwLock<Lapp>>,
+    lapps_path: PathBuf,
     http_client: reqwest::blocking::Client,
 }
 
 impl LappsManager {
-    pub fn new(lapps_path: impl AsRef<Path>) -> io::Result<Self> {
-        fs::read_dir(lapps_path)?
+    pub fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
+        let lapps_path = lapps_path.into();
+        fs::read_dir(&lapps_path)?
             .map(|entry| {
                 entry.and_then(|dir| {
                     let name = dir.file_name().into_string().map_err(|invalid_name| {
@@ -33,7 +35,11 @@ impl LappsManager {
             .collect::<io::Result<_>>()
             .map(|lapps| {
                 let http_client = reqwest::blocking::Client::new();
-                Self { lapps, http_client }
+                Self {
+                    lapps,
+                    lapps_path,
+                    http_client,
+                }
             })
     }
 
@@ -64,6 +70,10 @@ impl LappsManager {
                     .expect("Lapp should be loaded");
             }
         }
+    }
+
+    pub fn lapp_dir(&self, lapp_name: impl AsRef<str>) -> PathBuf {
+        self.lapps_path.join(lapp_name.as_ref())
     }
 
     pub fn is_loaded(&self, lapp_name: impl AsRef<str>) -> bool {

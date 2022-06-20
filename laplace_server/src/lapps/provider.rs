@@ -1,4 +1,4 @@
-use std::{future::Future, io, ops::Deref, path::Path, sync::Arc};
+use std::{future::Future, io, ops::Deref, path::PathBuf, sync::Arc};
 
 use actix_web::HttpResponse;
 use futures::future;
@@ -13,7 +13,7 @@ use crate::{
 pub struct LappsProvider(Arc<LappsManager>);
 
 impl LappsProvider {
-    pub fn new(lapps_path: impl AsRef<Path>) -> io::Result<Self> {
+    pub fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
         LappsManager::new(lapps_path).map(|manager| Self(Arc::new(manager)))
     }
 

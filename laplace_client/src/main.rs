@@ -10,6 +10,7 @@ use wasm_web_helpers::{
     error::Result,
     fetch::{JsonFetcher, Response},
 };
+use web_sys::{FormData, HtmlInputElement};
 use yew::{self, classes, html, Callback, Component, Context, Html};
 use yew_mdc_widgets::{
     auto_init, console,
@@ -18,7 +19,8 @@ use yew_mdc_widgets::{
         self,
         prelude::{wasm_bindgen, JsError},
     },
-    Chip, ChipSet, CustomEvent, Drawer, Element, IconButton, MdcWidget, Switch, TopAppBar,
+    Button, Chip, ChipSet, CustomEvent, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, Switch,
+    TopAppBar,
 };
 
 use self::i18n::label::*;
@@ -66,6 +68,7 @@ enum Msg {
     Fetch(LappResponse),
     SwitchLapp(String),
     UpdatePermission(PermissionUpdate),
+    AddLar,
     Error(Error),
 }
 
@@ -121,7 +124,7 @@ impl Component for Root {
                 if let Some(lapp) = self.lapps.iter_mut().find(|lapp| lapp.name() == name) {
                     lapp.switch_enabled();
 
-                    let uri = Lapp::main_uri("lapp");
+                    let uri = Lapp::main_uri("lapp/update");
                     if let Ok(body) = serde_json::to_string(
                         &UpdateQuery::new(lapp.name().to_string())
                             .enabled(lapp.enabled())
@@ -143,7 +146,7 @@ impl Component for Root {
                 permission,
                 allow,
             }) => {
-                let uri = Lapp::main_uri("lapp");
+                let uri = Lapp::main_uri("lapp/update");
                 if let Ok(body) = serde_json::to_string(
                     &UpdateQuery::new(lapp_name)
                         .update_permission(permission, allow)
@@ -156,6 +159,7 @@ impl Component for Root {
                 }
                 false
             },
+            Msg::AddLar => false,
             Msg::Error(err) => {
                 console::error!(&format!("{}", err));
                 true
@@ -169,6 +173,23 @@ impl Component for Root {
         let drawer = Drawer::new()
             .id("app-drawer")
             .title(html! { <h3 tabindex = 0>{ i18n.text(SETTINGS) }</h3> })
+            .content(
+                List::ul()
+                    .divider()
+                    .item(
+                        ListItem::new()
+                            .icon("upload")
+                            .text(i18n.text(ADD_LAPP))
+                            .attr("tabindex", "0")
+                            .on_click(|_| {
+                                dom::existing::get_element_by_id::<Element>("app-drawer")
+                                    .get("MDCDrawer")
+                                    .set("open", false);
+                                Dialog::open_existing("add-lapp-dialog");
+                            }),
+                    )
+                    .markup_only(),
+            )
             .modal();
 
         let top_app_bar = TopAppBar::new()
@@ -182,6 +203,45 @@ impl Component for Root {
                 drawer.set("open", !opened);
             });
 
+        let add_lapp_dialog = Dialog::new()
+            .id("add-lapp-dialog")
+            .title(html! { <h2 tabindex = 0> { i18n.text(ADD_LAPP) } </h2> })
+            .content(List::ul().item(html! {
+                <div>
+                    <input id = "lar-selector" name = "lar" type = "file" accept = ".lar, .zip" />
+                </div>
+            }))
+            .action(
+                Button::new()
+                    .label("Cancel")
+                    .class(Dialog::BUTTON_CLASS)
+                    .on_click(|_| Dialog::close_existing("add-lapp-dialog")),
+            )
+            .action(Button::new().label("Add").class(Dialog::BUTTON_CLASS).on_click({
+                let send_lar_callback = callback(ctx);
+
+                ctx.link().callback(move |_| {
+                    let files = dom::existing::get_element_by_id::<HtmlInputElement>("lar-selector").files();
+                    if let Some(file) = files.and_then(|files| files.get(0)) {
+                        match FormData::new() {
+                            Ok(form_data) => {
+                                if let Err(err) = form_data.append_with_blob("lar", &file) {
+                                    return Msg::Error(anyhow!("Append file to form data error: {:?}", err));
+                                }
+
+                                let callback = send_lar_callback.clone();
+                                JsonFetcher::send_post(Lapp::main_uri("lapp/add"), form_data, move |response_result| {
+                                    callback.emit(response_result)
+                                });
+                                Dialog::close_existing("add-lapp-dialog");
+                            },
+                            Err(err) => return Msg::Error(anyhow!("Creation form data error: {:?}", err)),
+                        }
+                    }
+                    Msg::AddLar
+                })
+            }));
+
         html! {
             <>
                 { drawer }
@@ -189,6 +249,7 @@ impl Component for Root {
 
                 <div class = { classes!("app-content", Drawer::APP_CONTENT_CLASS) }>
                     { top_app_bar }
+                    { add_lapp_dialog }
 
                     <div class = "mdc-top-app-bar--fixed-adjust">
                         <div class = "content-container">
@@ -214,7 +275,7 @@ impl Root {
         JsonFetcher::send_get(uri, move |response_result| callback.emit(response_result));
     }
 
-    pub fn send_post(ctx: &Context<Self>, uri: impl AsRef<str>, body: impl Into<String>) {
+    pub fn send_post(ctx: &Context<Self>, uri: impl AsRef<str>, body: impl Into<JsValue>) {
         let callback = callback(ctx);
         JsonFetcher::send_post(uri, body, move |response_result| callback.emit(response_result));
     }

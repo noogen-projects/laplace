@@ -15,6 +15,7 @@ lazy_static! {
 pub mod label {
     pub const SETTINGS: &'static str = "Settings";
     pub const APPLICATIONS: &'static str = "Applications";
+    pub const ADD_LAPP: &'static str = "Add lapp";
 }
 
 pub fn default_translations() -> HashMap<String, TextMap> {
@@ -23,6 +24,7 @@ pub fn default_translations() -> HashMap<String, TextMap> {
         [
             (label::SETTINGS.into(), "Settings".into()),
             (label::APPLICATIONS.into(), "Applications".into()),
+            (label::ADD_LAPP.into(), "Add lapp".into()),
         ]
         .into(),
     )]

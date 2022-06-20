@@ -42,6 +42,9 @@ pub enum ServerError {
     #[error("Wrong parse JSON: {0}")]
     ParseJsonError(#[from] serde_json::Error),
 
+    #[error("Zip error: {0}")]
+    ZipError(#[from] zip::result::ZipError),
+
     #[error("Lapps service poisoned lock: another task failed inside")]
     LappsServiceNotLock,
 
@@ -56,6 +59,15 @@ pub enum ServerError {
 
     #[error("Lapp '{0}' is not loaded")]
     LappNotLoaded(String),
+
+    #[error("Lapp '{0}' already exists")]
+    LappAlreadyExists(String),
+
+    #[error("Path '{0}' is not lapp directory")]
+    WrongLappDirectory(String),
+
+    #[error("Unknown lapp name")]
+    UnknownLappName,
 
     #[error("Permission '{}' denied for lapp '{0}'", .1.as_str())]
     LappPermissionDenied(String, Permission),

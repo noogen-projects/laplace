@@ -1,6 +1,8 @@
-use std::sync::Arc;
+use std::{io, sync::Arc};
 
+use actix_easy_multipart::{extractor::MultipartForm, File, FromMultipart};
 use actix_web::{web, HttpResponse};
+use zip::ZipArchive;
 
 use crate::{
     error::{ServerError, ServerResult},
@@ -29,11 +31,54 @@ pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse 
         .await
 }
 
+#[derive(FromMultipart)]
+pub struct LarUpload {
+    pub lar: File,
+}
+
+pub async fn add_lapp(lapps_service: web::Data<LappsProvider>, form: MultipartForm<LarUpload>) -> HttpResponse {
+    lapps_service
+        .into_inner()
+        .handle(move |lapps_manager| async move { process_add_lapp(lapps_manager, form.into_inner().lar).await })
+        .await
+}
+
 pub async fn update_lapp(lapps_service: web::Data<LappsProvider>, body: String) -> HttpResponse {
     lapps_service
         .into_inner()
         .handle(move |lapps_manager| async move { process_update_lapp(lapps_manager, body).await })
         .await
+}
+
+async fn process_add_lapp(lapps_manager: Arc<LappsManager>, lar: File) -> ServerResult<HttpResponse> {
+    let file_name = lar.filename.as_ref().ok_or(ServerError::UnknownLappName)?;
+    let lapp_name = file_name
+        .strip_suffix(".zip")
+        .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));
+
+    extract_lar(lapps_manager, lapp_name, ZipArchive::new(&lar.file)?)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+fn extract_lar<R: io::Read + io::Seek>(
+    lapps_manager: Arc<LappsManager>,
+    lapp_name: &str,
+    mut archive: ZipArchive<R>,
+) -> ServerResult<()> {
+    let lapp_dir = lapps_manager.lapp_dir(lapp_name);
+
+    if lapp_dir.exists() {
+        if !lapp_dir.is_dir() {
+            return Err(ServerError::WrongLappDirectory(lapp_dir.display().to_string()));
+        }
+
+        if lapp_dir.read_dir()?.next().is_some() {
+            return Err(ServerError::LappAlreadyExists(lapp_name.into()));
+        }
+    }
+
+    archive.extract(lapp_dir).map_err(Into::into)
 }
 
 async fn process_update_lapp(lapps_manager: Arc<LappsManager>, body: String) -> ServerResult<HttpResponse> {
