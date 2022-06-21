@@ -23,12 +23,13 @@ pub mod service;
 pub mod settings;
 
 pub async fn run(settings: Settings) -> AppResult<()> {
-    let lapps_path = settings.lapps.path.clone();
-    let lapps_provider = web::Data::new(
-        web::block(move || LappsProvider::new(lapps_path))
+    let lapps_dir = settings.lapps.path.clone();
+    let lapps_provider = web::Data::new({
+        let lapps_dir = lapps_dir.clone();
+        web::block(move || LappsProvider::new(lapps_dir))
             .await
-            .expect("Lapps provider should be constructed")?,
-    );
+            .expect("Lapps provider should be constructed")?
+    });
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = settings.http.access_token.clone().unwrap_or_default();
     let upload_file_limit = settings.http.upload_file_limit;
@@ -48,11 +49,13 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         );
     }
 
+    lapps_provider.read_manager().expect("Lapps is not locked").load_lapps();
+
     let http_server = HttpServer::new(move || {
         let static_dir = web_root.join(Lapp::static_dir_name());
         let laplace_uri = format!("/{}", Lapp::main_name());
 
-        let mut app = App::new()
+        App::new()
             .app_data(web::Data::clone(&lapps_provider))
             .app_data(MultipartFormConfig::default().file_limit(upload_file_limit))
             .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
@@ -76,23 +79,66 @@ pub async fn run(settings: Settings) -> AppResult<()> {
                     }
                 }),
             )
-            .route(
-                &laplace_uri,
-                web::get().to(move || {
-                    let index_file = static_dir.join(Lapp::index_file_name());
-                    async { NamedFile::open(index_file) }
-                }),
-            )
-            .route(&Lapp::main_uri("lapps"), web::get().to(handler::get_lapps))
-            .route(&Lapp::main_uri("lapp/add"), web::post().to(handler::add_lapp))
-            .route(&Lapp::main_uri("lapp/update"), web::post().to(handler::update_lapp));
+            .service(
+                web::scope(&laplace_uri)
+                    .service(web::resource(["", "/"]).route(web::get().to(move || {
+                        let index_file = static_dir.join(Lapp::index_file_name());
+                        async { NamedFile::open(index_file) }
+                    })))
+                    .route(
+                        &format!("/{}/{{file_path:.*}}", Lapp::static_dir_name()),
+                        web::get().to({
+                            let lapps_dir = lapps_dir.clone();
+                            move |file_path: web::Path<String>, request| {
+                                let file_path = lapps_dir
+                                    .join(Lapp::main_name())
+                                    .join(Lapp::static_dir_name())
+                                    .join(&*file_path);
 
-        let lapps_manager = lapps_provider.read_manager().expect("Lapps is not locked");
-        lapps_manager.load_lapps();
-        for lapp in lapps_manager.lapps_iter() {
-            app = app.configure(lapp.read().expect("Lapp is not readable").http_configure());
-        }
-        app
+                                async move { NamedFile::open(file_path).map(|file| file.into_response(&request)) }
+                            }
+                        }),
+                    )
+                    .route("/lapps", web::get().to(handler::get_lapps))
+                    .route("/lapp/add", web::post().to(handler::add_lapp))
+                    .route("/lapp/update", web::post().to(handler::update_lapp)),
+            )
+            .service(
+                web::scope("/{lapp_name}")
+                    .service(
+                        web::resource(["", "/"]).route(web::get().to(move |lapps_service, lapp_name, request| {
+                            lapps::handler::index_file(lapps_service, lapp_name, request)
+                        })),
+                    )
+                    .route(
+                        &format!("/{}/{{file_path:.*}}", Lapp::static_dir_name()),
+                        web::get().to({
+                            move |lapps_service, path: web::Path<(String, String)>, request| {
+                                let (lapp_name, file_path) = path.into_inner();
+                                lapps::handler::static_file(lapps_service, lapp_name, file_path, request)
+                            }
+                        }),
+                    )
+                    .route(
+                        "/ws",
+                        web::get().to(move |lapps_service, lapp_name, request, stream| {
+                            lapps::handler::ws_start(lapps_service, lapp_name, request, stream)
+                        }),
+                    )
+                    .route(
+                        "/p2p",
+                        web::post().to(move |lapps_service, lapp_name, request| {
+                            lapps::handler::gossipsub_start(lapps_service, lapp_name, request)
+                        }),
+                    )
+                    .route(
+                        "/{tail}*",
+                        web::route().to(move |lapps_service, path: web::Path<(String, String)>, request, body| {
+                            let (lapp_name, _tail) = path.into_inner();
+                            lapps::handler::http(lapps_service, lapp_name, request, body)
+                        }),
+                    ),
+            )
     });
 
     let http_server_addr = (settings.http.host.as_str(), settings.http.port);

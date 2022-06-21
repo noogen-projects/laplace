@@ -11,8 +11,6 @@ use std::{
     sync::{Arc, Mutex, RwLockReadGuard},
 };
 
-use actix_files::Files;
-use actix_web::web;
 use arc_swap::ArcSwapOption;
 use borsh::BorshDeserialize;
 use log::error;
@@ -24,7 +22,6 @@ use wasmer_wasi::WasiState;
 use crate::{
     error::{ServerError, ServerResult},
     lapps::{
-        handler,
         import::{
             database::{self, DatabaseEnv},
             http::{self, HttpEnv},
@@ -165,56 +162,6 @@ impl Lapp {
             service::LappService::stop(sender).await
         } else {
             false
-        }
-    }
-
-    pub fn http_configure(&self) -> impl FnOnce(&mut web::ServiceConfig) + '_ {
-        let name = self.name().to_string();
-        let root_uri = self.root_uri();
-        let static_uri = self.static_uri();
-        let static_dir = self.static_dir();
-        let is_main_client = self.is_main();
-
-        move |config| {
-            config
-                .route(
-                    &root_uri,
-                    web::get().to({
-                        let name = name.clone();
-                        move |lapps_service, request| handler::index_file(lapps_service, request, name.clone())
-                    }),
-                )
-                .service(Files::new(&static_uri, static_dir).index_file(Self::index_file_name()));
-
-            if !is_main_client {
-                config.service(
-                    web::scope(&root_uri)
-                        .route(
-                            "/ws",
-                            web::get().to({
-                                let name = name.clone();
-                                move |lapps_service, request, stream| {
-                                    handler::ws_start(lapps_service, request, stream, name.clone())
-                                }
-                            }),
-                        )
-                        .route(
-                            "/p2p",
-                            web::post().to({
-                                let name = name.clone();
-                                move |lapps_service, request| {
-                                    handler::gossipsub_start(lapps_service, request, name.clone())
-                                }
-                            }),
-                        )
-                        .route(
-                            "/{tail}*",
-                            web::route().to(move |lapps_service, request, body| {
-                                handler::http(lapps_service, request, body, name.clone())
-                            }),
-                        ),
-                );
-            }
         }
     }
 

@@ -12,7 +12,7 @@ use laplace_wasm::http;
 use crate::{
     convert,
     error::ServerResult,
-    lapps::{ExpectedInstance, Instance, LappsProvider, Permission},
+    lapps::{ExpectedInstance, Instance, Lapp, LappsProvider, Permission},
     service,
     service::{
         gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService},
@@ -22,12 +22,12 @@ use crate::{
 
 pub async fn index_file(
     lapps_service: web::Data<LappsProvider>,
+    lapp_name: web::Path<String>,
     request: HttpRequest,
-    lapp_name: String,
 ) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle_client_http(lapp_name, move |lapps_provider, lapp_name| {
+        .handle_client_http(lapp_name.into_inner(), move |lapps_provider, lapp_name| {
             lapps_provider
                 .read_manager()
                 .and_then(|manager| manager.lapp(&lapp_name).map(|lapp| lapp.index_file()))
@@ -37,11 +37,35 @@ pub async fn index_file(
         .await
 }
 
+pub async fn static_file(
+    lapps_service: web::Data<LappsProvider>,
+    lapp_name: String,
+    file_path: String,
+    request: HttpRequest,
+) -> HttpResponse {
+    lapps_service
+        .into_inner()
+        .handle_client_http(lapp_name, move |lapps_provider, lapp_name| {
+            lapps_provider
+                .read_manager()
+                .map(|manager| {
+                    let file_path = manager
+                        .lapp_dir(&lapp_name)
+                        .join(Lapp::static_dir_name())
+                        .join(&file_path);
+
+                    async move { Ok(NamedFile::open(file_path)?.into_response(&request)) }.left_future()
+                })
+                .unwrap_or_else(|err| future::ready(Err(err)).right_future())
+        })
+        .await
+}
+
 pub async fn http(
     lapps_service: web::Data<LappsProvider>,
+    lapp_name: String,
     request: HttpRequest,
     body: Option<web::Bytes>,
-    lapp_name: String,
 ) -> HttpResponse {
     lapps_service
         .into_inner()
@@ -72,13 +96,13 @@ async fn process_http(
 
 pub async fn ws_start(
     lapps_service: web::Data<LappsProvider>,
+    lapp_name: web::Path<String>,
     request: HttpRequest,
     stream: web::Payload,
-    lapp_name: String,
 ) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle_ws(lapp_name, move |lapps_provider, lapp_name| {
+        .handle_ws(lapp_name.into_inner(), move |lapps_provider, lapp_name| {
             lapps_provider
                 .read_manager()
                 .and_then(|manager| {
@@ -113,14 +137,14 @@ async fn process_ws_start(
 
 pub async fn gossipsub_start(
     lapps_service: web::Data<LappsProvider>,
+    lapp_name: web::Path<String>,
     request: web::Json<Peer>,
-    lapp_name: String,
 ) -> HttpResponse {
     lapps_service
         .into_inner()
         .handle_allowed(
             &[Permission::ClientHttp, Permission::Tcp],
-            lapp_name,
+            lapp_name.into_inner(),
             move |lapps_provider, lapp_name| {
                 lapps_provider
                     .read_manager()
