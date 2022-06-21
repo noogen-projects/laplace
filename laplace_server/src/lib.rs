@@ -24,9 +24,11 @@ pub mod settings;
 
 pub async fn run(settings: Settings) -> AppResult<()> {
     let lapps_path = settings.lapps.path.clone();
-    let lapps_provider = web::block(move || LappsProvider::new(lapps_path))
-        .await
-        .expect("Lapps provider should be constructed")?;
+    let lapps_provider = web::Data::new(
+        web::block(move || LappsProvider::new(lapps_path))
+            .await
+            .expect("Lapps provider should be constructed")?,
+    );
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = settings.http.access_token.clone().unwrap_or_default();
     let upload_file_limit = settings.http.upload_file_limit;
@@ -51,15 +53,14 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         let laplace_uri = format!("/{}", Lapp::main_name());
 
         let mut app = App::new()
-            .app_data(web::Data::new(lapps_provider.clone()))
+            .app_data(web::Data::clone(&lapps_provider))
             .app_data(MultipartFormConfig::default().file_limit(upload_file_limit))
             .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::NormalizePath::trim())
-            .wrap_fn({
-                let lapps_provider = lapps_provider.clone();
-                let laplace_access_token = laplace_access_token.clone();
-                auth::create_check_access_middleware(lapps_provider, laplace_access_token)
-            })
+            .wrap_fn(auth::create_check_access_middleware(
+                web::Data::clone(&lapps_provider),
+                laplace_access_token.clone(),
+            ))
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
             .service(Files::new(&Lapp::main_static_uri(), &static_dir).index_file(Lapp::index_file_name()))
@@ -86,8 +87,9 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .route(&Lapp::main_uri("lapp/add"), web::post().to(handler::add_lapp))
             .route(&Lapp::main_uri("lapp/update"), web::post().to(handler::update_lapp));
 
-        lapps_provider.load_lapps();
-        for lapp in lapps_provider.lapps_iter() {
+        let lapps_manager = lapps_provider.read_manager().expect("Lapps is not locked");
+        lapps_manager.load_lapps();
+        for lapp in lapps_manager.lapps_iter() {
             app = app.configure(lapp.read().expect("Lapp is not readable").http_configure());
         }
         app

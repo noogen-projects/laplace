@@ -43,6 +43,13 @@ impl LappsManager {
             })
     }
 
+    pub fn insert_lapp(&mut self, lapp_name: impl Into<String>) {
+        let lapp_name = lapp_name.into();
+        let root_dir = self.lapps_path.join(&lapp_name);
+        self.lapps
+            .insert(lapp_name.clone(), RwLock::new(Lapp::new(lapp_name, root_dir)));
+    }
+
     pub fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         let http_client = self.http_client.clone();
         lapp.instantiate(http_client)

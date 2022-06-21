@@ -2,9 +2,12 @@ use actix_web::{
     cookie::Cookie,
     dev::{Service, ServiceRequest, ServiceResponse},
     error::Error,
-    http, HttpResponse,
+    http, web, HttpResponse,
 };
-use futures::future::{self, Either, Ready};
+use futures::{
+    future::{self, Either, Ready},
+    FutureExt,
+};
 
 use crate::{
     error::error_response,
@@ -14,7 +17,7 @@ use crate::{
 pub type AccessServiceResult = Result<ServiceResponse, Error>;
 
 pub fn create_check_access_middleware<S>(
-    lapps_provider: LappsProvider,
+    lapps_provider: web::Data<LappsProvider>,
     laplace_access_token: impl Into<String>,
 ) -> impl Fn(ServiceRequest, &S) -> Either<S::Future, Ready<AccessServiceResult>> + Clone
 where
@@ -51,15 +54,22 @@ where
                 Either::Right(future::ok(request.into_response(HttpResponse::Forbidden().finish())))
             }
         } else {
-            match lapps_provider.lapp(lapp_name).map(|lapp| {
-                access_token.as_str() == lapp.settings().application.access_token.as_deref().unwrap_or_default()
-            }) {
-                Ok(true) => Either::Left(service.call(request)),
+            let is_access_allowed = lapps_provider
+                .read_manager()
+                .and_then(|manager| {
+                    manager.lapp(lapp_name).map(|lapp| {
+                        access_token.as_str() == lapp.settings().application.access_token.as_deref().unwrap_or_default()
+                    })
+                })
+                .map_err(error_response);
+
+            match is_access_allowed {
+                Ok(true) => service.call(request).left_future(),
                 Ok(false) => {
                     let response = request.into_response(HttpResponse::Forbidden().finish());
-                    Either::Right(future::ok(response))
+                    future::ok(response).right_future()
                 },
-                Err(err) => Either::Right(future::ok(request.into_response(error_response(err)))),
+                Err(err) => future::ok(request.into_response(error_response(err))).right_future(),
             }
         }
     }

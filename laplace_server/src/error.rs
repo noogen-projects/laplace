@@ -45,8 +45,8 @@ pub enum ServerError {
     #[error("Zip error: {0}")]
     ZipError(#[from] zip::result::ZipError),
 
-    #[error("Lapps service poisoned lock: another task failed inside")]
-    LappsServiceNotLock,
+    #[error("Lapps manager poisoned lock: another task failed inside")]
+    LappsManagerNotLock,
 
     #[error("Lapps poisoned lock")]
     LappNotLock,

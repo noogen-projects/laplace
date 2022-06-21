@@ -4,7 +4,7 @@ use actix_files::NamedFile;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws::WsResponseBuilder;
 use borsh::{BorshDeserialize, BorshSerialize};
-use futures::{future, TryFutureExt};
+use futures::{future, FutureExt, TryFutureExt};
 
 use laplace_common::{api::Peer, lapp::settings::GossipsubSettings};
 use laplace_wasm::http;
@@ -27,14 +27,12 @@ pub async fn index_file(
 ) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle_client_http(lapp_name, move |lapps_manager, lapp_name| {
-            lapps_manager
-                .lapp(&lapp_name)
-                .map(|lapp| {
-                    let index = lapp.index_file();
-                    future::Either::Left(async move { Ok(NamedFile::open(index)?.into_response(&request)) })
-                })
-                .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
+        .handle_client_http(lapp_name, move |lapps_provider, lapp_name| {
+            lapps_provider
+                .read_manager()
+                .and_then(|manager| manager.lapp(&lapp_name).map(|lapp| lapp.index_file()))
+                .map(|index| async move { Ok(NamedFile::open(index)?.into_response(&request)) }.left_future())
+                .unwrap_or_else(|err| future::ready(Err(err)).right_future())
         })
         .await
 }
@@ -80,14 +78,18 @@ pub async fn ws_start(
 ) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle_ws(lapp_name, move |lapps_manager, lapp_name| {
-            lapps_manager
-                .lapp_mut(&lapp_name)
-                .and_then(|mut lapp| lapp.run_service_if_needed())
-                .map(|lapp_service_sender| {
-                    future::Either::Left(process_ws_start(lapp_service_sender, lapp_name, request, stream))
+        .handle_ws(lapp_name, move |lapps_provider, lapp_name| {
+            lapps_provider
+                .read_manager()
+                .and_then(|manager| {
+                    manager
+                        .lapp_mut(&lapp_name)
+                        .and_then(|mut lapp| lapp.run_service_if_needed())
                 })
-                .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
+                .map(|lapp_service_sender| {
+                    process_ws_start(lapp_service_sender, lapp_name, request, stream).left_future()
+                })
+                .unwrap_or_else(|err| future::ready(Err(err)).right_future())
         })
         .await
 }
@@ -119,18 +121,22 @@ pub async fn gossipsub_start(
         .handle_allowed(
             &[Permission::ClientHttp, Permission::Tcp],
             lapp_name,
-            move |lapps_manager, lapp_name| {
-                lapps_manager
-                    .lapp_mut(&lapp_name)
-                    .and_then(|mut lapp| lapp.run_service_if_needed())
-                    .and_then(|lapp_service_sender| {
-                        lapps_manager.lapp(&lapp_name).map(|lapp| {
-                            future::Either::Left(process_gossipsub_start(
-                                lapp_service_sender,
-                                request,
-                                lapp.settings().network().gossipsub().clone(),
-                            ))
-                        })
+            move |lapps_provider, lapp_name| {
+                lapps_provider
+                    .read_manager()
+                    .and_then(|manager| {
+                        manager
+                            .lapp_mut(&lapp_name)
+                            .and_then(|mut lapp| lapp.run_service_if_needed())
+                            .and_then(|lapp_service_sender| {
+                                manager.lapp(&lapp_name).map(|lapp| {
+                                    future::Either::Left(process_gossipsub_start(
+                                        lapp_service_sender,
+                                        request,
+                                        lapp.settings().network().gossipsub().clone(),
+                                    ))
+                                })
+                            })
                     })
                     .unwrap_or_else(|err| future::Either::Right(future::ready(Err(err))))
             },
