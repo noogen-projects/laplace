@@ -12,24 +12,7 @@ use crate::{
 pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle(|lapps_provider| {
-            let result = lapps_provider.read_manager().and_then(|manager| {
-                manager
-                    .lapps_iter()
-                    .filter_map(|lapp| match lapp.read() {
-                        Ok(lapp) if lapp.is_main() => None,
-                        Ok(lapp) => Some(Ok(CommonLappGuard(lapp))),
-                        Err(_) => Some(Err(ServerError::LappNotLock)),
-                    })
-                    .collect::<ServerResult<Vec<_>>>()
-                    .map(|mut lapps| {
-                        lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
-                        HttpResponse::Ok().json(CommonLappResponse::lapps(lapps))
-                    })
-            });
-
-            async { result }
-        })
+        .handle(|lapps_provider| async { process_get_lapps(lapps_provider) })
         .await
 }
 
@@ -48,8 +31,25 @@ pub async fn add_lapp(lapps_service: web::Data<LappsProvider>, form: MultipartFo
 pub async fn update_lapp(lapps_service: web::Data<LappsProvider>, body: String) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle(move |lapps_manager| async move { process_update_lapp(lapps_manager, body).await })
+        .handle(move |lapps_provider| async move { process_update_lapp(lapps_provider, body).await })
         .await
+}
+
+fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<HttpResponse> {
+    lapps_provider.read_manager().and_then(|manager| {
+        manager
+            .lapps_iter()
+            .filter_map(|lapp| match lapp.read() {
+                Ok(lapp) if lapp.is_main() => None,
+                Ok(lapp) => Some(Ok(CommonLappGuard(lapp))),
+                Err(_) => Some(Err(ServerError::LappNotLock)),
+            })
+            .collect::<ServerResult<Vec<_>>>()
+            .map(|mut lapps| {
+                lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
+                HttpResponse::Ok().json(CommonLappResponse::lapps(lapps))
+            })
+    })
 }
 
 async fn process_add_lapp(lapps_provider: LappsProvider, lar: File) -> ServerResult<HttpResponse> {
@@ -59,9 +59,17 @@ async fn process_add_lapp(lapps_provider: LappsProvider, lar: File) -> ServerRes
         .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));
 
     extract_lar(&lapps_provider, lapp_name, ZipArchive::new(&lar.file)?)?;
-    lapps_provider.write_manager()?.insert_lapp(lapp_name);
 
-    Ok(HttpResponse::Ok().finish())
+    lapps_provider.write_manager().and_then(|mut manager| {
+        manager.insert_lapp(lapp_name);
+        let lapp = manager.lapp_mut(lapp_name)?;
+        if lapp.enabled() {
+            manager.load(lapp)?;
+        }
+        Ok(())
+    })?;
+
+    process_get_lapps(lapps_provider)
 }
 
 fn extract_lar<R: io::Read + io::Seek>(
