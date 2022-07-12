@@ -63,17 +63,13 @@ impl LappsManager {
     }
 
     pub fn load_lapps(&self) {
-        let http_client = self.http_client.clone();
         for (name, lapp_lock) in &self.lapps {
             let lapp = lapp_lock.read().expect("Lapp is not readable");
             if !lapp.is_main() && lapp.enabled() && !lapp.is_loaded() {
                 info!("Load lapp '{}'", name);
 
                 drop(lapp);
-                lapp_lock
-                    .write()
-                    .expect("Lapp is not writable")
-                    .instantiate(http_client.clone())
+                self.load(lapp_lock.write().expect("Lapp is not writable"))
                     .expect("Lapp should be loaded");
             }
         }

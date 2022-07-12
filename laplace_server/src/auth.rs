@@ -8,6 +8,7 @@ use futures::{
     future::{self, Either, Ready},
     FutureExt,
 };
+use openssl::rand::rand_bytes;
 
 use crate::{
     error::error_response,
@@ -15,6 +16,12 @@ use crate::{
 };
 
 pub type AccessServiceResult = Result<ServiceResponse, Error>;
+
+pub fn generate_token() -> String {
+    let mut buf = [0; 32];
+    rand_bytes(&mut buf).expect("Fail generation rand bytes");
+    bs58::encode(&buf).into_string()
+}
 
 pub fn create_check_access_middleware<S>(
     lapps_provider: web::Data<LappsProvider>,

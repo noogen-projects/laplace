@@ -17,7 +17,7 @@ strum = { version = "0.24", features = ["derive"] }
 yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
 wasm-dom = "0.1"
-wasm-web-helpers = "0.1"
+wasm-web-helpers = "0.2"
 gloo-console = "0.2"
 todo_common = { path = "../common" }
 laplace_yew = { path = "../../../laplace_yew" }

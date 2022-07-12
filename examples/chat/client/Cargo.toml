@@ -19,7 +19,7 @@ bs58 = "0.4"
 getrandom = { version = "0.2", features = ["js"] }
 yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
-wasm-web-helpers = "0.1"
+wasm-web-helpers = "0.2"
 web-sys = { version = "0.3", features = [
     "Window", "Document", "HtmlElement", "HtmlInputElement", "HtmlTextAreaElement", "CssStyleDeclaration", "Range",
     "Selection", "HtmlCollection"

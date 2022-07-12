@@ -31,7 +31,11 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .expect("Lapps provider should be constructed")?
     });
     let web_root = settings.http.web_root.clone();
-    let laplace_access_token = settings.http.access_token.clone().unwrap_or_default();
+    let laplace_access_token = settings
+        .http
+        .access_token
+        .clone()
+        .unwrap_or_else(|| auth::generate_token());
     let upload_file_limit = settings.http.upload_file_limit;
 
     if settings.http.print_url {
