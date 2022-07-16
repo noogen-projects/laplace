@@ -22,7 +22,3 @@ members = [
 
 [profile.release]
 lto = true
-
-# Remove this patch when PR https://github.com/yewstack/implicit-clone/pull/7 will be merged
-[patch.crates-io]
-implicit-clone = { git = "https://github.com/XX/implicit-clone", branch = "add_str_borrowing" }
