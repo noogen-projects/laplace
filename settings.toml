@@ -14,7 +14,7 @@ certificate_path = "cert/cert.pem"
 mdns_discovery_enabled = true
 
 [log]
-spec = "info,regalloc=warn,wasmer_compiler_cranelift=warn"
+spec = "info,regalloc=warn,wasmer_compiler_cranelift=warn,cranelift_codegen=warn"
 
 [lapps]
 path = "lapps"
