@@ -148,10 +148,12 @@ toolchain = "stable"
 args = ["build", "-p", "laplace_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
-[tasks.laplace]
+[tasks.laplace_client]
 env = { APP = "laplace" }
 run_task = "client"
-dependencies = ["laplace_server"]
+
+[tasks.laplace]
+dependencies = ["laplace_server", "laplace_client"]
 
 [tasks.run_laplace]
 command = "cargo"
@@ -160,14 +162,25 @@ args = ["run", "-p", "laplace_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
 
+[tasks.mobile_assets]
+script_runner = "@duckscript"
+script = '''
+rm -r target/mobile/assets
+mkdir target/mobile/assets/lapps/
+cp lapps/laplace target/mobile/assets/lapps/
+cp static target/mobile/assets/
+'''
+dependencies = ["choose_profile", "laplace_client"]
+
 [tasks.mobile]
 command = "cargo"
 toolchain = "stable"
 args = ["apk", "build", "--manifest-path", "laplace_mobile/Cargo.toml", "--target-dir", "target/mobile", "--lib", "${ADDITIONAL}"]
-dependencies = ["choose_profile"]
+dependencies = ["choose_profile", "mobile_assets"]
+
 
 [tasks.all]
-dependencies = ["laplace", "examples"]
+dependencies = ["laplace", "examples", "mobile"]
 
 [tasks.run]
 env = { RUSTFLAGS = "", RUST_LOG = "debug,regalloc=warn,wasmer_wasi=info,wasmer_compiler_cranelift=warn,cranelift_codegen=warn,h2=info,netlink_proto=info" }

@@ -9,7 +9,5 @@ format_macro_matchers = true
 imports_granularity = "Crate"
 newline_style = "Unix"
 overflow_delimited_expr = true
-report_fixme = "Always"
-report_todo = "Always"
 use_field_init_shorthand = true
 wrap_comments = true
