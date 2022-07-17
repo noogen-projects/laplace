@@ -1,8 +1,8 @@
-/target/
+**/target/
 /lapps/
 /cert/
 
 **/*.rs.bk
 
-.idea
-*.iml
+**/.idea
+**/*.iml

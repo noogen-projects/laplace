@@ -160,6 +160,12 @@ args = ["run", "-p", "laplace_server", "${ADDITIONAL}"]
 dependencies = ["choose_profile"]
 
 
+[tasks.mobile]
+command = "cargo"
+toolchain = "stable"
+args = ["apk", "build", "--manifest-path", "laplace_mobile/Cargo.toml", "--target-dir", "target/mobile", "--lib", "${ADDITIONAL}"]
+dependencies = ["choose_profile"]
+
 [tasks.all]
 dependencies = ["laplace", "examples"]
 

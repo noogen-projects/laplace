@@ -19,6 +19,9 @@ members = [
     "laplace_wasm_macro",
     "laplace_yew",
 ]
+exclude = [
+    "laplace_mobile",
+]
 
 [profile.release]
 lto = true
