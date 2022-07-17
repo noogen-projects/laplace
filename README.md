@@ -78,7 +78,7 @@ cargo +stable test --all-features --all-targets
 To check and perform formatting, use the following commands:
 
 ```shell script
-cargo +nightly fmt -- --check
+cargo +nightly fmt --check
 cargo +nightly fmt
 ```
 

@@ -179,10 +179,11 @@ args = ["apk", "build", "--manifest-path", "laplace_mobile/Cargo.toml", "--targe
 dependencies = ["choose_profile", "mobile_assets"]
 
 
-[tasks.all]
-dependencies = ["laplace", "examples", "mobile"]
-
 [tasks.run]
 env = { RUSTFLAGS = "", RUST_LOG = "debug,regalloc=warn,wasmer_wasi=info,wasmer_compiler_cranelift=warn,cranelift_codegen=warn,h2=info,netlink_proto=info" }
 run_task = "run_laplace"
-dependencies = ["all"]
+dependencies = ["laplace", "examples"]
+
+
+[tasks.all]
+dependencies = ["laplace", "examples", "mobile"]
