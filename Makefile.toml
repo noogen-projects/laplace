@@ -172,6 +172,11 @@ cp static target/mobile/assets/
 '''
 dependencies = ["choose_profile", "laplace_client"]
 
+[tasks.mobile_check]
+command = "cargo"
+toolchain = "stable"
+args = ["apk", "check", "--manifest-path", "laplace_mobile/Cargo.toml", "--target-dir", "target/mobile"]
+
 [tasks.mobile]
 command = "cargo"
 toolchain = "stable"

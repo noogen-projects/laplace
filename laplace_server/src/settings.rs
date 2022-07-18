@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use config::{Config, ConfigError, Environment, File};
-use serde::Deserialize;
+use config::{Config, Environment, File};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+pub use config::ConfigError;
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct HttpSettings {
     pub host: String,
@@ -27,7 +29,7 @@ impl Default for HttpSettings {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SslSettings {
     #[serde(default)]
     pub enabled: bool,
@@ -57,13 +59,13 @@ fn certificate_path_default() -> PathBuf {
     PathBuf::from("cert.pem")
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct P2pSettings {
     pub mdns_discovery_enabled: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LoggerSettings {
     pub spec: String,
@@ -81,7 +83,7 @@ impl Default for LoggerSettings {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LappsSettings {
     pub path: PathBuf,
@@ -93,7 +95,7 @@ impl Default for LappsSettings {
     }
 }
 
-#[derive(Default, Debug, Deserialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Settings {
     pub http: HttpSettings,

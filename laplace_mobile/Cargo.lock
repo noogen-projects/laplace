@@ -2242,6 +2242,7 @@ dependencies = [
  "log",
  "ndk-glue",
  "openssl",
+ "toml",
 ]
 
 [[package]]
