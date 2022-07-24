@@ -14,9 +14,11 @@ description = "The mobile server of the local-firs web-application platform"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
+ndk = "0.6"
 ndk-glue = "0.6"
+ndk-context = "0.1"
+jni = "0.19"
 log = "0.4"
-flexi_logger = "0.22"
 actix-web = "4.0"
 laplace_server = { path = "../laplace_server" }
 openssl = { version = "0.10", features = ["vendored"] }
