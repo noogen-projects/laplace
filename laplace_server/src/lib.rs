@@ -1,7 +1,7 @@
 pub use actix_files;
 pub use actix_web;
 
-use std::{fs::File, io::Write};
+use std::{fs, io::Write};
 
 use actix_easy_multipart::extractor::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
@@ -76,8 +76,10 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         );
     }
 
+    log::info!("Load lapps");
     lapps_provider.read_manager().expect("Lapps is not locked").load_lapps();
 
+    log::info!("Create HTTP server");
     let http_server = HttpServer::new(move || {
         let static_dir = web_root.join(Lapp::static_dir_name());
         let laplace_uri = format!("/{}", Lapp::main_name());
@@ -174,12 +176,21 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         let certificate_path = &settings.ssl.certificate_path;
 
         if !certificate_path.exists() && !private_key_path.exists() {
+            log::info!("Generate SSL certificate");
             let certificate = rcgen::generate_simple_self_signed(vec![settings.http.host.clone()])?;
 
-            File::create(private_key_path)?.write_all(certificate.serialize_private_key_pem().as_bytes())?;
-            File::create(certificate_path)?.write_all(certificate.serialize_pem()?.as_bytes())?;
+            if let Some(parent) = private_key_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            if let Some(parent) = certificate_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            fs::File::create(private_key_path)?.write_all(certificate.serialize_private_key_pem().as_bytes())?;
+            fs::File::create(certificate_path)?.write_all(certificate.serialize_pem()?.as_bytes())?;
         }
 
+        log::info!("Build SSL");
         let mut ssl_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls())?;
         ssl_builder.set_private_key_file(private_key_path, SslFiletype::PEM)?;
         ssl_builder.set_certificate_chain_file(certificate_path)?;
@@ -189,5 +200,6 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         http_server.bind(http_server_addr)?
     };
 
+    log::info!("Run HTTP server");
     Ok(http_server.run().await?)
 }
