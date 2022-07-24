@@ -49,12 +49,28 @@ pub async fn static_file(
             lapps_provider
                 .read_manager()
                 .map(|manager| {
-                    let file_path = manager
-                        .lapp_dir(&lapp_name)
-                        .join(Lapp::static_dir_name())
-                        .join(&file_path);
+                    let lapp_dir = manager.lapp_dir(&lapp_name);
+                    let mut fs_file_path = lapp_dir.join(Lapp::static_dir_name()).join(&file_path);
 
-                    async move { Ok(NamedFile::open(file_path)?.into_response(&request)) }.left_future()
+                    if !fs_file_path.exists() {
+                        let additional_dirs = match manager
+                            .lapp(&lapp_name)
+                            .map(|lapp| lapp.settings().application.additional_static_dirs.clone())
+                        {
+                            Ok(dirs) => dirs,
+                            Err(err) => return future::ready(Err(err)).right_future(),
+                        };
+
+                        for additional_dir in additional_dirs {
+                            let additional_file_path = lapp_dir.join(additional_dir).join(&file_path);
+                            if additional_file_path.exists() {
+                                fs_file_path = additional_file_path;
+                                break;
+                            }
+                        }
+                    }
+
+                    async move { Ok(NamedFile::open(fs_file_path)?.into_response(&request)) }.left_future()
                 })
                 .unwrap_or_else(|err| future::ready(Err(err)).right_future())
         })

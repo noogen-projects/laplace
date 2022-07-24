@@ -15,6 +15,7 @@ pub struct ApplicationSettings {
     pub description: Option<String>,
     pub tags: Option<Vec<String>>,
     pub access_token: Option<String>,
+    pub additional_static_dirs: Vec<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
