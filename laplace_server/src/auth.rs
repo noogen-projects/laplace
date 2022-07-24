@@ -8,19 +8,32 @@ use futures::{
     future::{self, Either, Ready},
     FutureExt,
 };
-use openssl::rand::rand_bytes;
+use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
+use ring::rand;
 
 use crate::{
-    error::error_response,
+    error::{error_response, AppError, AppResult},
     lapps::{Lapp, LappsProvider},
 };
 
 pub type AccessServiceResult = Result<ServiceResponse, Error>;
 
-pub fn generate_token() -> String {
-    let mut buf = [0; 32];
-    rand_bytes(&mut buf).expect("Fail generation rand bytes");
-    bs58::encode(&buf).into_string()
+pub fn generate_token() -> AppResult<String> {
+    let buf: [u8; 32] = rand::generate(&rand::SystemRandom::new())
+        .map_err(|_| AppError::TokenGenerationFail)?
+        .expose();
+    Ok(bs58::encode(&buf).into_string())
+}
+
+pub fn generate_self_signed_certificate(subject_alt_names: impl Into<Vec<String>>) -> AppResult<Certificate> {
+    let mut distinguished_name = DistinguishedName::new();
+    distinguished_name.push(DnType::CommonName, "Laplace self signed cert");
+    distinguished_name.push(DnType::OrganizationName, "Laplace community");
+
+    let mut params = CertificateParams::new(subject_alt_names);
+    params.distinguished_name = distinguished_name;
+
+    Certificate::from_params(params).map_err(Into::into)
 }
 
 pub fn create_check_access_middleware<S>(

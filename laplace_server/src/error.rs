@@ -1,7 +1,6 @@
 use std::{fmt, io};
 
 use actix_web::{HttpResponse, ResponseError};
-use openssl::error::ErrorStack;
 use rcgen::RcgenError;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
@@ -22,11 +21,17 @@ pub enum AppError {
     #[error("IO error: {0}")]
     IoError(#[from] io::Error),
 
-    #[error("SSL error: {0:?}")]
-    ErrorStack(#[from] ErrorStack),
+    #[error("TLS error: {0:?}")]
+    ErrorStack(#[from] rustls::Error),
 
-    #[error("Certificate generation error: {0:?}")]
+    #[error("TLS certificate generation error: {0:?}")]
     RcgenError(#[from] RcgenError),
+
+    #[error("TLS missing private key")]
+    MissingPrivateKey,
+
+    #[error("Error while generate token")]
+    TokenGenerationFail,
 }
 
 pub type ServerResult<T> = Result<T, ServerError>;

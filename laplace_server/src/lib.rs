@@ -1,16 +1,20 @@
 pub use actix_files;
 pub use actix_web;
 
-use std::{fs, io::Write};
+use std::{
+    fs,
+    io::{BufReader, Write},
+};
 
 use actix_easy_multipart::extractor::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use flexi_logger::{Duplicate, FileSpec, Logger};
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use rustls::{Certificate, PrivateKey, ServerConfig};
+use rustls_pemfile::{certs, pkcs8_private_keys};
 
 use self::{
-    error::AppResult,
+    error::{AppError, AppResult},
     lapps::{Lapp, LappsProvider},
     settings::{LoggerSettings, Settings},
 };
@@ -54,11 +58,11 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .expect("Lapps provider should be constructed")?
     });
     let web_root = settings.http.web_root.clone();
-    let laplace_access_token = settings
-        .http
-        .access_token
-        .clone()
-        .unwrap_or_else(|| auth::generate_token());
+    let laplace_access_token = if let Some(access_token) = settings.http.access_token.clone() {
+        access_token
+    } else {
+        auth::generate_token()?
+    };
     let upload_file_limit = settings.http.upload_file_limit;
 
     if settings.http.print_url {
@@ -177,7 +181,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
 
         if !certificate_path.exists() && !private_key_path.exists() {
             log::info!("Generate SSL certificate");
-            let certificate = rcgen::generate_simple_self_signed(vec![settings.http.host.clone()])?;
+            let certificate = auth::generate_self_signed_certificate(vec![settings.http.host.clone()])?;
 
             if let Some(parent) = private_key_path.parent() {
                 fs::create_dir_all(parent)?;
@@ -190,12 +194,25 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             fs::File::create(certificate_path)?.write_all(certificate.serialize_pem()?.as_bytes())?;
         }
 
-        log::info!("Build SSL");
-        let mut ssl_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls())?;
-        ssl_builder.set_private_key_file(private_key_path, SslFiletype::PEM)?;
-        ssl_builder.set_certificate_chain_file(certificate_path)?;
+        log::info!("Bind SSL");
+        let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?))?
+            .into_iter()
+            .map(|buf| Certificate(buf))
+            .collect();
 
-        http_server.bind_openssl(http_server_addr, ssl_builder)?
+        let private_key = PrivateKey(
+            pkcs8_private_keys(&mut BufReader::new(fs::File::open(private_key_path)?))?
+                .into_iter()
+                .next()
+                .ok_or(AppError::MissingPrivateKey)?,
+        );
+
+        let config = ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certificates, private_key)?;
+
+        http_server.bind_rustls(http_server_addr, config)?
     } else {
         http_server.bind(http_server_addr)?
     };

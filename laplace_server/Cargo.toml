@@ -13,12 +13,14 @@ description = "The server of the local-first web-application platform"
 [dependencies]
 async-std = "1.9"
 actix = "0.13"
-actix-web = { version = "4.1", features = ["openssl"] }
+actix-web = { version = "4.1", features = ["rustls"] }
 actix-web-actors = "4.1"
 actix-files = "0.6"
 actix-easy-multipart = "2.1"
-openssl = { version = "0.10", features = ["vendored"] }
+ring = "0.16"
 rcgen = "0.9"
+rustls = "0.20"
+rustls-pemfile = "1.0"
 arc-swap = "1.5"
 bs58 = "0.4"
 clap = { version = "3.0", features = ["derive"] }
