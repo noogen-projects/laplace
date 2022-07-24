@@ -166,8 +166,8 @@ dependencies = ["choose_profile"]
 script_runner = "@duckscript"
 script = '''
 rm -r target/mobile/assets
-mkdir target/mobile/assets/lapps/
-cp lapps/laplace target/mobile/assets/lapps/
+mkdir target/mobile/assets
+cp lapps target/mobile/assets/
 cp static target/mobile/assets/
 '''
 dependencies = ["choose_profile", "laplace_client"]
