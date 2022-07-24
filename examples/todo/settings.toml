@@ -10,4 +10,4 @@ required = ["database", "client_http"]
 allowed = ["database", "client_http"]
 
 [database]
-path = "lapps/todo/todos.db"
+path = "todos.db"

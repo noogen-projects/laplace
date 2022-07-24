@@ -208,6 +208,11 @@ impl Lapp {
 
         if is_allow_db_access {
             let database_path = self.settings().database().path();
+            let database_path = if database_path.is_relative() {
+                self.root_dir().join(database_path)
+            } else {
+                database_path.into()
+            };
             let connection = Arc::new(Mutex::new(Connection::open(database_path)?));
 
             let execute_native = Function::new_native_with_env(
