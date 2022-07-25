@@ -26,7 +26,7 @@ pub fn main() {
         settings.http.web_root = data_path.join("web_root");
         settings.http.access_token = generate_token().ok();
         settings.lapps.path = settings.http.web_root.join("lapps");
-        settings.log.path = Some(data_path.join("log").jpin("laplace.log"));
+        settings.log.path = Some(data_path.join("log").join("laplace.log"));
         settings.log.spec = "info,regalloc=warn,wasmer_compiler_cranelift=warn,cranelift_codegen=warn".into();
         settings.ssl.enabled = false;
         settings.ssl.private_key_path = data_path.join("cert").join("key.pem");
@@ -38,7 +38,7 @@ pub fn main() {
         settings
     };
 
-    laplace_server::init_logger(&settings.log);
+    laplace_server::init_logger(&settings.log).expect("Logger should be configured");
     panic::set_logger_hook();
 
     if !settings.lapps.path.exists()
