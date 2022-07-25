@@ -26,7 +26,7 @@ pub fn main() {
         settings.http.web_root = data_path.join("web_root");
         settings.http.access_token = generate_token().ok();
         settings.lapps.path = settings.http.web_root.join("lapps");
-        settings.log.dir = Some(data_path.join("log"));
+        settings.log.path = Some(data_path.join("log").jpin("laplace.log"));
         settings.log.spec = "info,regalloc=warn,wasmer_compiler_cranelift=warn,cranelift_codegen=warn".into();
         settings.ssl.enabled = false;
         settings.ssl.private_key_path = data_path.join("cert").join("key.pem");

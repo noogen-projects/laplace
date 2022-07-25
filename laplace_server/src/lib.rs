@@ -9,7 +9,7 @@ use std::{
 use actix_easy_multipart::extractor::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
-use flexi_logger::{Duplicate, FileSpec, Logger};
+use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 
@@ -27,26 +27,29 @@ pub mod lapps;
 pub mod service;
 pub mod settings;
 
-pub fn init_logger(settings: &LoggerSettings) {
-    let mut logger = Logger::try_with_env_or_str(&settings.spec).expect("Logger should be configured");
-    if let Some(dir) = &settings.dir {
-        logger = logger.log_to_file(
-            FileSpec::default()
-                .directory(dir)
-                .basename("laplace")
-                .suppress_timestamp()
-                .suffix("log"),
-        );
+pub fn init_logger(settings: &LoggerSettings) -> AppResult<LoggerHandle> {
+    let mut logger = Logger::try_with_env_or_str(&settings.spec)?;
+    if let Some(path) = &settings.path {
+        logger = logger
+            .log_to_file(FileSpec::try_from(path)?.suppress_timestamp())
+            .rotate(
+                Criterion::Age(Age::Day),
+                Naming::Timestamps,
+                Cleanup::KeepLogFiles(settings.keep_log_for_days),
+            )
+            .append()
     }
-    logger
+    let handle = logger
         .duplicate_to_stdout(if settings.duplicate_to_stdout {
             Duplicate::All
         } else {
             Duplicate::None
         })
+        .use_utc()
         .format(flexi_logger::colored_detailed_format)
-        .start()
-        .expect("Logger should be started");
+        .start()?;
+
+    Ok(handle)
 }
 
 pub async fn run(settings: Settings) -> AppResult<()> {

@@ -68,19 +68,34 @@ pub struct P2pSettings {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LoggerSettings {
+    #[serde(default = "default_spec")]
     pub spec: String,
-    pub dir: Option<PathBuf>,
+
+    pub path: Option<PathBuf>,
+
     pub duplicate_to_stdout: bool,
+
+    #[serde(default = "default_keep_log_for_days")]
+    pub keep_log_for_days: usize,
 }
 
 impl Default for LoggerSettings {
     fn default() -> Self {
         Self {
-            spec: "info".into(),
-            dir: None,
+            spec: default_spec(),
+            path: None,
             duplicate_to_stdout: false,
+            keep_log_for_days: default_keep_log_for_days(),
         }
     }
+}
+
+fn default_spec() -> String {
+    "info".into()
+}
+
+const fn default_keep_log_for_days() -> usize {
+    7
 }
 
 #[derive(Debug, Deserialize, Serialize)]

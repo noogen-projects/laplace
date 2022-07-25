@@ -10,6 +10,6 @@ async fn main() {
     let cmd_opts: CmdOpts = CmdOpts::parse();
     let settings = Settings::new(&cmd_opts.settings_path).expect("Settings should be configured");
 
-    laplace_server::init_logger(&settings.log);
+    laplace_server::init_logger(&settings.log).expect("Logger should be configured");
     laplace_server::run(settings).await.expect("Laplace running error")
 }

@@ -1,13 +1,13 @@
 use std::{fmt, io};
 
 use actix_web::{HttpResponse, ResponseError};
+use flexi_logger::FlexiLoggerError;
+use laplace_common::lapp::Permission;
 use rcgen::RcgenError;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 use wasmer_wasi::{WasiError, WasiStateCreationError};
-
-use laplace_common::lapp::Permission;
 
 use crate::{
     lapps::{LappInstanceError, LappSettingsError},
@@ -21,13 +21,16 @@ pub enum AppError {
     #[error("IO error: {0}")]
     IoError(#[from] io::Error),
 
-    #[error("TLS error: {0:?}")]
-    ErrorStack(#[from] rustls::Error),
+    #[error("Logger error: {0}")]
+    LoggerError(#[from] FlexiLoggerError),
 
-    #[error("TLS certificate generation error: {0:?}")]
+    #[error("TLS error: {0:?}")]
+    TlsError(#[from] rustls::Error),
+
+    #[error("Certificate generation error: {0:?}")]
     RcgenError(#[from] RcgenError),
 
-    #[error("TLS missing private key")]
+    #[error("Missing private key")]
     MissingPrivateKey,
 
     #[error("Error while generate token")]
