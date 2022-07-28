@@ -1,5 +1,5 @@
 use actix_web::{
-    cookie::Cookie,
+    cookie::{time::Duration, Cookie},
     dev::{Service, ServiceRequest, ServiceResponse},
     error::Error,
     http, web, HttpResponse,
@@ -86,6 +86,11 @@ where
             match is_access_allowed {
                 Ok(true) => service.call(request).left_future(),
                 Ok(false) => {
+                    log::warn!(
+                        "Access denied for lapp \"{}\" with access token \"{}\"",
+                        lapp_name,
+                        access_token
+                    );
                     let response = request.into_response(HttpResponse::Forbidden().finish());
                     future::ok(response).right_future()
                 },
@@ -123,8 +128,8 @@ pub fn query_access_token_redirect(request: ServiceRequest) -> Result<ServiceRes
         let access_token_cookie = Cookie::build("access_token", access_token)
             .domain(uri.host().unwrap_or(""))
             .path(format!("/{}", lapp_name))
-            .secure(true)
             .http_only(true)
+            .max_age(Duration::days(365 * 10)) // 10 years
             .finish();
 
         let response = request.into_response(
