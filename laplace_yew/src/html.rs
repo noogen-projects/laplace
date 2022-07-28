@@ -5,6 +5,7 @@ use yew::{virtual_dom::VNode, Component, Context, Html, Properties};
 #[derive(Debug, Clone, Eq, PartialEq, Properties)]
 pub struct RawHtmlProps {
     pub inner_html: String,
+    pub styles: Option<String>,
 }
 
 pub struct RawHtml {
@@ -35,6 +36,10 @@ impl Component for RawHtml {
             .create_element("div")
             .expect_throw("Div should be created");
         div.set_inner_html(self.props.inner_html.as_str());
+        if let Some(styles) = self.props.styles.as_deref() {
+            div.set_attribute("style", styles)
+                .expect_throw("Attribute style should be set");
+        }
 
         VNode::VRef(Node::from(div))
     }
