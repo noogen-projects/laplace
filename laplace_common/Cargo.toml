@@ -12,7 +12,7 @@ description = "The common lib of the local-firs web-application platform"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_with = "1.8"
+serde_with = "2.0"
 strum = { version = "0.24", features = ["derive"] }
 
 [dev-dependencies]

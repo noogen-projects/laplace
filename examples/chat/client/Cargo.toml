@@ -14,7 +14,7 @@ description = "The Chat lapp example"
 [dependencies]
 anyhow = "1.0"
 serde_json = "1.0"
-libp2p-core = "0.33"
+libp2p-core = "0.36"
 bs58 = "0.4"
 getrandom = { version = "0.2", features = ["js"] }
 yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }

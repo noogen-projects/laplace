@@ -22,7 +22,7 @@ impl Component for RawHtml {
         }
     }
 
-    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, ctx: &Context<Self>, _old_props: &Self::Properties) -> bool {
         if self.props != *ctx.props() {
             self.props = ctx.props().clone();
             true

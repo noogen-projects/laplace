@@ -353,7 +353,7 @@ fn main() {
 
 #[wasm_bindgen]
 pub fn add_translations(translations: JsValue) -> std::result::Result<(), JsError> {
-    let translations: Vec<(String, HashMap<String, String>)> = translations.into_serde()?;
+    let translations: Vec<(String, HashMap<String, String>)> = serde_wasm_bindgen::from_value(translations)?;
     i18n::add_translations(translations);
     Ok(())
 }
