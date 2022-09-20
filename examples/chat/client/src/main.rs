@@ -170,9 +170,7 @@ impl Component for Root {
                 true
             },
             Msg::InitChat { keys, peer_id } => {
-                let location = dom::existing::document()
-                    .location()
-                    .expect("Location should be existing");
+                let location = dom::existing::location();
                 let url = format!("ws://{}/chat/ws", location.host().expect("Location host expected"));
                 let send_callback = ctx.link().batch_callback(|send_result: Result<(), WebSocketError>| {
                     send_result.err().map(|err| Msg::Error(anyhow!("{}", err)))

@@ -2690,7 +2690,7 @@ name = "laplace_yew"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "wasm-dom",
+ "wasm-dom 0.1.0",
  "web-sys",
  "yew",
 ]
@@ -2714,7 +2714,7 @@ source = "git+https://github.com/noogen-projects/lew#71bb5f8dca1b49bdab2b6b39a5d
 dependencies = [
  "derive_more",
  "wasm-bindgen",
- "wasm-dom",
+ "wasm-dom 0.1.0",
  "web-sys",
  "yew",
 ]
@@ -5308,7 +5308,7 @@ dependencies = [
  "laplace_yew",
  "strum",
  "todo_common",
- "wasm-dom",
+ "wasm-dom 0.1.0",
  "wasm-web-helpers",
  "web-sys",
  "yew",
@@ -5726,6 +5726,18 @@ name = "wasm-dom"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "229767133afb236d15c29c54bf8f1335f97b929f052d7a119ef7bff3dd283d05"
+dependencies = [
+ "js-sys",
+ "thiserror",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm-dom"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5dcecb4b1ab14569b4e2c2fd6a3d231f0f80c45fee671a0b32415aa3552809"
 dependencies = [
  "js-sys",
  "thiserror",
@@ -6351,7 +6363,7 @@ dependencies = [
 [[package]]
 name = "yew"
 version = "0.19.3"
-source = "git+https://github.com/yewstack/yew.git#ce70e4c1fb33ead52dc6915efde3b682da9aa3f0"
+source = "git+https://github.com/yewstack/yew.git#89dd3b3e7ffc4b633e69dfae7d8d440f1325ae7a"
 dependencies = [
  "console_error_panic_hook",
  "futures",
@@ -6374,7 +6386,7 @@ dependencies = [
 [[package]]
 name = "yew-macro"
 version = "0.19.3"
-source = "git+https://github.com/yewstack/yew.git#ce70e4c1fb33ead52dc6915efde3b682da9aa3f0"
+source = "git+https://github.com/yewstack/yew.git#89dd3b3e7ffc4b633e69dfae7d8d440f1325ae7a"
 dependencies = [
  "boolinator",
  "once_cell",
@@ -6387,15 +6399,15 @@ dependencies = [
 
 [[package]]
 name = "yew-mdc-widgets"
-version = "0.4.2"
-source = "git+https://github.com/noogen-projects/yew-mdc-widgets#3163da3e67e5d80c88ac8a9fcb45d3f9c8ce1544"
+version = "0.4.3"
+source = "git+https://github.com/noogen-projects/yew-mdc-widgets#d2cfb63de24b35a860f2f34536c25ec216c410fd"
 dependencies = [
  "const_format",
  "gloo 0.7.0",
  "gloo-console",
  "js-sys",
  "wasm-bindgen",
- "wasm-dom",
+ "wasm-dom 1.0.0",
  "web-sys",
  "yew",
 ]
