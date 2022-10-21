@@ -13,11 +13,18 @@ description = "The Notes lapp example"
 
 [dependencies]
 anyhow = "1.0"
+laplace_yew = { path = "../../../laplace_yew" }
+lew = { git = "https://github.com/noogen-projects/lew" }
+notes_common = { path = "../common" }
+pulldown-cmark = "0.9"
+wasm-web-helpers = "0.2"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "HtmlInputElement",
+    "HtmlElement",
+    "HtmlTextAreaElement",
+    "DomStringMap",
+] }
 yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
-lew = { git = "https://github.com/noogen-projects/lew" }
-web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement", "HtmlElement", "HtmlTextAreaElement", "DomStringMap"] }
-wasm-web-helpers = "0.2"
-pulldown-cmark = "0.9"
-notes_common = { path = "../common" }
-laplace_yew = { path = "../../../laplace_yew" }

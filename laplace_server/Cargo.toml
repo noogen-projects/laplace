@@ -11,35 +11,35 @@ repository = "https://github.com/noogen-projects/laplace"
 description = "The server of the local-first web-application platform"
 
 [dependencies]
-async-std = "1.12"
 actix = "0.13"
+actix-easy-multipart = "2.1"
+actix-files = "0.6"
 actix-web = { version = "4.2.1", features = ["rustls"] }
 actix-web-actors = "4.1"
-actix-files = "0.6"
-actix-easy-multipart = "2.1"
-ring = "0.16"
-rcgen = "0.9"
-rustls = "0.20"
-rustls-pemfile = "1.0"
+anyhow = "1.0"
 arc-swap = "1.5"
+async-std = "1.12"
+borsh = "0.9"
 bs58 = "0.4"
 clap = { version = "3.2", features = ["derive"] }
-borsh = "0.9"
+config = "0.13"
+derive_more = "0.99"
+flexi_logger = "0.23"
 futures = "0.3"
+laplace_common = { path = "../laplace_common" }
+laplace_wasm = { path = "../laplace_wasm" }
 libp2p = { version = "0.48", features = ["tcp-tokio"] }
+log = "0.4"
+rcgen = "0.9"
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls"] }
+ring = "0.16"
+rusqlite = { version = "0.28", features = ["bundled"] }
+rustls = "0.20"
+rustls-pemfile = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-anyhow = "1.0"
 thiserror = "1.0"
-derive_more = "0.99"
-log = "0.4"
-flexi_logger = "0.23"
-config = "0.13"
 toml = "0.5"
 wasmer = "2.3"
 wasmer-wasi = "2.3"
-rusqlite = { version = "0.28", features = ["bundled"] }
-reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls"] }
-laplace_common = { path = "../laplace_common" }
-laplace_wasm = { path = "../laplace_wasm" }
 zip = { git = "https://github.com/wyatt-herkamp/zip.git" } # Fix zstd dependency

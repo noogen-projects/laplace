@@ -14,13 +14,13 @@ description = "The mobile server of the local-firs web-application platform"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ndk = "0.7"
-ndk-glue = "0.7"
-ndk-context = "0.1"
-jni = "0.19"
-log = "0.4"
 actix-web = "4.2"
+jni = "0.19"
 laplace_server = { path = "../laplace_server" }
+log = "0.4"
+ndk = "0.7"
+ndk-context = "0.1"
+ndk-glue = "0.7"
 toml = "0.5"
 
 [profile.release]
@@ -35,14 +35,14 @@ build_targets = ["aarch64-linux-android", "i686-linux-android"]
 apk_name = "laplace"
 assets = "../target/mobile/assets"
 
-[[package.metadata.android.uses_permission]]
-name = "android.permission.WRITE_EXTERNAL_STORAGE"
+    [[package.metadata.android.uses_permission]]
+    name = "android.permission.WRITE_EXTERNAL_STORAGE"
 
-[[package.metadata.android.uses_permission]]
-name = "android.permission.INTERNET"
+    [[package.metadata.android.uses_permission]]
+    name = "android.permission.INTERNET"
 
-[[package.metadata.android.uses_permission]]
-name = "android.permission.CHANGE_NETWORK_STATE"
+    [[package.metadata.android.uses_permission]]
+    name = "android.permission.CHANGE_NETWORK_STATE"
 
-[[package.metadata.android.uses_permission]]
-name = "android.permission.ACCESS_NETWORK_STATE"
+    [[package.metadata.android.uses_permission]]
+    name = "android.permission.ACCESS_NETWORK_STATE"

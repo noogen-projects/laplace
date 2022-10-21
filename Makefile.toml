@@ -7,9 +7,9 @@ additional_profiles = ["debug"]
 MODE = "release"
 ADDITIONAL = "--release"
 
-[tasks.choose_profile.env.debug]
-MODE = "debug"
-ADDITIONAL = "--color=auto" # it's a stub
+    [tasks.choose_profile.env.debug]
+    MODE = "debug"
+    ADDITIONAL = "--color=auto" # it's a stub
 
 [tasks.parse_params]
 script_runner = "@duckscript"
@@ -22,11 +22,11 @@ end
 [tasks.wasm_build_prepare]
 dependencies = ["choose_profile", "parse_params"]
 
-[tasks.wasm_build_prepare.env]
-RUSTFLAGS = "-Copt-level=s"
+    [tasks.wasm_build_prepare.env]
+    RUSTFLAGS = "-Copt-level=s"
 
-[tasks.wasm_build_prepare.env.debug]
-RUSTFLAGS = ""
+        [tasks.wasm_build_prepare.env.debug]
+        RUSTFLAGS = ""
 
 
 [tasks.create_lapp_dir]
@@ -116,27 +116,19 @@ dependencies = ["build_server_wasi", "deploy_server_wasi"]
 
 [tasks.chat]
 env = { "APP" = "chat" }
-run_task = [
-    { name = ["client", "server"] },
-]
+run_task = [{ name = ["client", "server"] }]
 
 [tasks.echo]
 env = { "APP" = "echo" }
-run_task = [
-    { name = ["client", "server"] },
-]
+run_task = [{ name = ["client", "server"] }]
 
 [tasks.notes]
 env = { "APP" = "notes" }
-run_task = [
-    { name = ["client", "wasi"] },
-]
+run_task = [{ name = ["client", "wasi"] }]
 
 [tasks.todo]
 env = { "APP" = "todo" }
-run_task = [
-    { name = ["client", "server"] },
-]
+run_task = [{ name = ["client", "server"] }]
 
 [tasks.examples]
 dependencies = ["chat", "echo", "notes", "todo"]
@@ -180,7 +172,16 @@ args = ["apk", "check", "--manifest-path", "laplace_mobile/Cargo.toml", "--targe
 [tasks.mobile]
 command = "cargo"
 toolchain = "stable"
-args = ["apk", "build", "--manifest-path", "laplace_mobile/Cargo.toml", "--target-dir", "target/mobile", "--lib", "${ADDITIONAL}"]
+args = [
+    "apk",
+    "build",
+    "--manifest-path",
+    "laplace_mobile/Cargo.toml",
+    "--target-dir",
+    "target/mobile",
+    "--lib",
+    "${ADDITIONAL}",
+]
 dependencies = ["choose_profile", "mobile_assets"]
 
 

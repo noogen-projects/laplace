@@ -1,0 +1,16 @@
+include = ["**/Cargo.toml", "**/Makefile.toml", ".taplo.toml"]
+
+[formatting]
+# Formatter options: https://taplo.tamasfe.dev/configuration/formatter-options.html
+align_comments = false
+array_auto_collapse = false
+column_width = 120
+indent_string = "    "
+indent_tables = true
+reorder_keys = false
+
+[[rule]]
+keys = ["dependencies", "formatting"]
+
+    [rule.formatting]
+    reorder_keys = true
