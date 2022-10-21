@@ -81,7 +81,7 @@ impl GossipsubService {
         swarm.listen_on(address)?;
 
         let transport = executor::block_on(libp2p::development_transport(keypair))?;
-        let behaviour = executor::block_on(Mdns::new(MdnsConfig::default()))?;
+        let behaviour = Mdns::new(MdnsConfig::default())?;
         let mut swarm_discovery = Swarm::new(transport, behaviour, peer_id);
         swarm_discovery.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 

@@ -18,7 +18,7 @@ chat_common = { path = "../common" }
 getrandom = { version = "0.2", features = ["js"] }
 gloo-timers = "0.2"
 laplace_yew = { path = "../../../laplace_yew" }
-libp2p-core = "0.36"
+libp2p-core = "0.37"
 pulldown-cmark = "0.9"
 serde_json = "1.0"
 wasm-web-helpers = "0.2"

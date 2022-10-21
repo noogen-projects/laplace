@@ -19,7 +19,7 @@ pub fn copy(asset_dirs: impl IntoIterator<Item = impl AsRef<Path>>, destination:
     // Query the Asset Manager
     let asset_manager = env
         .call_method(
-            ctx.context().cast(),
+            unsafe { JObject::from_raw(ctx.context().cast()) },
             "getAssets",
             "()Landroid/content/res/AssetManager;",
             &[],
@@ -62,7 +62,7 @@ fn list(env: JNIEnv, asset_manager: JObject, asset_dir: &Path) -> CopyResult<Vec
             .new_string(asset_dir.to_string_lossy())?
             .into()])?
         .l()?
-        .into_inner();
+        .into_raw();
 
     let mut assets = Vec::new();
     for index in 0..env.get_array_length(asset_array)? {
