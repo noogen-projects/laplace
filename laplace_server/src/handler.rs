@@ -1,6 +1,6 @@
 use std::io;
 
-use actix_easy_multipart::{extractor::MultipartForm, File, FromMultipart};
+use actix_easy_multipart::{tempfile::Tempfile, MultipartForm};
 use actix_web::{web, HttpResponse};
 use zip::ZipArchive;
 
@@ -16,9 +16,9 @@ pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse 
         .await
 }
 
-#[derive(FromMultipart)]
+#[derive(MultipartForm)]
 pub struct LarUpload {
-    pub lar: File,
+    pub lar: Tempfile,
 }
 
 pub async fn add_lapp(lapps_service: web::Data<LappsProvider>, form: MultipartForm<LarUpload>) -> HttpResponse {
@@ -52,8 +52,8 @@ fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<HttpResponse
     })
 }
 
-async fn process_add_lapp(lapps_provider: LappsProvider, lar: File) -> ServerResult<HttpResponse> {
-    let file_name = lar.filename.as_ref().ok_or(ServerError::UnknownLappName)?;
+async fn process_add_lapp(lapps_provider: LappsProvider, lar: Tempfile) -> ServerResult<HttpResponse> {
+    let file_name = lar.file_name.as_ref().ok_or(ServerError::UnknownLappName)?;
     let lapp_name = file_name
         .strip_suffix(".zip")
         .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));

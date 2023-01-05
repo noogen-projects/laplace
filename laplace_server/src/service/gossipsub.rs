@@ -18,7 +18,7 @@ use libp2p::{
         MessageId, ValidationMode,
     },
     identity::{ed25519, Keypair},
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    mdns::{async_io::Behaviour, Config, Event},
     multiaddr::Protocol,
     swarm::SwarmEvent,
     Multiaddr, PeerId, Swarm,
@@ -33,7 +33,7 @@ pub type Receiver = mpsc::Receiver<Message>;
 
 pub struct GossipsubService {
     swarm: Swarm<Gossipsub>,
-    swarm_discovery: Swarm<Mdns>,
+    swarm_discovery: Swarm<Behaviour>,
     dial_ports: Vec<u16>,
     topic: Topic,
     receiver: Receiver,
@@ -77,12 +77,12 @@ impl GossipsubService {
             gossipsub_behaviour.add_explicit_peer(peer_id);
         }
 
-        let mut swarm = Swarm::new(transport, gossipsub_behaviour, peer_id);
+        let mut swarm = Swarm::with_threadpool_executor(transport, gossipsub_behaviour, peer_id);
         swarm.listen_on(address)?;
 
         let transport = executor::block_on(libp2p::development_transport(keypair))?;
-        let behaviour = Mdns::new(MdnsConfig::default())?;
-        let mut swarm_discovery = Swarm::new(transport, behaviour, peer_id);
+        let behaviour = Behaviour::new(Config::default())?;
+        let mut swarm_discovery = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
         swarm_discovery.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
         let (sender, receiver) = mpsc::channel();
@@ -108,7 +108,7 @@ impl Future for GossipsubService {
         loop {
             match self.swarm_discovery.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
+                    SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                         for (peer_id, address) in peers {
                             info!("MDNS discovered {} {}", peer_id, address);
                             let addresses = self.peers.entry(peer_id).or_default();
@@ -117,7 +117,7 @@ impl Future for GossipsubService {
                             }
                         }
                     },
-                    SwarmEvent::Behaviour(MdnsEvent::Expired(expired)) => {
+                    SwarmEvent::Behaviour(Event::Expired(expired)) => {
                         for (peer_id, address) in expired {
                             info!("MDNS expired {} {}", peer_id, address);
                             self.peers.remove(&peer_id);

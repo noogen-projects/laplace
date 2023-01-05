@@ -12,12 +12,12 @@ description = "The server of the local-first web-application platform"
 
 [dependencies]
 actix = "0.13"
-actix-easy-multipart = "2.1"
+actix-easy-multipart = "3.0"
 actix-files = "0.6"
 actix-web = { version = "4.2", features = ["rustls"] }
 actix-web-actors = "4.1"
 anyhow = "1.0"
-arc-swap = "1.5"
+arc-swap = "1.6"
 async-std = "1.12"
 borsh = "0.9"
 bs58 = "0.4"
@@ -28,7 +28,7 @@ flexi_logger = "0.24"
 futures = "0.3"
 laplace_common = { path = "../laplace_common" }
 laplace_wasm = { path = "../laplace_wasm" }
-libp2p = { version = "0.49", features = [
+libp2p = { version = "0.50", features = [
     "async-std",
     "tcp",
     "dns",

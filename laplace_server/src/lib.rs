@@ -6,7 +6,7 @@ use std::{
     io::{BufReader, Write},
 };
 
-use actix_easy_multipart::extractor::MultipartFormConfig;
+use actix_easy_multipart::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
@@ -93,7 +93,11 @@ pub async fn run(settings: Settings) -> AppResult<()> {
 
         App::new()
             .app_data(web::Data::clone(&lapps_provider))
-            .app_data(MultipartFormConfig::default().file_limit(upload_file_limit))
+            .app_data(
+                MultipartFormConfig::default()
+                    .total_limit(upload_file_limit)
+                    .memory_limit(upload_file_limit),
+            )
             .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::NormalizePath::trim())
             .wrap_fn(auth::create_check_access_middleware(

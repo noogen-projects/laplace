@@ -12,7 +12,7 @@ description = "The WASM client of the local-firs web-application platform"
 
 [dependencies]
 anyhow = "1.0"
-arc-swap = "1.5"
+arc-swap = "1.6"
 laplace_common = { path = "../laplace_common" }
 laplace_yew = { path = "../laplace_yew" }
 lazy_static = "1.4"
