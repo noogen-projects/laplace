@@ -5,10 +5,8 @@ use gloo_console as console;
 use laplace_yew::MsgError;
 use strum::{Display, EnumIter, IntoEnumIterator};
 use todo_common::{Response, Task};
-use wasm_web_helpers::{
-    error::Result,
-    fetch::{JsonFetcher, Response as WebResponse},
-};
+use wasm_web_helpers::error::Result;
+use wasm_web_helpers::fetch::{JsonFetcher, Response as WebResponse};
 use web_sys::HtmlInputElement;
 use yew::{classes, html, Callback, Component, Context, Html, InputEvent, KeyboardEvent, NodeRef};
 
@@ -144,7 +142,7 @@ impl Component for Root {
                 if !description.is_empty() {
                     JsonFetcher::send_post(
                         "/todo/add",
-                        format!(r#"{{"description":"{}","completed":false}}"#, description),
+                        format!(r#"{{"description":"{description}","completed":false}}"#),
                         {
                             let callback = callback(ctx);
                             move |response_result| callback.emit(response_result)
@@ -177,8 +175,7 @@ impl Component for Root {
             Msg::TypeEdit(idx) => {
                 if let Some(edit) = &mut self.state.edit {
                     let value =
-                        wasm_dom::existing::get_element_by_id::<HtmlInputElement>(&format!("edit-task-{}", idx))
-                            .value();
+                        wasm_dom::existing::get_element_by_id::<HtmlInputElement>(&format!("edit-task-{idx}")).value();
                     edit.value = value;
                 }
                 false
@@ -262,7 +259,7 @@ impl Component for Root {
                 false
             },
             Msg::Error(err) => {
-                console::error!(&format!("{}", err));
+                console::error!(&format!("{err}"));
                 true
             },
             Msg::Nope => false,
@@ -367,7 +364,7 @@ impl Root {
         if let Some(Edit { value, task_idx }) = &self.state.edit {
             if *task_idx == idx {
                 return html! {
-                    <input id = { format!("edit-task-{}", idx) } class = "edit" type = "text" ref = { self.focus_ref.clone() } value = { value.clone() }
+                    <input id = { format!("edit-task-{idx}") } class = "edit" type = "text" ref = { self.focus_ref.clone() } value = { value.clone() }
                             onmouseover = { ctx.link().callback(|_| Msg::Focus) }
                             oninput = { ctx.link().callback(move |_: InputEvent| Msg::TypeEdit(idx)) }
                             onblur = { ctx.link().callback(move |_| Msg::Edit) }

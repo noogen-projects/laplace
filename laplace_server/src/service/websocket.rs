@@ -1,17 +1,14 @@
-use std::{
-    io,
-    time::{Duration, Instant},
-};
+use std::io;
+use std::time::{Duration, Instant};
 
 use actix::{Actor, ActorContext, AsyncContext, Handler, Running, StreamHandler, WrapFuture};
 use actix_web_actors::ws;
 use derive_more::From;
-use log::{debug, error};
+pub use laplace_wasm::route::websocket::Message;
 use wasmer::{ExportError, RuntimeError};
 
-use crate::{lapps::LappInstanceError, service};
-
-pub use laplace_wasm::route::websocket::Message;
+use crate::lapps::LappInstanceError;
+use crate::service;
 
 #[derive(Debug, From)]
 enum WsError {
@@ -58,7 +55,7 @@ impl WebSocketService {
             // check client heartbeats
             if Instant::now().duration_since(act.hb) > Self::CLIENT_TIMEOUT {
                 // heartbeat timed out
-                println!("Websocket Client heartbeat failed, disconnecting!");
+                log::debug!("Websocket Client heartbeat failed, disconnecting!");
 
                 // stop actor
                 ctx.stop();
@@ -100,14 +97,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
-                error!("WS error: {:?}", err);
+                log::error!("WS error: {err:?}");
                 ctx.stop();
                 return;
             },
         };
 
         // process websocket messages
-        debug!("WS message: {:?}", msg);
+        log::debug!("WS message: {msg:?}");
         match msg {
             ws::Message::Ping(msg) => {
                 self.hb = Instant::now();
@@ -119,11 +116,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService 
             ws::Message::Text(text) => {
                 let lapp_service_sender = self.lapp_service_sender.clone();
                 let fut = async move {
-                    if let Err(err) = lapp_service_sender
-                        .send(service::lapp::Message::WebSocket(Message::Text(text.to_string())))
-                        .await
+                    if let Err(err) =
+                        lapp_service_sender.send(service::lapp::Message::WebSocket(Message::Text(text.to_string())))
                     {
-                        log::error!("Error occurs when send to lapp service: {:?}", err);
+                        log::error!("Error occurs when send to lapp service: {err:?}");
                     }
                 };
                 ctx.wait(fut.into_actor(self));

@@ -1,29 +1,25 @@
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::io;
+use std::pin::Pin;
+use std::str::FromStr;
+use std::sync::mpsc;
+use std::task::Poll;
+use std::time::Duration;
+
 pub use laplace_wasm::route::gossipsub::Message;
-
-use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
-    hash::{Hash, Hasher},
-    io,
-    pin::Pin,
-    str::FromStr,
-    sync::mpsc,
-    task::Poll,
-    time::Duration,
+use libp2p::futures::{executor, Future, StreamExt};
+use libp2p::gossipsub::{
+    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
+    MessageId, ValidationMode,
 };
-
-use libp2p::{
-    futures::{executor, Future, StreamExt},
-    gossipsub::{
-        Gossipsub, GossipsubConfigBuilder, GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
-        MessageId, ValidationMode,
-    },
-    identity::{ed25519, Keypair},
-    mdns::{async_io::Behaviour, Config, Event},
-    multiaddr::Protocol,
-    swarm::SwarmEvent,
-    Multiaddr, PeerId, Swarm,
-};
-use log::{error, info};
+use libp2p::identity::{ed25519, Keypair};
+use libp2p::mdns::async_io::Behaviour;
+use libp2p::mdns::{Config, Event};
+use libp2p::multiaddr::Protocol;
+use libp2p::swarm::SwarmEvent;
+use libp2p::{Multiaddr, PeerId, Swarm};
 use thiserror::Error;
 
 use crate::service;
@@ -110,7 +106,7 @@ impl Future for GossipsubService {
                 Poll::Ready(Some(event)) => match event {
                     SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                         for (peer_id, address) in peers {
-                            info!("MDNS discovered {} {}", peer_id, address);
+                            log::info!("MDNS discovered {peer_id} {address}");
                             let addresses = self.peers.entry(peer_id).or_default();
                             if !addresses.contains(&address) {
                                 addresses.push(address);
@@ -119,15 +115,15 @@ impl Future for GossipsubService {
                     },
                     SwarmEvent::Behaviour(Event::Expired(expired)) => {
                         for (peer_id, address) in expired {
-                            info!("MDNS expired {} {}", peer_id, address);
+                            log::info!("MDNS expired {peer_id} {address}");
                             self.peers.remove(&peer_id);
                         }
                     },
-                    SwarmEvent::NewListenAddr { address, .. } => info!("MDNS listening on {:?}", address),
+                    SwarmEvent::NewListenAddr { address, .. } => log::info!("MDNS listening on {address:?}"),
                     SwarmEvent::IncomingConnection {
                         local_addr,
                         send_back_addr,
-                    } => info!("MDNS incoming connection {}, {}", local_addr, send_back_addr),
+                    } => log::info!("MDNS incoming connection {local_addr}, {send_back_addr}"),
                     _ => break,
                 },
                 Poll::Ready(None) | Poll::Pending => break,
@@ -138,7 +134,7 @@ impl Future for GossipsubService {
             if let Err(err) = match self.receiver.try_recv() {
                 Ok(Message::Text { msg, .. }) => {
                     let topic = self.topic.clone();
-                    info!("Publish message: {}", msg);
+                    log::info!("Publish message: {msg}");
                     self.swarm
                         .behaviour_mut()
                         .publish(topic, msg)
@@ -146,9 +142,9 @@ impl Future for GossipsubService {
                         .map_err(Error::GossipsubPublishError)
                 },
                 Ok(Message::Dial(peer_id)) => {
-                    info!("Dial peer: {}", peer_id);
+                    log::info!("Dial peer: {peer_id}");
                     PeerId::from_str(&peer_id)
-                        .map_err(|err| Error::ParsePeerIdError(format!("{:?}", err)))
+                        .map_err(|err| Error::ParsePeerIdError(format!("{err:?}")))
                         .and_then(|peer_id| {
                             if let Some(mut address) = self
                                 .peers
@@ -159,7 +155,7 @@ impl Future for GossipsubService {
                                 for port in self.dial_ports.clone() {
                                     address.pop();
                                     address.push(Protocol::Tcp(port));
-                                    info!("Dial address: {}", address);
+                                    log::info!("Dial address: {address}");
                                     self.swarm.dial(address.clone()).map_err(Error::DialError)?;
                                 }
                                 Ok(())
@@ -169,7 +165,7 @@ impl Future for GossipsubService {
                         })
                 },
                 Ok(Message::AddAddress(address)) => {
-                    info!("Add address: {}", address);
+                    log::info!("Add address: {address}");
                     Multiaddr::from_str(&address)
                         .map_err(Error::WrongMultiaddr)
                         .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
@@ -177,7 +173,7 @@ impl Future for GossipsubService {
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return Poll::Ready(()),
             } {
-                error!("P2P error for topic \"{}\": {:?}", self.topic, err);
+                log::error!("P2P error for topic \"{}\": {err:?}", self.topic);
             }
         }
 
@@ -190,25 +186,25 @@ impl Future for GossipsubService {
                         message,
                     }) => {
                         let text = String::from_utf8_lossy(&message.data); // todo: catch error
-                        info!("Got message: {} with id: {} from peer: {:?}", text, message_id, peer_id);
+                        log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
                         if message.topic == self.topic.hash() {
                             // todo: use async send
                             if let Err(err) =
                                 self.lapp_service_sender
-                                    .try_send(service::lapp::Message::GossipSub(Message::Text {
+                                    .send(service::lapp::Message::GossipSub(Message::Text {
                                         peer_id: peer_id.to_base58(),
                                         msg: text.to_string(),
                                     }))
                             {
-                                log::error!("Error occurs when send to lapp service: {:?}", err);
+                                log::error!("Error occurs when send to lapp service: {err:?}");
                             }
                         }
                     },
-                    SwarmEvent::NewListenAddr { address, .. } => info!("Listening on {:?}", address),
+                    SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {address:?}"),
                     SwarmEvent::IncomingConnection {
                         local_addr,
                         send_back_addr,
-                    } => info!("Incoming connection {}, {}", local_addr, send_back_addr),
+                    } => log::info!("Incoming connection {local_addr}, {send_back_addr}"),
                     _ => break,
                 },
                 Poll::Ready(None) | Poll::Pending => break,

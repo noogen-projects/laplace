@@ -1,4 +1,5 @@
-use std::{fs, io, path::Path};
+use std::path::Path;
+use std::{fs, io};
 
 pub use laplace_common::lapp::{ApplicationSettings, LappSettings, PermissionsSettings};
 use thiserror::Error;
@@ -28,8 +29,8 @@ impl FileSettings for LappSettings {
     type Settings = Self;
 
     fn load(path: impl AsRef<Path>) -> LappSettingsResult<Self> {
-        let buf = fs::read(path)?;
-        toml::from_slice(&buf).map_err(Into::into)
+        let content = fs::read_to_string(path)?;
+        toml::from_str(&content).map_err(Into::into)
     }
 
     fn save(&self, path: impl AsRef<Path>) -> LappSettingsResult<()> {

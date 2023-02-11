@@ -1,47 +1,27 @@
-use std::{borrow::Borrow, convert::TryFrom, iter::FromIterator, sync::Arc, time::Duration};
+use std::iter::FromIterator;
+use std::time::Duration;
 
-use arc_swap::ArcSwapOption;
 use borsh::{BorshDeserialize, BorshSerialize};
 use laplace_common::lapp::{HttpHosts, HttpMethod, HttpMethods, HttpSettings};
 use laplace_wasm::http;
 use reqwest::blocking::Client;
-use wasmer::{Instance, WasmerEnv};
+use wasmer::FunctionEnvMut;
 
-use crate::lapps::ExpectedInstance;
-
-#[derive(WasmerEnv, Clone)]
-pub struct HttpEnv {
-    pub instance: Arc<ArcSwapOption<Instance>>,
-    pub client: Client,
-    pub settings: HttpSettings,
-}
-
-impl<T: Borrow<HttpEnv>> From<T> for ExpectedHttpEnv {
-    fn from(env: T) -> Self {
-        let env = env.borrow();
-        let instance =
-            ExpectedInstance::try_from(env.instance.load_full().expect("Lapp instance should be initialized"))
-                .expect("Memory should be presented");
-
-        Self {
-            instance,
-            client: env.client.clone(),
-            settings: env.settings.clone(),
-        }
-    }
-}
+use crate::lapps::wasm_interop::MemoryManagementHostData;
 
 #[derive(Clone)]
-pub struct ExpectedHttpEnv {
-    pub instance: ExpectedInstance,
+pub struct HttpEnv {
+    pub memory_data: Option<MemoryManagementHostData>,
     pub client: Client,
     pub settings: HttpSettings,
 }
 
-pub fn invoke_http(env: &HttpEnv, request_slice: u64) -> u64 {
-    let env = ExpectedHttpEnv::from(env);
+pub fn invoke_http(mut env: FunctionEnvMut<HttpEnv>, request_slice: u64) -> u64 {
+    let memory_data = env.data().memory_data.clone().expect("Memory data must not be empty");
+
     let request_bytes = unsafe {
-        env.instance
+        memory_data
+            .to_manager(&mut env)
             .wasm_slice_to_vec(request_slice)
             .map_err(|_| http::InvokeError::CanNotReadWasmData)
     };
@@ -50,10 +30,11 @@ pub fn invoke_http(env: &HttpEnv, request_slice: u64) -> u64 {
         .and_then(|bytes| {
             BorshDeserialize::try_from_slice(&bytes).map_err(|_| http::InvokeError::FailDeserializeRequest)
         })
-        .and_then(|request| do_invoke_http(&env.client, request, &env.settings));
+        .and_then(|request| do_invoke_http(&env.data().client, request, &env.data().settings));
 
     let serialized = result.try_to_vec().expect("Result should be serializable");
-    env.instance
+    memory_data
+        .to_manager(&mut env)
         .bytes_to_wasm_slice(&serialized)
         .expect("Result should be to move to WASM")
         .into()
@@ -64,7 +45,7 @@ pub fn do_invoke_http(
     request: http::Request,
     settings: &HttpSettings,
 ) -> http::InvokeResult<http::Response> {
-    log::debug!("Invoke HTTP: {:#?},\n{:#?}", request, settings);
+    log::debug!("Invoke HTTP: {request:#?},\n{settings:#?}");
     let http::Request {
         method,
         uri,
@@ -92,7 +73,7 @@ pub fn do_invoke_http(
         .send()
         .map_err(|err| http::InvokeError::FailRequest(err.status().map(|status| status.as_u16()), format!("{}", err)))
         .map(|response| {
-            log::debug!("Invoke HTTP response: {:#?}", response);
+            log::debug!("Invoke HTTP response: {response:#?}");
 
             http::Response {
                 status: response.status(),

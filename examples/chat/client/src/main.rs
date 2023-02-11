@@ -5,19 +5,20 @@ use std::cell::RefCell;
 use anyhow::{anyhow, Context as _, Error};
 use chat_common::{Peer, WsMessage, WsResponse};
 use laplace_yew::{MsgError, RawHtml};
-use libp2p_core::{identity::ed25519::Keypair, PeerId, PublicKey};
+use libp2p_core::identity::ed25519::Keypair;
+use libp2p_core::{PeerId, PublicKey};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
-use wasm_web_helpers::{
-    error::Result as WebResult,
-    fetch::{JsonFetcher, MissingBody, Response},
-    websocket::{self, WebSocketError, WebSocketService},
-};
+use wasm_web_helpers::error::Result as WebResult;
+use wasm_web_helpers::fetch::{JsonFetcher, MissingBody, Response};
+use wasm_web_helpers::websocket::{self, WebSocketError, WebSocketService};
 use web_sys::{HtmlElement, HtmlInputElement, HtmlTextAreaElement};
-use yew::{classes, html, html::Scope, Component, Context, Html, KeyboardEvent, MouseEvent};
+use yew::html::Scope;
+use yew::{classes, html, Component, Context, Html, KeyboardEvent, MouseEvent};
+use yew_mdc_widgets::dom::existing::JsObjectAccess;
+use yew_mdc_widgets::dom::{self};
 use yew_mdc_widgets::{
-    auto_init, console,
-    dom::{self, existing::JsObjectAccess},
-    drawer, Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField, TopAppBar,
+    auto_init, console, drawer, Button, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, TextField,
+    TopAppBar,
 };
 
 use self::addresses::Addresses;
@@ -205,7 +206,7 @@ impl Component for Root {
                     move || close_send_callback.emit(()),
                     move || close_receive_callback.emit(()),
                 )
-                .unwrap_or_else(|err| panic!("WS should be created for URL {}: {:?}", url, err));
+                .unwrap_or_else(|err| panic!("WS should be created for URL {url}: {err:?}"));
 
                 self.state = State::Chat(Chat {
                     keys,
@@ -227,13 +228,13 @@ impl Component for Root {
                         let container = select_exist_html_element(".chat-screen");
                         let width =
                             100.max((resize_data.width.start_size + delta_x).min(container.client_width() - 400));
-                        set_exist_element_style(".chat-sidebar", "width", &format!("{}px", width));
+                        set_exist_element_style(".chat-sidebar", "width", &format!("{width}px"));
                     } else if resize_data.height.tracking && event.buttons() == 1 {
                         let delta_y = event.screen_y() - resize_data.height.start_cursor_screen_pos;
                         let container = select_exist_html_element(".chat-screen");
                         let height =
                             72.max((resize_data.height.start_size - delta_y).min(container.client_height() - 100));
-                        set_exist_element_style(".chat-editor textarea", "height", &format!("{}px", height));
+                        set_exist_element_style(".chat-editor textarea", "height", &format!("{height}px"));
                     } else {
                         resize_data.width.tracking = false;
                         resize_data.height.tracking = false;
@@ -474,8 +475,8 @@ impl Root {
             let public_key = bs58::encode(keypair.public().encode()).into_string();
             let secret_key = bs58::encode(keypair.secret()).into_string();
 
-            TextField::set_value("public-key", &public_key);
-            TextField::set_value("secret-key", &secret_key);
+            TextField::set_value("public-key", public_key);
+            TextField::set_value("secret-key", secret_key);
 
             let sign_in_button = dom::existing::get_element_by_id::<HtmlElement>("sign-in-button");
             sign_in_button.remove_attribute("disabled").ok();
@@ -667,7 +668,7 @@ pub fn set_element_style(element: impl AsRef<HtmlElement>, property: &str, value
         .as_ref()
         .style()
         .set_property(property, value)
-        .unwrap_or_else(|err| panic!("Can't set style \"{}:{}\": {:?}", property, value, err));
+        .unwrap_or_else(|err| panic!("Can't set style \"{property}:{value}\": {err:?}"));
 }
 
 pub fn set_exist_element_style(selector: &str, property: &str, value: &str) {

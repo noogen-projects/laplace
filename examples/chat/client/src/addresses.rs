@@ -1,11 +1,9 @@
 use gloo_timers::callback::Timeout;
 use web_sys::HtmlInputElement;
-use yew::{html, html::Scope, Component, Context, Html, MouseEvent, Properties};
-use yew_mdc_widgets::{
-    console,
-    dom::{self, JsCast},
-    Button, Dialog, Element, IconButton, List, ListItem, MdcWidget, TextField,
-};
+use yew::html::Scope;
+use yew::{html, Component, Context, Html, MouseEvent, Properties};
+use yew_mdc_widgets::dom::{self, JsCast};
+use yew_mdc_widgets::{console, Button, Dialog, Element, IconButton, List, ListItem, MdcWidget, TextField};
 
 use super::{Msg as RootMsg, Root};
 
@@ -67,7 +65,7 @@ impl Component for Addresses {
                 false
             },
             Msg::FinishRemove(address) => {
-                console::log!(&format!("Remove {}", address));
+                console::log!(&format!("Remove {address}"));
                 dom::existing::get_element_by_id::<Element>(&address).remove();
                 false
             },

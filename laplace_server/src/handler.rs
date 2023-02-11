@@ -1,18 +1,17 @@
 use std::io;
 
-use actix_easy_multipart::{tempfile::Tempfile, MultipartForm};
+use actix_easy_multipart::tempfile::Tempfile;
+use actix_easy_multipart::MultipartForm;
 use actix_web::{web, HttpResponse};
 use zip::ZipArchive;
 
-use crate::{
-    error::{ServerError, ServerResult},
-    lapps::{CommonLappGuard, CommonLappResponse, LappUpdateRequest, LappsProvider},
-};
+use crate::error::{ServerError, ServerResult};
+use crate::lapps::{CommonLappGuard, CommonLappResponse, LappUpdateRequest, LappsProvider};
 
 pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse {
     lapps_service
         .into_inner()
-        .handle(|lapps_provider| async { process_get_lapps(lapps_provider) })
+        .handle(|lapps_provider| process_get_lapps(lapps_provider))
         .await
 }
 
@@ -35,21 +34,19 @@ pub async fn update_lapp(lapps_service: web::Data<LappsProvider>, body: String) 
         .await
 }
 
-fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<HttpResponse> {
-    lapps_provider.read_manager().and_then(|manager| {
-        manager
-            .lapps_iter()
-            .filter_map(|lapp| match lapp.read() {
-                Ok(lapp) if lapp.is_main() => None,
-                Ok(lapp) => Some(Ok(CommonLappGuard(lapp))),
-                Err(_) => Some(Err(ServerError::LappNotLock)),
-            })
-            .collect::<ServerResult<Vec<_>>>()
-            .map(|mut lapps| {
-                lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
-                HttpResponse::Ok().json(CommonLappResponse::lapps(lapps))
-            })
-    })
+async fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<HttpResponse> {
+    let manager = lapps_provider.read_manager().await;
+
+    let mut lapps = Vec::new();
+    for lapp in manager.lapps_iter() {
+        let lapp = lapp.read().await;
+        if !lapp.is_main() {
+            lapps.push(CommonLappGuard(lapp));
+        }
+    }
+    lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
+
+    Ok(HttpResponse::Ok().json(CommonLappResponse::lapps(lapps)))
 }
 
 async fn process_add_lapp(lapps_provider: LappsProvider, lar: Tempfile) -> ServerResult<HttpResponse> {
@@ -58,26 +55,28 @@ async fn process_add_lapp(lapps_provider: LappsProvider, lar: Tempfile) -> Serve
         .strip_suffix(".zip")
         .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));
 
-    extract_lar(&lapps_provider, lapp_name, ZipArchive::new(&lar.file)?)?;
+    extract_lar(&lapps_provider, lapp_name, ZipArchive::new(&lar.file)?).await?;
 
-    lapps_provider.write_manager().and_then(|mut manager| {
+    {
+        let mut manager = lapps_provider.write_manager().await;
         manager.insert_lapp(lapp_name);
-        let lapp = manager.lapp_mut(lapp_name)?;
-        if lapp.enabled() {
-            manager.load(lapp)?;
-        }
-        Ok(())
-    })?;
 
-    process_get_lapps(lapps_provider)
+        let shared_lapp = manager.lapp(lapp_name)?;
+        let lapp = shared_lapp.write().await;
+        if lapp.enabled() {
+            manager.load(lapp).await?;
+        }
+    }
+
+    process_get_lapps(lapps_provider).await
 }
 
-fn extract_lar<R: io::Read + io::Seek>(
+async fn extract_lar<R: io::Read + io::Seek>(
     lapps_provider: &LappsProvider,
     lapp_name: &str,
     mut archive: ZipArchive<R>,
 ) -> ServerResult<()> {
-    let lapp_dir = lapps_provider.read_manager()?.lapp_dir(lapp_name);
+    let lapp_dir = lapps_provider.read_manager().await.lapp_dir(lapp_name);
 
     if lapp_dir.exists() {
         if !lapp_dir.is_dir() {
@@ -95,13 +94,14 @@ fn extract_lar<R: io::Read + io::Seek>(
 async fn process_update_lapp(lapps_provider: LappsProvider, body: String) -> ServerResult<HttpResponse> {
     let request: LappUpdateRequest = serde_json::from_str(&body)?;
     let update_query = request.into_query();
-    let manager = lapps_provider.read_manager()?;
-    let mut lapp = manager.lapp_mut(&update_query.lapp_name)?;
+    let manager = lapps_provider.read_manager().await;
+    let shared_lapp = manager.lapp(&update_query.lapp_name)?;
+    let mut lapp = shared_lapp.write().await;
 
     let updated = lapp.update(update_query)?;
     if updated.enabled.is_some() {
         if lapp.enabled() {
-            manager.load(lapp)?;
+            manager.load(lapp).await?;
         } else {
             manager.unload(lapp).await?;
         }

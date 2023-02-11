@@ -1,16 +1,15 @@
-pub use self::{request::*, response::*};
-pub use http::{
-    self as types,
-    header::{self, HeaderName},
-    HeaderMap, HeaderValue, Method, StatusCode, Uri, Version,
-};
+use std::io::{self, Read};
+use std::iter::FromIterator;
+
+use borsh::maybestd::io::Write;
+use borsh::{BorshDeserialize, BorshSerialize};
+pub use http::header::{self, HeaderName};
+pub use http::{self as types, HeaderMap, HeaderValue, Method, StatusCode, Uri, Version};
 pub use laplace_wasm_macro::process_http as process;
-
-use std::{io, iter::FromIterator};
-
-use borsh::{maybestd::io::Write, BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
+pub use self::request::*;
+pub use self::response::*;
 use crate::WasmSlice;
 
 pub mod request;
@@ -42,7 +41,7 @@ pub enum InvokeError {
 
 fn display_code(code: &Option<u16>) -> String {
     if let Some(code) = code {
-        format!("{}", code)
+        format!("{code}")
     } else {
         "None".to_string()
     }
@@ -80,23 +79,23 @@ pub fn invoke(request: Request) -> Result<Response> {
 
 fn serialize_version<W: Write>(version: Version, writer: &mut W) -> io::Result<()> {
     match version {
-        http::Version::HTTP_09 => 9_u8,
-        http::Version::HTTP_10 => 10,
-        http::Version::HTTP_11 => 11,
-        http::Version::HTTP_2 => 20,
-        http::Version::HTTP_3 => 30,
+        Version::HTTP_09 => 9_u8,
+        Version::HTTP_10 => 10,
+        Version::HTTP_11 => 11,
+        Version::HTTP_2 => 20,
+        Version::HTTP_3 => 30,
         _ => return Err(io::Error::from(io::ErrorKind::Unsupported)),
     }
     .serialize(writer)
 }
 
-fn deserialize_version(buf: &mut &[u8]) -> io::Result<Version> {
-    Ok(match u8::deserialize(buf)? {
-        9 => http::Version::HTTP_09,
-        10 => http::Version::HTTP_10,
-        11 => http::Version::HTTP_11,
-        20 => http::Version::HTTP_2,
-        30 => http::Version::HTTP_3,
+fn deserialize_version<R: Read>(reader: &mut R) -> io::Result<Version> {
+    Ok(match u8::deserialize_reader(reader)? {
+        9 => Version::HTTP_09,
+        10 => Version::HTTP_10,
+        11 => Version::HTTP_11,
+        20 => Version::HTTP_2,
+        30 => Version::HTTP_3,
         _ => return Err(io::Error::from(io::ErrorKind::Unsupported)),
     })
 }
@@ -109,9 +108,9 @@ fn serialize_headers<W: Write>(headers: &HeaderMap, writer: &mut W) -> io::Resul
     headers.serialize(writer)
 }
 
-fn deserialize_headers(buf: &mut &[u8]) -> io::Result<HeaderMap> {
+fn deserialize_headers<R: Read>(reader: &mut R) -> io::Result<HeaderMap> {
     let mut headers = Vec::new();
-    for (name, value) in Vec::<(Vec<u8>, Vec<u8>)>::deserialize(buf)?.into_iter() {
+    for (name, value) in Vec::<(Vec<u8>, Vec<u8>)>::deserialize_reader(reader)?.into_iter() {
         headers.push((
             HeaderName::from_bytes(&name).map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?,
             HeaderValue::from_bytes(&value).map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?,

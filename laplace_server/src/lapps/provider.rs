@@ -1,34 +1,33 @@
-use std::{
-    future::Future,
-    io,
-    ops::Deref,
-    path::PathBuf,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-};
+use std::future::Future;
+use std::io;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use actix_web::HttpResponse;
-use futures::{future, FutureExt};
+use derive_more::Deref;
 use laplace_common::lapp::Permission;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::{
-    error::{error_response, ServerError, ServerResult},
-    lapps::{Instance, Lapp, LappsManager},
-};
+use crate::error::{error_response, ServerResult};
+use crate::lapps::{LappsManager, SharedLapp};
 
-#[derive(Clone)]
+#[derive(Clone, Deref)]
+#[deref(forward)]
 pub struct LappsProvider(Arc<RwLock<LappsManager>>);
 
 impl LappsProvider {
-    pub fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
-        LappsManager::new(lapps_path).map(|manager| Self(Arc::new(RwLock::new(manager))))
+    pub async fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
+        let manager = LappsManager::new(lapps_path).await?;
+
+        Ok(Self(Arc::new(RwLock::new(manager))))
     }
 
-    pub fn read_manager(&self) -> ServerResult<RwLockReadGuard<LappsManager>> {
-        self.0.read().map_err(|_| ServerError::LappsManagerNotLock)
+    pub async fn read_manager(&self) -> RwLockReadGuard<LappsManager> {
+        self.0.read().await
     }
 
-    pub fn write_manager(&self) -> ServerResult<RwLockWriteGuard<LappsManager>> {
-        self.0.write().map_err(|_| ServerError::LappsManagerNotLock)
+    pub async fn write_manager(&self) -> RwLockWriteGuard<LappsManager> {
+        self.0.write().await
     }
 
     pub async fn handle<Fut>(self: Arc<Self>, handler: impl FnOnce(Self) -> Fut) -> HttpResponse
@@ -47,16 +46,16 @@ impl LappsProvider {
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
     {
-        self.handle(move |lapps_provider| {
+        self.handle(move |lapps_provider| async move {
             lapps_provider
                 .read_manager()
-                .and_then(|manager| {
-                    manager
-                        .loaded_lapp(&lapp_name)
-                        .and_then(|(lapp, _)| lapp.check_enabled_and_allow_permissions(permissions))
-                })
-                .map(|_| handler(lapps_provider, lapp_name).left_future())
-                .unwrap_or_else(|err| future::ready(Err(err)).right_future())
+                .await
+                .lapp(&lapp_name)?
+                .read()
+                .await
+                .check_enabled_and_allow_permissions(permissions)?;
+
+            handler(lapps_provider, lapp_name).await
         })
         .await
     }
@@ -65,21 +64,17 @@ impl LappsProvider {
         self: Arc<Self>,
         permissions: &[Permission],
         lapp_name: String,
-        handler: impl FnOnce(String, &Lapp, Instance) -> Fut,
+        handler: impl FnOnce(String, SharedLapp) -> Fut,
     ) -> HttpResponse
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
     {
-        self.handle(move |lapps_provider| {
-            lapps_provider
-                .read_manager()
-                .and_then(|manager| {
-                    manager.loaded_lapp(&lapp_name).and_then(|(lapp, instance)| {
-                        lapp.check_enabled_and_allow_permissions(permissions)?;
-                        Ok(handler(lapp_name, &*lapp, instance).left_future())
-                    })
-                })
-                .unwrap_or_else(|err| future::ready(Err(err)).right_future())
+        self.handle(move |lapps_provider| async move {
+            let manager = lapps_provider.read_manager().await;
+            let lapp = manager.lapp(&lapp_name)?;
+            lapp.read().await.check_enabled_and_allow_permissions(permissions)?;
+
+            handler(lapp_name, lapp).await
         })
         .await
     }
@@ -98,7 +93,7 @@ impl LappsProvider {
     pub async fn handle_client_http_lapp<Fut>(
         self: Arc<Self>,
         lapp_name: String,
-        handler: impl FnOnce(String, &Lapp, Instance) -> Fut,
+        handler: impl FnOnce(String, SharedLapp) -> Fut,
     ) -> HttpResponse
     where
         Fut: Future<Output = ServerResult<HttpResponse>>,
@@ -117,13 +112,5 @@ impl LappsProvider {
     {
         self.handle_allowed(&[Permission::ClientHttp, Permission::Websocket], lapp_name, handler)
             .await
-    }
-}
-
-impl Deref for LappsProvider {
-    type Target = RwLock<LappsManager>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

@@ -1,9 +1,14 @@
-pub use wasmer::{Instance, Memory};
+use std::io;
+use std::ops::Deref;
+use std::string::FromUtf8Error;
 
-use std::{convert::TryFrom, ops::Deref, ptr::copy_nonoverlapping, slice, string::FromUtf8Error, sync::Arc};
-
-use laplace_wasm::WasmSlice;
+use borsh::{BorshDeserialize, BorshSerialize};
+use laplace_wasm::route::{gossipsub, websocket, Route};
+use laplace_wasm::{http, WasmSlice};
 use thiserror::Error;
+use wasmer::{Instance, Store};
+
+use crate::lapps::wasm_interop::{MemoryManagementError, MemoryManagementHostData};
 
 #[derive(Debug, Error)]
 pub enum LappInstanceError {
@@ -16,96 +21,97 @@ pub enum LappInstanceError {
     #[error("Can't deserialize string: {0:?}")]
     DeserializeStringError(#[from] FromUtf8Error),
 
-    #[error("Incorrect WASM slice length")]
-    WrongBufferLength,
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+
+    #[error("Wrong memory operation: {0}")]
+    MemoryManagementError(#[from] MemoryManagementError),
 }
 
 pub type LappInstanceResult<T> = Result<T, LappInstanceError>;
 
-pub trait Allocation {
-    fn alloc(&self, size: u32) -> LappInstanceResult<u32>;
-    unsafe fn dealloc(&self, offset: u32, size: u32) -> LappInstanceResult<()>;
+pub struct LappInstance {
+    pub instance: Instance,
+    pub memory_management: MemoryManagementHostData,
+    pub store: Store,
 }
 
-impl Allocation for Instance {
-    fn alloc(&self, size: u32) -> LappInstanceResult<u32> {
-        let alloc_fn = self.exports.get_function("alloc")?.native::<u32, u32>()?;
-        alloc_fn.call(size).map_err(Into::into)
+impl LappInstance {
+    pub fn process_http(&mut self, request: http::Request) -> LappInstanceResult<http::Response> {
+        let process_http_fn = self
+            .instance
+            .exports
+            .get_typed_function::<u64, u64>(&self.store, "process_http")?;
+
+        let bytes = request.try_to_vec()?;
+        let arg = self.bytes_to_wasm_slice(&bytes)?;
+
+        let slice = process_http_fn.call(&mut self.store, arg.into())?;
+        let bytes = unsafe { self.wasm_slice_to_vec(slice)? };
+
+        Ok(BorshDeserialize::deserialize(&mut bytes.as_slice())?)
     }
 
-    unsafe fn dealloc(&self, offset: u32, size: u32) -> LappInstanceResult<()> {
-        log::trace!("Dealloc: offset = {}, size = {}", offset, size);
-        let dealloc_fn = self.exports.get_function("dealloc")?.native::<(u32, u32), ()>()?;
-        dealloc_fn.call(offset, size).map_err(Into::into)
-    }
-}
+    pub fn route_ws(&mut self, msg: &websocket::Message) -> LappInstanceResult<Vec<Route>> {
+        let route_ws_fn = self.exports.get_function("route_ws")?.typed::<u64, u64>(&self.store)?;
+        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
 
-#[derive(Clone)]
-pub struct ExpectedInstance {
-    instance: Instance,
-    memory: Memory,
-}
+        let response_slice = route_ws_fn.call(&mut self.store, arg.into())?;
+        let bytes = unsafe { self.wasm_slice_to_vec(response_slice)? };
 
-impl ExpectedInstance {
-    pub fn copy_to_memory(&self, src: *const u8, size: usize) -> LappInstanceResult<u32> {
-        let offset = self.alloc(size as _)?;
-        if size as u64 <= self.memory.data_size() - offset as u64 {
-            unsafe {
-                copy_nonoverlapping(src, self.memory.data_ptr().offset(offset as _), size);
-            }
-            Ok(offset)
-        } else {
-            log::error!(
-                "Destination offset = {} and buffer len = {}, but memory data size = {}",
-                offset,
-                size,
-                self.memory.data_size()
-            );
-            Err(LappInstanceError::WrongBufferLength)
-        }
+        Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
 
-    pub unsafe fn move_from_memory(&self, offset: u32, size: usize) -> LappInstanceResult<Vec<u8>> {
-        log::trace!(
-            "Move from memory: data_ptr = {}, data_size = {}, offset = {}, size = {}",
-            self.memory.data_ptr() as usize,
-            self.memory.data_size(),
-            offset,
-            size
-        );
-        let data = slice::from_raw_parts(self.memory.data_ptr().offset(offset as _), size).into();
-        self.dealloc(offset, size as _)?;
-        Ok(data)
+    pub fn route_gossipsub(&mut self, msg: &gossipsub::Message) -> LappInstanceResult<Vec<Route>> {
+        let route_gossipsub = self
+            .exports
+            .get_function("route_gossipsub")?
+            .typed::<u64, u64>(&self.store)?;
+        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
+
+        let response_slice = route_gossipsub.call(&mut self.store, arg.into())?;
+        let bytes = unsafe { self.wasm_slice_to_vec(response_slice)? };
+
+        Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
 
-    pub unsafe fn wasm_slice_to_vec(&self, slice: impl Into<WasmSlice>) -> LappInstanceResult<Vec<u8>> {
-        let slice = slice.into();
-        if slice.len() as u64 <= self.memory.data_size() - slice.ptr() as u64 {
-            Ok(self.move_from_memory(slice.ptr(), slice.len() as _)?)
-        } else {
-            log::error!(
-                "WASM slice ptr = {}, len = {}, but memory data size = {}",
-                slice.ptr(),
-                slice.len(),
-                self.memory.data_size()
-            );
-            Err(LappInstanceError::WrongBufferLength)
-        }
+    pub fn copy_to_memory(&mut self, src: *const u8, size: usize) -> LappInstanceResult<u32> {
+        Ok(self
+            .memory_management
+            .to_manager(&mut self.store)
+            .copy_to_memory(src, size)?)
     }
 
-    pub unsafe fn wasm_slice_to_string(&self, slice: impl Into<WasmSlice>) -> LappInstanceResult<String> {
-        let data = self.wasm_slice_to_vec(slice)?;
-        String::from_utf8(data).map_err(Into::into)
+    pub unsafe fn move_from_memory(&mut self, offset: u32, size: usize) -> LappInstanceResult<Vec<u8>> {
+        Ok(self
+            .memory_management
+            .to_manager(&mut self.store)
+            .move_from_memory(offset, size)?)
     }
 
-    pub fn bytes_to_wasm_slice(&self, bytes: impl AsRef<[u8]>) -> LappInstanceResult<WasmSlice> {
-        let bytes = bytes.as_ref();
-        let offset = self.copy_to_memory(bytes.as_ptr(), bytes.len())?;
-        Ok(WasmSlice::from((offset, bytes.len() as _)))
+    pub unsafe fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<Vec<u8>> {
+        Ok(self
+            .memory_management
+            .to_manager(&mut self.store)
+            .wasm_slice_to_vec(slice)?)
+    }
+
+    pub unsafe fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<String> {
+        Ok(self
+            .memory_management
+            .to_manager(&mut self.store)
+            .wasm_slice_to_string(slice)?)
+    }
+
+    pub fn bytes_to_wasm_slice(&mut self, bytes: impl AsRef<[u8]>) -> LappInstanceResult<WasmSlice> {
+        Ok(self
+            .memory_management
+            .to_manager(&mut self.store)
+            .bytes_to_wasm_slice(bytes)?)
     }
 }
 
-impl Deref for ExpectedInstance {
+impl Deref for LappInstance {
     type Target = Instance;
 
     fn deref(&self) -> &Self::Target {
@@ -113,28 +119,28 @@ impl Deref for ExpectedInstance {
     }
 }
 
-impl TryFrom<Instance> for ExpectedInstance {
-    type Error = wasmer::ExportError;
-
-    fn try_from(instance: Instance) -> Result<Self, Self::Error> {
-        let memory = instance.exports.get_memory("memory")?.clone();
-
-        Ok(Self { instance, memory })
-    }
-}
-
-impl TryFrom<&Instance> for ExpectedInstance {
-    type Error = wasmer::ExportError;
-
-    fn try_from(instance: &Instance) -> Result<Self, Self::Error> {
-        Self::try_from(instance.clone())
-    }
-}
-
-impl TryFrom<Arc<Instance>> for ExpectedInstance {
-    type Error = wasmer::ExportError;
-
-    fn try_from(instance: Arc<Instance>) -> Result<Self, Self::Error> {
-        Self::try_from(&*instance)
-    }
-}
+// impl TryFrom<Instance> for LappInstance {
+//     type Error = wasmer::ExportError;
+//
+//     fn try_from(instance: Instance) -> Result<Self, Self::Error> {
+//         let memory = instance.exports.get_memory("memory")?.clone();
+//
+//         Ok(Self { instance, memory })
+//     }
+// }
+//
+// impl TryFrom<&Instance> for LappInstance {
+//     type Error = wasmer::ExportError;
+//
+//     fn try_from(instance: &Instance) -> Result<Self, Self::Error> {
+//         Self::try_from(instance.clone())
+//     }
+// }
+//
+// impl TryFrom<Arc<Instance>> for LappInstance {
+//     type Error = wasmer::ExportError;
+//
+//     fn try_from(instance: Arc<Instance>) -> Result<Self, Self::Error> {
+//         Self::try_from(&*instance)
+//     }
+// }

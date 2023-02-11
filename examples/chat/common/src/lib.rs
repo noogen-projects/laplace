@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Peer {
@@ -23,6 +24,6 @@ pub enum WsResponse {
 
 impl WsResponse {
     pub fn make_error_json_string<E: fmt::Debug>(err: E) -> String {
-        format!(r#"{{"Error":"{:?}"}}"#, err)
+        format!(r#"{{"Error":"{err:?}"}}"#)
     }
 }

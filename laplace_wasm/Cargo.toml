@@ -12,7 +12,7 @@ repository = "https://github.com/noogen-projects/laplace"
 description = "The WASM utilities of the local-firs web-application platform"
 
 [dependencies]
-borsh = "0.9"
+borsh = { workspace = true }
 derive_more = "0.99"
 http = "0.2"
 laplace_wasm_macro = { path = "../laplace_wasm_macro" }

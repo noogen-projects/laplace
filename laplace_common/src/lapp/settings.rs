@@ -1,7 +1,5 @@
-use std::{
-    fmt,
-    path::{Path, PathBuf},
-};
+use std::fmt;
+use std::path::{Path, PathBuf};
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -162,7 +160,7 @@ impl<'de> de::Visitor<'de> for HttpMethodsVisitor {
     {
         match value.to_lowercase().as_str() {
             "all" => Ok(HttpMethods::All),
-            value => Err(E::custom(format!("Unknown string value: {}", value))),
+            value => Err(E::custom(format!("Unknown string value: {value}"))),
         }
     }
 
@@ -232,7 +230,7 @@ impl<'de> de::Visitor<'de> for HttpHostsVisitor {
     {
         match value.to_lowercase().as_str() {
             "all" => Ok(HttpHosts::All),
-            value => Err(E::custom(format!("Unknown string value: {}", value))),
+            value => Err(E::custom(format!("Unknown string value: {value}"))),
         }
     }
 

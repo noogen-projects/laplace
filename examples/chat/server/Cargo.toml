@@ -15,7 +15,7 @@ description = "The Chat lapp example"
 crate-type = ["cdylib"]
 
 [dependencies]
-borsh = "0.9"
+borsh = { workspace = true }
 chat_common = { path = "../common" }
 laplace_wasm = { path = "../../../laplace_wasm" }
 serde_json = "1.0"

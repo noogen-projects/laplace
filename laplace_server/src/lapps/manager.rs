@@ -1,58 +1,54 @@
-use std::{
-    collections::HashMap,
-    fs, io,
-    path::PathBuf,
-    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
-};
+use std::collections::HashMap;
+use std::io;
+use std::path::PathBuf;
 
-use log::{error, info};
-use wasmer::Instance;
+use reqwest::blocking::Client;
+use tokio::fs;
+use tokio::sync::RwLockWriteGuard;
 
-use crate::{
-    error::{ServerError, ServerResult},
-    Lapp,
-};
+use crate::error::{ServerError, ServerResult};
+use crate::lapps::SharedLapp;
+use crate::Lapp;
 
 pub struct LappsManager {
-    lapps: HashMap<String, RwLock<Lapp>>,
+    lapps: HashMap<String, SharedLapp>,
     lapps_path: PathBuf,
-    http_client: reqwest::blocking::Client,
+    http_client: Client,
 }
 
 impl LappsManager {
-    pub fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
+    pub async fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
         let lapps_path = lapps_path.into();
-        fs::read_dir(&lapps_path)?
-            .map(|entry| {
-                entry.and_then(|dir| {
-                    let name = dir.file_name().into_string().map_err(|invalid_name| {
-                        error!("Lapp name '{:?}' is not valid UTF-8", invalid_name);
-                        io::Error::from(io::ErrorKind::InvalidData)
-                    })?;
-                    Ok((name.clone(), RwLock::new(Lapp::new(name, dir.path()))))
-                })
-            })
-            .collect::<io::Result<_>>()
-            .map(|lapps| {
-                let http_client = reqwest::blocking::Client::new();
-                Self {
-                    lapps,
-                    lapps_path,
-                    http_client,
-                }
-            })
+        let mut lapps = HashMap::new();
+        let mut read_dir = fs::read_dir(&lapps_path).await?;
+
+        while let Some(dir) = read_dir.next_entry().await? {
+            let name = dir.file_name().into_string().map_err(|invalid_name| {
+                log::error!("Lapp name '{invalid_name:?}' is not valid UTF-8");
+                io::Error::from(io::ErrorKind::InvalidData)
+            })?;
+
+            lapps.insert(name.clone(), SharedLapp::new(Lapp::new(name, dir.path())));
+        }
+
+        let http_client = tokio::task::spawn_blocking(|| Client::new()).await?;
+        Ok(Self {
+            lapps,
+            lapps_path,
+            http_client,
+        })
     }
 
     pub fn insert_lapp(&mut self, lapp_name: impl Into<String>) {
         let lapp_name = lapp_name.into();
         let root_dir = self.lapps_path.join(&lapp_name);
         self.lapps
-            .insert(lapp_name.clone(), RwLock::new(Lapp::new(lapp_name, root_dir)));
+            .insert(lapp_name.clone(), SharedLapp::new(Lapp::new(lapp_name, root_dir)));
     }
 
-    pub fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
+    pub async fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         let http_client = self.http_client.clone();
-        lapp.instantiate(http_client)
+        lapp.instantiate(http_client).await
     }
 
     pub async fn unload(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
@@ -62,14 +58,15 @@ impl LappsManager {
         Ok(())
     }
 
-    pub fn load_lapps(&self) {
-        for (name, lapp_lock) in &self.lapps {
-            let lapp = lapp_lock.read().expect("Lapp is not readable");
+    pub async fn load_lapps(&self) {
+        for (name, shared_lapp) in &self.lapps {
+            let lapp = shared_lapp.read().await;
             if !lapp.is_main() && lapp.enabled() && !lapp.is_loaded() {
-                info!("Load lapp '{}'", name);
+                log::info!("Load lapp '{name}'");
 
                 drop(lapp);
-                self.load(lapp_lock.write().expect("Lapp is not writable"))
+                self.load(shared_lapp.write().await)
+                    .await
                     .expect("Lapp should be loaded");
             }
         }
@@ -79,42 +76,23 @@ impl LappsManager {
         self.lapps_path.join(lapp_name.as_ref())
     }
 
-    pub fn is_loaded(&self, lapp_name: impl AsRef<str>) -> bool {
-        self.lapp(lapp_name.as_ref())
-            .map(|lapp| lapp.is_loaded())
-            .unwrap_or(false)
+    pub async fn is_loaded(&self, lapp_name: impl AsRef<str>) -> bool {
+        if let Ok(lapp) = self.lapp(lapp_name.as_ref()) {
+            lapp.read().await.is_loaded()
+        } else {
+            false
+        }
     }
 
-    pub fn loaded_lapp(&self, lapp_name: impl AsRef<str>) -> ServerResult<(RwLockReadGuard<Lapp>, Instance)> {
-        let lapp_name = lapp_name.as_ref();
-        self.lapp(lapp_name).and_then(|lapp| {
-            lapp.instance()
-                .ok_or_else(|| ServerError::LappNotLoaded(lapp_name.to_string()))
-                .map(|instance| (lapp, instance))
-        })
-    }
-
-    pub fn lapp(&self, lapp_name: impl AsRef<str> + ToString) -> ServerResult<RwLockReadGuard<Lapp>> {
-        self.lapps
+    pub fn lapp(&self, lapp_name: impl AsRef<str> + ToString) -> ServerResult<SharedLapp> {
+        let lapp = self
+            .lapps
             .get(lapp_name.as_ref())
-            .ok_or_else(|| ServerError::LappNotFound(lapp_name.to_string()))
-            .and_then(|lapp| lapp.read().map_err(|_| ServerError::LappNotLock))
+            .ok_or_else(|| ServerError::LappNotFound(lapp_name.to_string()))?;
+        Ok(lapp.clone())
     }
 
-    pub fn lapp_mut(&self, lapp_name: impl AsRef<str> + ToString) -> ServerResult<RwLockWriteGuard<Lapp>> {
-        self.lapps
-            .get(lapp_name.as_ref())
-            .ok_or_else(|| ServerError::LappNotFound(lapp_name.to_string()))
-            .and_then(|lapp| lapp.write().map_err(|_| ServerError::LappNotLock))
-    }
-
-    pub fn lapps_iter(&self) -> impl Iterator<Item = &RwLock<Lapp>> {
+    pub fn lapps_iter(&self) -> impl Iterator<Item = &SharedLapp> {
         self.lapps.values()
-    }
-
-    pub fn instance(&self, lapp_name: impl AsRef<str> + ToString) -> ServerResult<Instance> {
-        self.lapp(lapp_name.as_ref())?
-            .instance()
-            .ok_or_else(|| ServerError::LappNotLoaded(lapp_name.to_string()))
     }
 }

@@ -1,10 +1,8 @@
 #![recursion_limit = "256"]
 
-use wasm_web_helpers::{
-    error::Result,
-    fetch::{fetch_success_text, Request, Response},
-    spawn_local,
-};
+use wasm_web_helpers::error::Result;
+use wasm_web_helpers::fetch::{fetch_success_text, Request, Response};
+use wasm_web_helpers::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::{html, Component, Context, Html};
 use yew_mdc_widgets::{auto_init, console, dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
@@ -32,11 +30,11 @@ impl Component for Root {
             Msg::Submit => {
                 let uri = dom::existing::select_element::<HtmlInputElement>("#uri > input").value();
                 if !uri.is_empty() {
-                    let request = Request::get(&format!("/echo/{}", uri));
+                    let request = Request::get(&format!("/echo/{uri}"));
                     let callback = ctx.link().callback(|result: Result<(Response, Result<String>)>| {
                         match result.and_then(|(_, body)| body) {
                             Ok(body) => Msg::Fetch(body),
-                            Err(err) => Msg::Error(format!("Fetch error: {:?}", err)),
+                            Err(err) => Msg::Error(format!("Fetch error: {err:?}")),
                         }
                     });
                     spawn_local(async move {

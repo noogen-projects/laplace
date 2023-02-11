@@ -1,26 +1,22 @@
-use std::{borrow::Cow, collections::HashMap, convert::TryFrom};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use anyhow::{anyhow, Context as _, Error};
-use laplace_common::{
-    api::{Response as CommonLappResponse, UpdateQuery},
-    lapp::{Lapp as CommonLapp, Permission},
-};
+use laplace_common::api::{Response as CommonLappResponse, UpdateQuery};
+use laplace_common::lapp::{Lapp as CommonLapp, Permission};
 use laplace_yew::error::MsgError;
-use wasm_web_helpers::{
-    error::Result,
-    fetch::{JsonFetcher, Response},
-};
+use wasm_web_helpers::error::Result;
+use wasm_web_helpers::fetch::{JsonFetcher, Response};
 use web_sys::{FormData, HtmlInputElement};
 use yew::{self, classes, html, Callback, Component, Context, Html};
+use yew_mdc_widgets::dom::existing::JsObjectAccess;
+use yew_mdc_widgets::dom::{self, JsValue};
+use yew_mdc_widgets::wasm_bindgen::prelude::{wasm_bindgen, JsError};
+use yew_mdc_widgets::wasm_bindgen::{self};
 use yew_mdc_widgets::{
-    auto_init, console,
-    dom::{self, existing::JsObjectAccess, JsValue},
-    wasm_bindgen::{
-        self,
-        prelude::{wasm_bindgen, JsError},
-    },
-    Button, Chip, ChipSet, CustomEvent, Dialog, Drawer, Element, IconButton, List, ListItem, MdcWidget, Switch,
-    TopAppBar,
+    auto_init, console, Button, Chip, ChipSet, CustomEvent, Dialog, Drawer, Element, IconButton, List, ListItem,
+    MdcWidget, Switch, TopAppBar,
 };
 
 use self::i18n::label::*;
@@ -137,7 +133,7 @@ impl Component for Root {
                     }
                     false
                 } else {
-                    console::error!(&format!("Unknown lapp name: {}", name));
+                    console::error!(&format!("Unknown lapp name: {name}"));
                     false
                 }
             },
@@ -161,7 +157,7 @@ impl Component for Root {
             },
             Msg::AddLar => false,
             Msg::Error(err) => {
-                console::error!(&format!("{}", err));
+                console::error!(&format!("{err}"));
                 true
             },
         }

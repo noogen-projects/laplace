@@ -9,10 +9,8 @@ use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
 use wasmer_wasi::{WasiError, WasiStateCreationError};
 
-use crate::{
-    lapps::{LappInstanceError, LappSettingsError},
-    service::gossipsub,
-};
+use crate::lapps::{LappInstanceError, LappSettingsError};
+use crate::service::gossipsub;
 
 pub type AppResult<T> = Result<T, AppError>;
 
@@ -132,8 +130,8 @@ impl From<ServerError> for HttpResponse {
 }
 
 pub fn error_response(err: impl fmt::Debug) -> HttpResponse {
-    let error_message = format!("{:#?}", err);
-    log::error!("Internal Server error: {}", error_message);
+    let error_message = format!("{err:#?}");
+    log::error!("Internal Server error: {error_message}");
 
     HttpResponse::InternalServerError().body(error_message)
 }

@@ -1,6 +1,8 @@
+use std::io::Read;
 use std::{fmt, io};
 
-use borsh::{maybestd::io::Write, BorshDeserialize, BorshSerialize};
+use borsh::maybestd::io::Write;
+use borsh::{BorshDeserialize, BorshSerialize};
 use http;
 
 use super::{
@@ -72,12 +74,12 @@ impl BorshSerialize for Response {
 }
 
 impl BorshDeserialize for Response {
-    fn deserialize(buf: &mut &[u8]) -> io::Result<Self> {
-        let status =
-            StatusCode::from_u16(u16::deserialize(buf)?).map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
-        let version = deserialize_version(buf)?;
-        let headers = deserialize_headers(buf)?;
-        let body = Vec::<u8>::deserialize(buf)?;
+    fn deserialize_reader<R: Read>(reader: &mut R) -> io::Result<Self> {
+        let status = StatusCode::from_u16(u16::deserialize_reader(reader)?)
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
+        let version = deserialize_version(reader)?;
+        let headers = deserialize_headers(reader)?;
+        let body = Vec::<u8>::deserialize_reader(reader)?;
 
         Ok(Self {
             status,

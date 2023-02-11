@@ -7,16 +7,15 @@ use laplace_yew::RawHtml;
 use lew::SimpleEditor;
 use notes_common::{Note, NoteContent, Response};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
-use wasm_web_helpers::{
-    error::Result,
-    fetch::{JsonFetcher, Response as WebResponse},
-};
+use wasm_web_helpers::error::Result;
+use wasm_web_helpers::fetch::{JsonFetcher, Response as WebResponse};
 use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
 use yew::{html, Callback, Component, Context, Html, InputEvent};
+use yew_mdc_widgets::dom::existing::JsObjectAccess;
+use yew_mdc_widgets::dom::{self};
 use yew_mdc_widgets::{
-    auto_init, console,
-    dom::{self, existing::JsObjectAccess},
-    Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, ListItem, MdcWidget, Menu, TextField, TopAppBar,
+    auto_init, console, Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, ListItem, MdcWidget, Menu,
+    TextField, TopAppBar,
 };
 
 struct FullNote {
@@ -118,7 +117,7 @@ impl Component for Root {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::GetInitialNote(name) => {
-                JsonFetcher::send_get(format!("/notes/note/{}", name), {
+                JsonFetcher::send_get(format!("/notes/note/{name}"), {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
                 });
@@ -227,7 +226,7 @@ impl Component for Root {
                 false
             },
             Msg::RenameNote(name, new_name) => {
-                let uri = format!("/notes/rename/{}", name);
+                let uri = format!("/notes/rename/{name}");
                 JsonFetcher::send_post(uri, new_name, {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
@@ -235,7 +234,7 @@ impl Component for Root {
                 false
             },
             Msg::DeleteNote(name) => {
-                let uri = format!("/notes/delete/{}", name);
+                let uri = format!("/notes/delete/{name}");
                 JsonFetcher::send_post(uri, "", {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
@@ -267,7 +266,7 @@ impl Component for Root {
                 false
             },
             Msg::Error(err) => {
-                console::error!(&format!("{}", err));
+                console::error!(&format!("{err}"));
                 true
             },
         }

@@ -78,6 +78,6 @@ pub enum Response {
 
 impl Response {
     pub fn json_error_from<E: fmt::Debug>(err: E) -> String {
-        format!(r#"{{"Error":"{:?}"}}"#, err)
+        format!(r#"{{"Error":"{err:?}"}}"#)
     }
 }

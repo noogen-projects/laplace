@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0"
-borsh = "0.9"
+borsh = { workspace = true }
 laplace_wasm = { path = "../../../laplace_wasm" }
 serde_json = "1.0"
 sql-builder = "3.1"

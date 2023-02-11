@@ -1,52 +1,28 @@
-use std::{
-    borrow::Borrow,
-    convert::TryFrom,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
-use arc_swap::ArcSwapOption;
 use borsh::BorshSerialize;
 use laplace_wasm::database::{Row, Value};
-use rusqlite::{types::ValueRef, Connection, OptionalExtension};
-use wasmer::{Instance, WasmerEnv};
+use rusqlite::types::ValueRef;
+use rusqlite::{Connection, OptionalExtension};
+use wasmer::FunctionEnvMut;
 
-use crate::lapps::ExpectedInstance;
-
-#[derive(WasmerEnv, Clone)]
-pub struct DatabaseEnv {
-    pub instance: Arc<ArcSwapOption<Instance>>,
-    pub connection: Arc<Mutex<Connection>>,
-}
-
-impl<T: Borrow<DatabaseEnv>> From<T> for ExpectedDatabaseEnv {
-    fn from(env: T) -> Self {
-        let env = env.borrow();
-        let instance =
-            ExpectedInstance::try_from(env.instance.load_full().expect("Lapp instance should be initialized"))
-                .expect("Memory should be presented");
-
-        Self {
-            instance,
-            connection: env.connection.clone(),
-        }
-    }
-}
+use crate::lapps::wasm_interop::MemoryManagementHostData;
 
 #[derive(Clone)]
-pub struct ExpectedDatabaseEnv {
-    pub instance: ExpectedInstance,
+pub struct DatabaseEnv {
+    pub memory_data: Option<MemoryManagementHostData>,
     pub connection: Arc<Mutex<Connection>>,
 }
 
-pub fn execute(env: &DatabaseEnv, sql_query_slice: u64) -> u64 {
+pub fn execute(env: FunctionEnvMut<DatabaseEnv>, sql_query_slice: u64) -> u64 {
     run(env, sql_query_slice, do_execute)
 }
 
-pub fn query(env: &DatabaseEnv, sql_query_slice: u64) -> u64 {
+pub fn query(env: FunctionEnvMut<DatabaseEnv>, sql_query_slice: u64) -> u64 {
     run(env, sql_query_slice, do_query)
 }
 
-pub fn query_row(env: &DatabaseEnv, sql_query_slice: u64) -> u64 {
+pub fn query_row(env: FunctionEnvMut<DatabaseEnv>, sql_query_slice: u64) -> u64 {
     run(env, sql_query_slice, do_query_row)
 }
 
@@ -77,25 +53,29 @@ pub fn do_query_row(connection: &Connection, sql: String) -> Result<Option<Row>,
 }
 
 fn run<T: BorshSerialize>(
-    env: &DatabaseEnv,
+    mut env: FunctionEnvMut<DatabaseEnv>,
     sql_query_slice: u64,
     fun: impl Fn(&Connection, String) -> Result<T, String>,
 ) -> u64 {
-    let env = ExpectedDatabaseEnv::from(env);
+    let memory_data = env.data().memory_data.clone().expect("Memory data must not be empty");
+
     let sql = unsafe {
-        env.instance
+        memory_data
+            .to_manager(&mut env)
             .wasm_slice_to_string(sql_query_slice)
             .expect("SQL query should be converted to string")
     };
 
     let result = env
+        .data()
         .connection
         .try_lock()
         .map_err(|err| format!("{:?}", err))
         .and_then(|connection| fun(&connection, sql));
 
     let serialized = result.try_to_vec().expect("Result should be serializable");
-    env.instance
+    memory_data
+        .to_manager(&mut env)
         .bytes_to_wasm_slice(&serialized)
         .expect("Result should be to move to WASM")
         .into()

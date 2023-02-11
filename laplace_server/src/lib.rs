@@ -1,10 +1,5 @@
-pub use actix_files;
-pub use actix_web;
-
-use std::{
-    fs,
-    io::{BufReader, Write},
-};
+use std::fs;
+use std::io::{BufReader, Write};
 
 use actix_easy_multipart::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
@@ -12,12 +7,11 @@ use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
+pub use {actix_files, actix_web};
 
-use self::{
-    error::{AppError, AppResult},
-    lapps::{Lapp, LappsProvider},
-    settings::{LoggerSettings, Settings},
-};
+use self::error::{AppError, AppResult};
+use self::lapps::{Lapp, LappsProvider};
+use self::settings::{LoggerSettings, Settings};
 
 pub mod auth;
 pub mod convert;
@@ -53,21 +47,16 @@ pub fn init_logger(settings: &LoggerSettings) -> AppResult<LoggerHandle> {
 }
 
 pub async fn run(settings: Settings) -> AppResult<()> {
-    let lapps_dir = settings.lapps.path.clone();
-    let lapps_provider = web::Data::new({
-        let lapps_dir = lapps_dir.clone();
-        web::block(move || LappsProvider::new(lapps_dir))
-            .await
-            .expect("Lapps provider should be constructed")?
-    });
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = if let Some(access_token) = settings.http.access_token.clone() {
         access_token
     } else {
         auth::generate_token()?
     };
-    let upload_file_limit = settings.http.upload_file_limit;
+    // todo: use `String::leak` when its stabilized
+    let laplace_access_token: &'static str = Box::leak(laplace_access_token.into_boxed_str());
 
+    let upload_file_limit = settings.http.upload_file_limit;
     if settings.http.print_url {
         let access_query = if !laplace_access_token.is_empty() {
             format!("?access_token={}", laplace_access_token)
@@ -82,9 +71,14 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             access_query
         );
     }
+    let lapps_dir = settings.lapps.path.clone();
+    let lapps_provider = LappsProvider::new(&lapps_dir)
+        .await
+        .expect("Lapps provider should be constructed");
 
     log::info!("Load lapps");
-    lapps_provider.read_manager().expect("Lapps is not locked").load_lapps();
+    lapps_provider.read_manager().await.load_lapps().await;
+    let lapps_provider = web::Data::new(lapps_provider);
 
     log::info!("Create HTTP server");
     let http_server = HttpServer::new(move || {
@@ -100,9 +94,9 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             )
             .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::NormalizePath::trim())
-            .wrap_fn(auth::create_check_access_middleware(
+            .wrap(auth::middleware::CheckAccess::new(
                 web::Data::clone(&lapps_provider),
-                laplace_access_token.clone(),
+                laplace_access_token,
             ))
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())

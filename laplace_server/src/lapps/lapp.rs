@@ -1,42 +1,31 @@
-pub use laplace_common::{
-    api::{UpdateQuery, UpdateRequest as LappUpdateRequest},
-    lapp::access::*,
-};
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
-use std::{
-    convert::TryFrom,
-    fs,
-    ops::{Deref, DerefMut},
-    path::PathBuf,
-    sync::{Arc, Mutex, RwLockReadGuard},
-};
-
-use arc_swap::ArcSwapOption;
 use borsh::BorshDeserialize;
-use log::error;
+use derive_more::{Deref, DerefMut};
+pub use laplace_common::api::{UpdateQuery, UpdateRequest as LappUpdateRequest};
+pub use laplace_common::lapp::access::*;
+use laplace_wasm::http::{Request, Response};
+use reqwest::blocking::Client;
 use rusqlite::Connection;
 use serde::{Serialize, Serializer};
-use wasmer::{Exports, Function, ImportObject, Instance, Module, Store};
+use tokio::fs;
+use tokio::sync::{RwLock, RwLockReadGuard};
+use wasmer::{Exports, Function, FunctionEnv, Imports, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
-use crate::{
-    error::{ServerError, ServerResult},
-    lapps::{
-        import::{
-            database::{self, DatabaseEnv},
-            http::{self, HttpEnv},
-            sleep,
-        },
-        settings::{FileSettings, LappSettings, LappSettingsResult},
-        ExpectedInstance,
-    },
-    service,
-};
+use crate::error::{ServerError, ServerResult};
+use crate::lapps::settings::{FileSettings, LappSettings, LappSettingsResult};
+use crate::lapps::wasm_interop::database::{self, DatabaseEnv};
+use crate::lapps::wasm_interop::http::{self, HttpEnv};
+use crate::lapps::wasm_interop::{sleep, MemoryManagementHostData};
+use crate::lapps::{LappInstance, LappInstanceError};
+use crate::service;
 
 pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
 pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, PathBuf, CommonLappGuard<'a>>;
 
-#[derive(Debug)]
 pub struct CommonLappGuard<'a>(pub RwLockReadGuard<'a, Lapp>);
 
 impl Deref for CommonLappGuard<'_> {
@@ -56,10 +45,12 @@ impl Serialize for CommonLappGuard<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Deref, DerefMut)]
 pub struct Lapp {
+    #[deref]
+    #[deref_mut]
     lapp: CommonLapp,
-    instance: Option<Instance>,
+    instance: Option<LappInstance>,
     service_sender: Option<service::lapp::Sender>,
 }
 
@@ -72,7 +63,7 @@ impl Lapp {
         };
         if !lapp.is_main() {
             if let Err(err) = lapp.reload_settings() {
-                error!("Error when load settings for lapp '{}': {:?}", lapp.name(), err);
+                log::error!("Error when load settings for lapp '{}': {err:?}", lapp.name());
             }
         }
         lapp
@@ -129,11 +120,11 @@ impl Lapp {
         self.instance.is_some()
     }
 
-    pub fn instance(&self) -> Option<Instance> {
-        self.instance.clone()
+    pub fn instance_mut(&mut self) -> Option<&mut LappInstance> {
+        self.instance.as_mut()
     }
 
-    pub fn take_instance(&mut self) -> Option<Instance> {
+    pub fn take_instance(&mut self) -> Option<LappInstance> {
         self.instance.take()
     }
 
@@ -141,19 +132,10 @@ impl Lapp {
         self.service_sender.clone()
     }
 
-    pub fn run_service_if_needed(&mut self) -> ServerResult<service::lapp::Sender> {
-        if let Some(sender) = self.service_sender() {
-            Ok(sender)
-        } else {
-            let instance = self
-                .instance()
-                .ok_or_else(|| ServerError::LappNotLoaded(self.name().to_string()))?;
-
-            let (service, sender) = service::LappService::new(ExpectedInstance::try_from(instance)?);
-            actix::spawn(service.run());
-
-            self.service_sender = Some(sender.clone());
-            Ok(sender)
+    pub fn process_http(&mut self, request: Request) -> ServerResult<Response> {
+        match self.instance_mut() {
+            Some(instance) => Ok(instance.process_http(request)?),
+            None => Err(ServerError::LappNotLoaded(self.name().to_string())),
         }
     }
 
@@ -165,11 +147,11 @@ impl Lapp {
         }
     }
 
-    pub fn instantiate(&mut self, http_client: reqwest::blocking::Client) -> ServerResult<()> {
-        let wasm = fs::read(self.server_module_file())?;
+    pub async fn instantiate(&mut self, http_client: Client) -> ServerResult<()> {
+        let wasm_bytes = fs::read(self.server_module_file()).await?;
 
-        let store = Store::default();
-        let module = Module::new(&store, &wasm)?;
+        let mut store = Store::default();
+        let module = Module::new(&store, &wasm_bytes)?;
 
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
@@ -179,14 +161,18 @@ impl Lapp {
 
         let dir_path = self.root_dir().join("data");
         if !dir_path.exists() && (is_allow_read || is_allow_write) {
-            fs::create_dir(&dir_path)?;
+            fs::create_dir(&dir_path).await?;
         }
 
-        let mut import_object = if self
+        let mut wasi_env = None;
+        let mut database_env = None;
+        let mut http_env = None;
+
+        let mut imports = if self
             .required_permissions()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
-            let mut wasi_env = WasiState::new(self.name())
+            let env = WasiState::new(self.name())
                 .preopen(|preopen| {
                     preopen
                         .directory(&dir_path)
@@ -196,92 +182,92 @@ impl Lapp {
                         // todo: why this works always as true?
                         .create(is_allow_write)
                 })?
-                .finalize()?;
+                .finalize(&mut store)?;
 
-            wasi_env.import_object(&module)?
+            let imports = env.import_object(&mut store, &module)?;
+            wasi_env = Some(env);
+            imports
         } else {
-            ImportObject::new()
+            Imports::default()
         };
 
-        let shared_instance = Arc::new(ArcSwapOption::from(None));
         let mut exports = Exports::new();
 
         if is_allow_db_access {
-            let database_path = self.settings().database().path();
-            let database_path = if database_path.is_relative() {
-                self.root_dir().join(database_path)
-            } else {
-                database_path.into()
-            };
+            let database_path = self.get_database_path();
             let connection = Arc::new(Mutex::new(Connection::open(database_path)?));
 
-            let execute_native = Function::new_native_with_env(
-                &store,
-                DatabaseEnv {
-                    instance: shared_instance.clone(),
-                    connection: connection.clone(),
-                },
-                database::execute,
-            );
-            let query_native = Function::new_native_with_env(
-                &store,
-                DatabaseEnv {
-                    instance: shared_instance.clone(),
-                    connection: connection.clone(),
-                },
-                database::query,
-            );
-            let query_row_native = Function::new_native_with_env(
-                &store,
-                DatabaseEnv {
-                    instance: shared_instance.clone(),
-                    connection,
-                },
-                database::query_row,
-            );
+            let env = FunctionEnv::new(&mut store, DatabaseEnv {
+                memory_data: None,
+                connection: connection.clone(),
+            });
+            let execute_fn = Function::new_typed_with_env(&mut store, &env, database::execute);
+            let query_fn = Function::new_typed_with_env(&mut store, &env, database::query);
+            let query_row_fn = Function::new_typed_with_env(&mut store, &env, database::query_row);
 
-            exports.insert("db_execute", execute_native);
-            exports.insert("db_query", query_native);
-            exports.insert("db_query_row", query_row_native);
+            exports.insert("db_execute", execute_fn);
+            exports.insert("db_query", query_fn);
+            exports.insert("db_query_row", query_row_fn);
+            database_env = Some(env);
         }
 
         if is_allow_http {
-            let invoke_http_native = Function::new_native_with_env(
-                &store,
-                HttpEnv {
-                    instance: shared_instance.clone(),
-                    client: http_client,
-                    settings: self.lapp.settings().network().http().clone(),
-                },
-                http::invoke_http,
-            );
+            let env = FunctionEnv::new(&mut store, HttpEnv {
+                memory_data: None,
+                client: http_client,
+                settings: self.lapp.settings().network().http().clone(),
+            });
+            let invoke_http_fn = Function::new_typed_with_env(&mut store, &env, http::invoke_http);
 
-            exports.insert("invoke_http", invoke_http_native);
+            exports.insert("invoke_http", invoke_http_fn);
+            http_env = Some(env);
         }
 
         if is_allow_sleep {
-            let invoke_sleep_native = Function::new_native(&store, sleep::invoke_sleep);
-
-            exports.insert("invoke_sleep", invoke_sleep_native);
+            let invoke_sleep_fn = Function::new_typed(&mut store, sleep::invoke_sleep);
+            exports.insert("invoke_sleep", invoke_sleep_fn);
         }
 
-        import_object.register("env", exports);
+        imports.register_namespace("env", exports);
+        let instance = Instance::new(&mut store, &module, &imports)?;
+        let memory_management = MemoryManagementHostData::from_exports(&instance.exports, &store)?;
 
-        let instance = Instance::new(&module, &import_object)?;
-        shared_instance.store(Some(Arc::new(instance.clone())));
+        if let Some(env) = wasi_env {
+            env.data_mut(&mut store).set_memory(memory_management.memory().clone());
+        }
+
+        if let Some(env) = database_env {
+            env.as_mut(&mut store).memory_data = Some(memory_management.clone());
+        }
+
+        if let Some(env) = http_env {
+            env.as_mut(&mut store).memory_data = Some(memory_management.clone());
+        }
 
         if let Ok(initialize) = instance.exports.get_function("_initialize") {
-            initialize.call(&[])?;
+            initialize.call(&mut store, &[])?;
+        }
+
+        if let Ok(start) = instance.exports.get_function("_start") {
+            start.call(&mut store, &[])?;
         }
 
         if let Ok(init) = instance.exports.get_function("init") {
-            let slice = init.native::<(), u64>()?.call()?;
-            let instance = ExpectedInstance::try_from(&instance)?;
-            let bytes = unsafe { instance.wasm_slice_to_vec(slice)? };
+            let slice = init.typed::<(), u64>(&store)?.call(&mut store)?;
+            let mut memory_manager = memory_management.to_manager(&mut store);
+            let bytes = unsafe {
+                memory_manager
+                    .wasm_slice_to_vec(slice)
+                    .map_err(LappInstanceError::MemoryManagementError)?
+            };
             Result::<(), String>::try_from_slice(&bytes)?.map_err(ServerError::LappInitError)?;
         }
 
-        self.instance.replace(instance);
+        self.instance.replace(LappInstance {
+            instance,
+            memory_management,
+            store,
+        });
         Ok(())
     }
 
@@ -321,18 +307,35 @@ impl Lapp {
         }
         Ok(())
     }
-}
 
-impl Deref for Lapp {
-    type Target = CommonLapp;
+    fn get_database_path(&self) -> PathBuf {
+        let database_path = self.settings().database().path();
 
-    fn deref(&self) -> &Self::Target {
-        &self.lapp
+        if database_path.is_relative() {
+            self.root_dir().join(database_path)
+        } else {
+            database_path.into()
+        }
     }
 }
 
-impl DerefMut for Lapp {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.lapp
+#[derive(Clone, Deref)]
+pub struct SharedLapp(Arc<RwLock<Lapp>>);
+
+impl SharedLapp {
+    pub fn new(lapp: Lapp) -> Self {
+        Self(Arc::new(RwLock::new(lapp)))
+    }
+
+    pub async fn run_service_if_needed(&self) -> ServerResult<service::lapp::Sender> {
+        if let Some(sender) = self.read().await.service_sender() {
+            Ok(sender)
+        } else {
+            let (service, sender) = service::LappService::new(self.clone());
+            actix::spawn(service.run());
+
+            self.write().await.service_sender = Some(sender.clone());
+            Ok(sender)
+        }
     }
 }
