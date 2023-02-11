@@ -6447,8 +6447,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "0.6.3"
-source = "git+https://github.com/wyatt-herkamp/zip.git#efd7f934caaecfb13eefeceeeaa5f3910d5be4e1"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0445d0fbc924bb93539b4316c11afb121ea39296f99a3c4c9edad09e3658cdef"
 dependencies = [
  "aes",
  "byteorder",

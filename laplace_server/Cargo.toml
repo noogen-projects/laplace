@@ -50,4 +50,4 @@ toml = "0.7"
 tokio = { version = "1.21", features = ["fs"] }
 wasmer = "3.2.0-alpha.1"
 wasmer-wasi = "3.2.0-alpha.1"
-zip = { git = "https://github.com/wyatt-herkamp/zip.git" } # Fix zstd dependency
+zip = "0.6"
