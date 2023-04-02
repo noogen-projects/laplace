@@ -5,8 +5,7 @@ use std::cell::RefCell;
 use anyhow::{anyhow, Context as _, Error};
 use chat_common::{Peer, WsMessage, WsResponse};
 use laplace_yew::{MsgError, RawHtml};
-use libp2p_core::identity::ed25519::Keypair;
-use libp2p_core::{PeerId, PublicKey};
+use libp2p_identity::{Keypair, PeerId};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
 use wasm_web_helpers::error::Result as WebResult;
 use wasm_web_helpers::fetch::{JsonFetcher, MissingBody, Response};
@@ -42,7 +41,7 @@ struct Chat {
 
 struct Keys {
     public_key: String,
-    secret_key: String,
+    keypair: String,
 }
 
 #[derive(Default)]
@@ -124,31 +123,27 @@ impl Component for Root {
                 false
             },
             Msg::SignIn => {
-                let public_key = TextField::get_value("public-key");
-                let secret_key = TextField::get_value("secret-key");
+                let encoded_public_key = TextField::get_value("public-key");
+                let encoded_keypair = TextField::get_value("keypair");
 
-                if let Ok(keypair) = (|| {
-                    let mut bytes = bs58::decode(&secret_key)
-                        .into_vec()
-                        .context("Decode secret key error")?;
-                    bytes.extend_from_slice(
-                        &bs58::decode(&public_key)
-                            .into_vec()
-                            .context("Decode public key error")?,
-                    );
-                    Keypair::decode(&mut bytes).context("Decode keypair error")
-                })()
-                .msg_error_map(ctx.link())
+                if let Ok(keypair) = bs58::decode(&encoded_keypair)
+                    .into_vec()
+                    .context("Decode keypair error")
+                    .and_then(|bytes| Keypair::from_protobuf_encoding(&bytes).context("Decode keypair error"))
+                    .msg_error_map(ctx.link())
                 {
-                    let peer_id = PeerId::from(PublicKey::Ed25519(keypair.public()));
+                    let peer_id = keypair.public().to_peer_id();
                     let body = serde_json::to_string(&Peer {
                         peer_id: peer_id.to_bytes(),
-                        keypair: keypair.encode().into(),
+                        keypair: keypair.to_protobuf_encoding().expect("Failed keypair encoding"),
                     })
                     .expect("Peer should be serialize to JSON");
 
                     let success_msg = RefCell::new(Some(Msg::InitChat {
-                        keys: Keys { public_key, secret_key },
+                        keys: Keys {
+                            public_key: encoded_public_key,
+                            keypair: encoded_keypair,
+                        },
                         peer_id,
                     }));
 
@@ -432,7 +427,7 @@ impl Component for Root {
                     .content(
                         List::ul()
                             .item(html! { <div><strong>{ "Public: " }</strong> { &state.keys.public_key }</div> })
-                            .item(html! { <div><strong>{ "Secret: " }</strong> { &state.keys.secret_key }</div> }),
+                            .item(html! { <div><strong>{ "Secret: " }</strong> { &state.keys.keypair }</div> }),
                     );
 
                 dialogs = html! {
@@ -471,12 +466,12 @@ impl Component for Root {
 impl Root {
     fn view_sign_in(&self, ctx: &Context<Self>) -> Html {
         let generate_keypair_button = Button::new().id("generate-key-button").label("Generate").on_click(|_| {
-            let keypair = Keypair::generate();
-            let public_key = bs58::encode(keypair.public().encode()).into_string();
-            let secret_key = bs58::encode(keypair.secret()).into_string();
+            let keypair = Keypair::generate_ed25519();
+            let public_key = bs58::encode(keypair.public().to_protobuf_encoding()).into_string();
+            let keypair = bs58::encode(keypair.to_protobuf_encoding().expect("Failed keypair encoding")).into_string();
 
             TextField::set_value("public-key", public_key);
-            TextField::set_value("secret-key", secret_key);
+            TextField::set_value("keypair", keypair);
 
             let sign_in_button = dom::existing::get_element_by_id::<HtmlElement>("sign-in-button");
             sign_in_button.remove_attribute("disabled").ok();
@@ -495,7 +490,7 @@ impl Root {
             let generate_key_button = dom::existing::get_element_by_id::<HtmlElement>("generate-key-button");
             let sign_in_button = dom::existing::get_element_by_id::<HtmlElement>("sign-in-button");
 
-            if TextField::get_value("public-key").is_empty() && TextField::get_value("secret-key").is_empty() {
+            if TextField::get_value("public-key").is_empty() && TextField::get_value("keypair").is_empty() {
                 generate_key_button.remove_attribute("disabled").ok();
                 sign_in_button.set_attribute("disabled", "").ok();
             } else if generate_key_button.get_attribute("disabled").is_none() {
@@ -517,9 +512,9 @@ impl Root {
             ),
             ListItem::simple().class("sig-in-field").child(
                 TextField::outlined()
-                    .id("secret-key")
+                    .id("keypair")
                     .class("expand")
-                    .label("Secret key")
+                    .label("Keypair")
                     .on_input(switch_buttons),
             ),
             ListItem::simple().child(html! {

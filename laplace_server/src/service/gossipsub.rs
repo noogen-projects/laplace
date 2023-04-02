@@ -10,16 +10,11 @@ use std::time::Duration;
 
 pub use laplace_wasm::route::gossipsub::Message;
 use libp2p::futures::{executor, Future, StreamExt};
-use libp2p::gossipsub::{
-    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
-    MessageId, ValidationMode,
-};
-use libp2p::identity::{ed25519, Keypair};
-use libp2p::mdns::async_io::Behaviour;
-use libp2p::mdns::{Config, Event};
+use libp2p::gossipsub::{self, IdentTopic as Topic, MessageAuthenticity, MessageId, ValidationMode};
+use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId, Swarm};
+use libp2p::{mdns, Multiaddr, PeerId, Swarm};
 use thiserror::Error;
 
 use crate::service;
@@ -28,8 +23,8 @@ pub type Sender = mpsc::Sender<Message>;
 pub type Receiver = mpsc::Receiver<Message>;
 
 pub struct GossipsubService {
-    swarm: Swarm<Gossipsub>,
-    swarm_discovery: Swarm<Behaviour>,
+    swarm: Swarm<gossipsub::Behaviour>,
+    swarm_discovery: Swarm<mdns::async_io::Behaviour>,
     dial_ports: Vec<u16>,
     topic: Topic,
     receiver: Receiver,
@@ -51,19 +46,20 @@ impl GossipsubService {
         lapp_service_sender: service::lapp::Sender,
     ) -> Result<(Self, Sender), Error> {
         let transport = executor::block_on(libp2p::development_transport(keypair.clone()))?;
-        let message_id_fn = |message: &GossipsubMessage| {
+        let message_id_fn = |message: &gossipsub::Message| {
             let mut hasher = DefaultHasher::new();
             message.data.hash(&mut hasher);
             MessageId::from(hasher.finish().to_string())
         };
-        let gossipsub_config = GossipsubConfigBuilder::default()
+        let gossipsub_config = gossipsub::ConfigBuilder::default()
             .heartbeat_interval(Self::HEARTBEAT_INTERVAL)
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id_fn)
             .build()
             .map_err(|err| Error::GossipsubUninit(err.into()))?;
-        let mut gossipsub_behaviour = Gossipsub::new(MessageAuthenticity::Signed(keypair.clone()), gossipsub_config)
-            .map_err(|err| Error::GossipsubUninit(err.into()))?;
+        let mut gossipsub_behaviour =
+            gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair.clone()), gossipsub_config)
+                .map_err(|err| Error::GossipsubUninit(err.into()))?;
 
         let topic = Topic::new(topic_name);
         gossipsub_behaviour
@@ -77,7 +73,7 @@ impl GossipsubService {
         swarm.listen_on(address)?;
 
         let transport = executor::block_on(libp2p::development_transport(keypair))?;
-        let behaviour = Behaviour::new(Config::default())?;
+        let behaviour = mdns::async_io::Behaviour::new(mdns::Config::default(), peer_id)?;
         let mut swarm_discovery = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
         swarm_discovery.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
@@ -104,7 +100,7 @@ impl Future for GossipsubService {
         loop {
             match self.swarm_discovery.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::Behaviour(Event::Discovered(peers)) => {
+                    SwarmEvent::Behaviour(mdns::Event::Discovered(peers)) => {
                         for (peer_id, address) in peers {
                             log::info!("MDNS discovered {peer_id} {address}");
                             let addresses = self.peers.entry(peer_id).or_default();
@@ -113,7 +109,7 @@ impl Future for GossipsubService {
                             }
                         }
                     },
-                    SwarmEvent::Behaviour(Event::Expired(expired)) => {
+                    SwarmEvent::Behaviour(mdns::Event::Expired(expired)) => {
                         for (peer_id, address) in expired {
                             log::info!("MDNS expired {peer_id} {address}");
                             self.peers.remove(&peer_id);
@@ -180,7 +176,7 @@ impl Future for GossipsubService {
         loop {
             match self.swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::Behaviour(GossipsubEvent::Message {
+                    SwarmEvent::Behaviour(gossipsub::Event::Message {
                         propagation_source: peer_id,
                         message_id,
                         message,
@@ -215,7 +211,7 @@ impl Future for GossipsubService {
 }
 
 pub fn decode_keypair(bytes: &mut [u8]) -> Result<Keypair, Error> {
-    Ok(Keypair::Ed25519(ed25519::Keypair::decode(bytes)?))
+    Ok(Keypair::from_protobuf_encoding(bytes)?)
 }
 
 pub fn decode_peer_id(bytes: &[u8]) -> Result<PeerId, Error> {
@@ -228,7 +224,7 @@ pub enum Error {
     HashError(#[from] libp2p::multihash::Error),
 
     #[error("Fail identity decode: {0}")]
-    IdentityDecodeError(#[from] libp2p::identity::error::DecodingError),
+    IdentityDecodeError(#[from] libp2p::identity::DecodingError),
 
     #[error("Wrong multiaddr: {0}")]
     WrongMultiaddr(#[from] libp2p::multiaddr::Error),
@@ -243,10 +239,10 @@ pub enum Error {
     GossipsubUninit(String),
 
     #[error("Gossipsub subscription error: {0:?}")]
-    GossipsubSubscribtionError(libp2p::gossipsub::error::SubscriptionError),
+    GossipsubSubscribtionError(libp2p::gossipsub::SubscriptionError),
 
     #[error("Gossipsub publish error: {0:?}")]
-    GossipsubPublishError(libp2p::gossipsub::error::PublishError),
+    GossipsubPublishError(libp2p::gossipsub::PublishError),
 
     #[error("Parse peer ID error: {0}")]
     ParsePeerIdError(String),
