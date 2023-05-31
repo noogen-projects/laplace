@@ -17,7 +17,7 @@ actix-files = "0.6"
 actix-web = { version = "4.3", features = ["rustls"] }
 actix-web-actors = "4.2"
 borsh = { workspace = true }
-bs58 = "0.4"
+bs58 = "0.5"
 clap = { version = "4.0", features = ["derive"] }
 config = "0.13"
 derive_more = "0.99"

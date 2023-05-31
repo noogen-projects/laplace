@@ -467,7 +467,7 @@ impl Root {
     fn view_sign_in(&self, ctx: &Context<Self>) -> Html {
         let generate_keypair_button = Button::new().id("generate-key-button").label("Generate").on_click(|_| {
             let keypair = Keypair::generate_ed25519();
-            let public_key = bs58::encode(keypair.public().to_protobuf_encoding()).into_string();
+            let public_key = bs58::encode(keypair.public().encode_protobuf()).into_string();
             let keypair = bs58::encode(keypair.to_protobuf_encoding().expect("Failed keypair encoding")).into_string();
 
             TextField::set_value("public-key", public_key);
