@@ -48,33 +48,25 @@ pub fn init_logger(settings: &LoggerSettings) -> AppResult<LoggerHandle> {
 
 pub async fn run(settings: Settings) -> AppResult<()> {
     let web_root = settings.http.web_root.clone();
-    let laplace_access_token = if let Some(access_token) = settings.http.access_token.clone() {
-        access_token
-    } else {
-        auth::generate_token()?
-    };
-    // todo: use `String::leak` when its stabilized
-    let laplace_access_token: &'static str = Box::leak(laplace_access_token.into_boxed_str());
-
+    let laplace_access_token = auth::prepare_access_token(settings.http.access_token.clone())?;
     let upload_file_limit = settings.http.upload_file_limit;
-    if settings.http.print_url {
-        let access_query = if !laplace_access_token.is_empty() {
-            format!("?access_token={}", laplace_access_token)
-        } else {
-            "".into()
-        };
-        log::info!(
-            "Laplace URL: {}://{}:{}/{}",
-            if settings.ssl.enabled { "https" } else { "http" },
-            settings.http.host,
-            settings.http.port,
-            access_query
-        );
-    }
     let lapps_dir = settings.lapps.path.clone();
     let lapps_provider = LappsProvider::new(&lapps_dir)
         .await
         .expect("Lapps provider should be constructed");
+
+    if settings.http.print_url {
+        let access_query = (!laplace_access_token.is_empty())
+            .then(|| format!("?access_token={}", laplace_access_token))
+            .unwrap_or_default();
+
+        log::info!(
+            "Laplace URL: {schema}://{host}:{port}/{access_query}",
+            schema = if settings.ssl.enabled { "https" } else { "http" },
+            host = settings.http.host,
+            port = settings.http.port,
+        );
+    }
 
     log::info!("Load lapps");
     lapps_provider.read_manager().await.load_lapps().await;
@@ -177,36 +169,11 @@ pub async fn run(settings: Settings) -> AppResult<()> {
 
     let http_server_addr = (settings.http.host.as_str(), settings.http.port);
     let http_server = if settings.ssl.enabled {
-        let private_key_path = &settings.ssl.private_key_path;
-        let certificate_path = &settings.ssl.certificate_path;
-
-        if !certificate_path.exists() && !private_key_path.exists() {
-            log::info!("Generate SSL certificate");
-            let certificate = auth::generate_self_signed_certificate(vec![settings.http.host.clone()])?;
-
-            if let Some(parent) = private_key_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            if let Some(parent) = certificate_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-
-            fs::File::create(private_key_path)?.write_all(certificate.serialize_private_key_pem().as_bytes())?;
-            fs::File::create(certificate_path)?.write_all(certificate.serialize_pem()?.as_bytes())?;
-        }
-
-        log::info!("Bind SSL");
-        let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?))?
-            .into_iter()
-            .map(|buf| Certificate(buf))
-            .collect();
-
-        let private_key = PrivateKey(
-            pkcs8_private_keys(&mut BufReader::new(fs::File::open(private_key_path)?))?
-                .into_iter()
-                .next()
-                .ok_or(AppError::MissingPrivateKey)?,
-        );
+        let (certificates, private_key) = auth::prepare_certificates(
+            &settings.ssl.certificate_path,
+            &settings.ssl.private_key_path,
+            &settings.http.host,
+        )?;
 
         let config = ServerConfig::builder()
             .with_safe_defaults()
@@ -219,5 +186,5 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     };
 
     log::info!("Run HTTP server");
-    Ok(http_server.run().await?)
+    http_server.run().await.map_err(Into::into)
 }
