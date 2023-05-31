@@ -10,7 +10,6 @@ use rustls::PrivateKey;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 
 use crate::error::{AppError, AppResult};
-use crate::settings::HttpSettings;
 
 pub mod middleware;
 

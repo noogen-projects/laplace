@@ -1,17 +1,13 @@
-use std::fs;
-use std::io::{BufReader, Write};
-
 use actix_easy_multipart::MultipartFormConfig;
 use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
-use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls::ServerConfig;
 pub use {actix_files, actix_web};
 
-use self::error::{AppError, AppResult};
-use self::lapps::{Lapp, LappsProvider};
-use self::settings::{LoggerSettings, Settings};
+use crate::error::AppResult;
+use crate::lapps::{Lapp, LappsProvider};
+use crate::settings::{LoggerSettings, Settings};
 
 pub mod auth;
 pub mod convert;
