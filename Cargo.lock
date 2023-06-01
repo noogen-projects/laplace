@@ -2729,6 +2729,7 @@ dependencies = [
  "bs58 0.5.0",
  "clap",
  "config",
+ "const_format",
  "derive_more",
  "flexi_logger",
  "futures",

@@ -4,7 +4,6 @@ pub use self::manager::*;
 pub use self::provider::*;
 pub use self::settings::*;
 
-pub mod handler;
 mod instance;
 mod lapp;
 mod manager;

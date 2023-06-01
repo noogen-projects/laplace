@@ -1,6 +1,7 @@
 use actix_easy_multipart::MultipartFormConfig;
-use actix_files::{Files, NamedFile};
+use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
+use const_format::concatcp;
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
 use rustls::ServerConfig;
 pub use {actix_files, actix_web};
@@ -12,10 +13,12 @@ use crate::settings::{LoggerSettings, Settings};
 pub mod auth;
 pub mod convert;
 pub mod error;
-pub mod handler;
 pub mod lapps;
 pub mod service;
 pub mod settings;
+pub mod web_api;
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn init_logger(settings: &LoggerSettings) -> AppResult<LoggerHandle> {
     let mut logger = Logger::try_with_env_or_str(&settings.spec)?;
@@ -71,7 +74,8 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     log::info!("Create HTTP server");
     let http_server = HttpServer::new(move || {
         let static_dir = web_root.join(Lapp::static_dir_name());
-        let laplace_uri = format!("/{}", Lapp::main_name());
+        let laplace_uri = concatcp!("/", Lapp::main_name());
+        let route_file_path = concatcp!("/", Lapp::static_dir_name(), "/{file_path:.*}");
 
         App::new()
             .app_data(web::Data::clone(&lapps_provider))
@@ -80,7 +84,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
                     .total_limit(upload_file_limit)
                     .memory_limit(upload_file_limit),
             )
-            .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
+            .wrap(middleware::DefaultHeaders::new().add(("X-Version", VERSION)))
             .wrap(middleware::NormalizePath::trim())
             .wrap(auth::middleware::CheckAccess::new(
                 web::Data::clone(&lapps_provider),
@@ -91,76 +95,20 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .service(Files::new(&Lapp::main_static_uri(), &static_dir).index_file(Lapp::index_file_name()))
             .route(
                 "/",
-                web::route().to({
-                    let laplace_uri = laplace_uri.clone();
-                    move || {
-                        let redirect = HttpResponse::Found()
-                            .append_header((http::header::LOCATION, laplace_uri.as_str()))
-                            .finish();
-                        async { redirect }
-                    }
+                web::route().to(move || {
+                    let redirect = HttpResponse::Found()
+                        .append_header((http::header::LOCATION, laplace_uri))
+                        .finish();
+                    async { redirect }
                 }),
             )
-            .service(
-                web::scope(&laplace_uri)
-                    .service(web::resource(["", "/"]).route(web::get().to(move || {
-                        let index_file = static_dir.join(Lapp::index_file_name());
-                        async { NamedFile::open(index_file) }
-                    })))
-                    .route(
-                        &format!("/{}/{{file_path:.*}}", Lapp::static_dir_name()),
-                        web::get().to({
-                            let lapps_dir = lapps_dir.clone();
-                            move |file_path: web::Path<String>, request| {
-                                let file_path = lapps_dir
-                                    .join(Lapp::main_name())
-                                    .join(Lapp::static_dir_name())
-                                    .join(&*file_path);
-
-                                async move { NamedFile::open(file_path).map(|file| file.into_response(&request)) }
-                            }
-                        }),
-                    )
-                    .route("/lapps", web::get().to(handler::get_lapps))
-                    .route("/lapp/add", web::post().to(handler::add_lapp))
-                    .route("/lapp/update", web::post().to(handler::update_lapp)),
-            )
-            .service(
-                web::scope("/{lapp_name}")
-                    .service(
-                        web::resource(["", "/"]).route(web::get().to(move |lapps_service, lapp_name, request| {
-                            lapps::handler::index_file(lapps_service, lapp_name, request)
-                        })),
-                    )
-                    .route(
-                        &format!("/{}/{{file_path:.*}}", Lapp::static_dir_name()),
-                        web::get().to({
-                            move |lapps_service, path: web::Path<(String, String)>, request| {
-                                let (lapp_name, file_path) = path.into_inner();
-                                lapps::handler::static_file(lapps_service, lapp_name, file_path, request)
-                            }
-                        }),
-                    )
-                    .route(
-                        "/ws",
-                        web::get().to(move |lapps_service, lapp_name, request, stream| {
-                            lapps::handler::ws_start(lapps_service, lapp_name, request, stream)
-                        }),
-                    )
-                    .route(
-                        "/p2p",
-                        web::post().to(move |lapps_service, lapp_name, request| {
-                            lapps::handler::gossipsub_start(lapps_service, lapp_name, request)
-                        }),
-                    )
-                    .route(
-                        "/{tail}*",
-                        web::route().to(move |lapps_service, path: web::Path<(String, String)>, request, body| {
-                            let (lapp_name, _tail) = path.into_inner();
-                            lapps::handler::http(lapps_service, lapp_name, request, body)
-                        }),
-                    ),
-            )
+            .service(web_api::laplace::services(
+                laplace_uri,
+                &static_dir,
+                &lapps_dir,
+                route_file_path,
+            ))
+            .service(web_api::lapp::services(route_file_path))
     });
 
     let http_server_addr = (settings.http.host.as_str(), settings.http.port);
