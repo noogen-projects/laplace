@@ -56,7 +56,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
 
     if settings.http.print_url {
         let access_query = (!laplace_access_token.is_empty())
-            .then(|| format!("?access_token={}", laplace_access_token))
+            .then(|| format!("?access_token={laplace_access_token}"))
             .unwrap_or_default();
 
         log::info!(
