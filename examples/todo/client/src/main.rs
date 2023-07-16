@@ -8,7 +8,7 @@ use todo_common::{Response, Task};
 use wasm_web_helpers::error::Result;
 use wasm_web_helpers::fetch::{JsonFetcher, Response as WebResponse};
 use web_sys::HtmlInputElement;
-use yew::{classes, html, Callback, Component, Context, Html, InputEvent, KeyboardEvent, NodeRef};
+use yew::{classes, html, Callback, Component, Context, Html, InputEvent, KeyboardEvent, NodeRef, ToHtml};
 
 #[derive(EnumIter, Display, Clone, Copy, PartialEq)]
 enum Filter {
@@ -30,6 +30,12 @@ impl Filter {
 impl Default for Filter {
     fn default() -> Self {
         Self::All
+    }
+}
+
+impl ToHtml for Filter {
+    fn to_html(&self) -> Html {
+        self.to_string().into()
     }
 }
 
