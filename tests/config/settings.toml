@@ -1,0 +1,21 @@
+[http]
+host = "127.0.0.1"
+port = 8080
+access_token = "24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR"
+upload_file_limit = 2147483648 # 2 GB
+print_url = true
+web_root = ".."
+
+[ssl]
+enabled = true
+private_key_path = "../cert/key.pem"
+certificate_path = "../cert/cert.pem"
+
+[p2p]
+mdns_discovery_enabled = true
+
+[log]
+spec = "info,actix_server=warn,actix_web=warn,regalloc=warn,wasmer_compiler_cranelift=warn,cranelift_codegen=warn,h2=info,netlink_proto=info"
+
+[lapps]
+path = "../lapps"

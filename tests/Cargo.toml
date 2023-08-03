@@ -1,0 +1,21 @@
+[package]
+name = "tests"
+version = "0.1.0"
+authors = [
+    "Alexander Mescheryakov <freecoder.xx@gmail.com>",
+    "Noogen Team <info.noogen@gmail.com>",
+]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/noogen-projects/laplace"
+description = "The local-first web-application platform test suite"
+
+[dependencies]
+env_logger = "0.10"
+function_name = "0.3"
+lazy_static = "1.4"
+log = "0.4"
+reqwest = { version = "0.11", features = ["rustls-tls-manual-roots"] }
+strum = { version = "0.25", features = ["derive"] }
+subprocess = "0.2"
+tokio = { workspace = true }

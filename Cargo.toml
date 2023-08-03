@@ -19,6 +19,7 @@ members = [
     "laplace_wasm",
     "laplace_wasm_macro",
     "laplace_yew",
+    "tests",
 ]
 exclude = [
     "laplace_mobile",
@@ -29,3 +30,4 @@ lto = true
 
 [workspace.dependencies]
 borsh = "0.10"
+tokio = { version = "1.29", features = ["full"] }
