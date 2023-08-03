@@ -1,10 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use chat_common::{WsMessage, WsResponse};
+use laplace_wasm::route::{gossipsub, websocket};
 pub use laplace_wasm::{alloc, dealloc};
-use laplace_wasm::{
-    route::{gossipsub, websocket},
-    Route, WasmSlice,
-};
+use laplace_wasm::{Route, WasmSlice};
 
 #[no_mangle]
 pub unsafe extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
@@ -40,9 +38,7 @@ pub unsafe extern "C" fn route_gossipsub(msg: WasmSlice) -> WasmSlice {
 
 fn do_ws(msg: Vec<u8>) -> Result<WsMessage, String> {
     let msg: websocket::Message = BorshDeserialize::deserialize(&mut msg.as_slice()).map_err(|err| err.to_string())?;
-    let text = match msg {
-        websocket::Message::Text(text) => text,
-    };
+    let websocket::Message::Text(text) = msg;
     let msg: WsMessage = serde_json::from_str(&text).map_err(|err| err.to_string())?;
     match msg {
         WsMessage::AddPeer(peer_id) => Ok(WsMessage::AddPeer(peer_id)),

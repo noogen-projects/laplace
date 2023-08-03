@@ -50,9 +50,12 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     let laplace_access_token = auth::prepare_access_token(settings.http.access_token.clone())?;
     let upload_file_limit = settings.http.upload_file_limit;
     let lapps_dir = settings.lapps.path.clone();
-    let lapps_provider = LappsProvider::new(&lapps_dir)
-        .await
-        .expect("Lapps provider should be constructed");
+    let lapps_provider = LappsProvider::new(&lapps_dir).await.unwrap_or_else(|err| {
+        panic!(
+            "Lapps provider should be constructed from path {}: {err}",
+            lapps_dir.display()
+        )
+    });
 
     if settings.http.print_url {
         let access_query = (!laplace_access_token.is_empty())

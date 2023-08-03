@@ -56,7 +56,7 @@ pub fn prepare_certificates(
     log::info!("Bind SSL");
     let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?))?
         .into_iter()
-        .map(|buf| rustls::Certificate(buf))
+        .map(rustls::Certificate)
         .collect();
 
     let private_key = PrivateKey(

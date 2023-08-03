@@ -44,6 +44,8 @@ impl PermissionUpdate {
             .as_string()
             .ok_or_else(|| anyhow!("Detail chipId param does not exist"))?;
         let id_data: Vec<_> = chip_id.split("--").collect();
+
+        #[allow(clippy::get_first)]
         if let (Some(lapp_name), Some(permission)) = (id_data.get(0), id_data.get(1)) {
             Ok(Self {
                 lapp_name: lapp_name.to_string(),

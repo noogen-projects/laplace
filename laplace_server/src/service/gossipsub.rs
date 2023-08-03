@@ -97,32 +97,29 @@ impl Future for GossipsubService {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        loop {
-            match self.swarm_discovery.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::Behaviour(mdns::Event::Discovered(peers)) => {
-                        for (peer_id, address) in peers {
-                            log::info!("MDNS discovered {peer_id} {address}");
-                            let addresses = self.peers.entry(peer_id).or_default();
-                            if !addresses.contains(&address) {
-                                addresses.push(address);
-                            }
+        while let Poll::Ready(Some(event)) = self.swarm_discovery.poll_next_unpin(cx) {
+            match event {
+                SwarmEvent::Behaviour(mdns::Event::Discovered(peers)) => {
+                    for (peer_id, address) in peers {
+                        log::info!("MDNS discovered {peer_id} {address}");
+                        let addresses = self.peers.entry(peer_id).or_default();
+                        if !addresses.contains(&address) {
+                            addresses.push(address);
                         }
-                    },
-                    SwarmEvent::Behaviour(mdns::Event::Expired(expired)) => {
-                        for (peer_id, address) in expired {
-                            log::info!("MDNS expired {peer_id} {address}");
-                            self.peers.remove(&peer_id);
-                        }
-                    },
-                    SwarmEvent::NewListenAddr { address, .. } => log::info!("MDNS listening on {address:?}"),
-                    SwarmEvent::IncomingConnection {
-                        local_addr,
-                        send_back_addr,
-                    } => log::info!("MDNS incoming connection {local_addr}, {send_back_addr}"),
-                    _ => break,
+                    }
                 },
-                Poll::Ready(None) | Poll::Pending => break,
+                SwarmEvent::Behaviour(mdns::Event::Expired(expired)) => {
+                    for (peer_id, address) in expired {
+                        log::info!("MDNS expired {peer_id} {address}");
+                        self.peers.remove(&peer_id);
+                    }
+                },
+                SwarmEvent::NewListenAddr { address, .. } => log::info!("MDNS listening on {address:?}"),
+                SwarmEvent::IncomingConnection {
+                    local_addr,
+                    send_back_addr,
+                } => log::info!("MDNS incoming connection {local_addr}, {send_back_addr}"),
+                _ => break,
             }
         }
 
@@ -173,37 +170,34 @@ impl Future for GossipsubService {
             }
         }
 
-        loop {
-            match self.swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::Behaviour(gossipsub::Event::Message {
-                        propagation_source: peer_id,
-                        message_id,
-                        message,
-                    }) => {
-                        let text = String::from_utf8_lossy(&message.data); // todo: catch error
-                        log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
-                        if message.topic == self.topic.hash() {
-                            // todo: use async send
-                            if let Err(err) =
-                                self.lapp_service_sender
-                                    .send(service::lapp::Message::GossipSub(Message::Text {
-                                        peer_id: peer_id.to_base58(),
-                                        msg: text.to_string(),
-                                    }))
-                            {
-                                log::error!("Error occurs when send to lapp service: {err:?}");
-                            }
+        while let Poll::Ready(Some(event)) = self.swarm.poll_next_unpin(cx) {
+            match event {
+                SwarmEvent::Behaviour(gossipsub::Event::Message {
+                    propagation_source: peer_id,
+                    message_id,
+                    message,
+                }) => {
+                    let text = String::from_utf8_lossy(&message.data); // todo: catch error
+                    log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
+                    if message.topic == self.topic.hash() {
+                        // todo: use async send
+                        if let Err(err) =
+                            self.lapp_service_sender
+                                .send(service::lapp::Message::GossipSub(Message::Text {
+                                    peer_id: peer_id.to_base58(),
+                                    msg: text.to_string(),
+                                }))
+                        {
+                            log::error!("Error occurs when send to lapp service: {err:?}");
                         }
-                    },
-                    SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {address:?}"),
-                    SwarmEvent::IncomingConnection {
-                        local_addr,
-                        send_back_addr,
-                    } => log::info!("Incoming connection {local_addr}, {send_back_addr}"),
-                    _ => break,
+                    }
                 },
-                Poll::Ready(None) | Poll::Pending => break,
+                SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {address:?}"),
+                SwarmEvent::IncomingConnection {
+                    local_addr,
+                    send_back_addr,
+                } => log::info!("Incoming connection {local_addr}, {send_back_addr}"),
+                _ => break,
             }
         }
         Poll::Pending

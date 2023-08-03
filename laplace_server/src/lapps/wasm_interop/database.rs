@@ -47,7 +47,7 @@ pub fn do_query(connection: &Connection, sql: String) -> Result<Vec<Row>, String
 
 pub fn do_query_row(connection: &Connection, sql: String) -> Result<Option<Row>, String> {
     connection
-        .query_row(&sql, [], |row| to_row(row))
+        .query_row(&sql, [], to_row)
         .optional()
         .map_err(|err| format!("{:?}", err))
 }
@@ -83,7 +83,6 @@ fn run<T: BorshSerialize>(
 
 fn to_row(source: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
     (0..source.as_ref().column_count())
-        .into_iter()
         .map(|idx| source.get_ref(idx).map(to_value))
         .collect::<Result<_, _>>()
         .map(Row::new)

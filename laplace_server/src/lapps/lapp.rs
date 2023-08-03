@@ -32,7 +32,7 @@ impl Deref for CommonLappGuard<'_> {
     type Target = CommonLapp;
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &self.0
     }
 }
 
@@ -113,7 +113,7 @@ impl Lapp {
     }
 
     pub fn server_module_file(&self) -> PathBuf {
-        self.root_dir().join(&format!("{}_server.wasm", self.name()))
+        self.root_dir().join(format!("{}_server.wasm", self.name()))
     }
 
     pub fn is_loaded(&self) -> bool {

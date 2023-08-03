@@ -96,19 +96,16 @@ pub fn do_invoke_http(
 fn is_method_allowed(method: &http::Method, methods: &HttpMethods) -> bool {
     match methods {
         HttpMethods::All => true,
-        HttpMethods::List(list) => list
-            .iter()
-            .find(|item| match item {
-                HttpMethod::Get => method == http::Method::GET,
-                HttpMethod::Post => method == http::Method::POST,
-            })
-            .is_some(),
+        HttpMethods::List(list) => list.iter().any(|item| match item {
+            HttpMethod::Get => method == http::Method::GET,
+            HttpMethod::Post => method == http::Method::POST,
+        }),
     }
 }
 
 fn is_host_allowed(host: &str, hosts: &HttpHosts) -> bool {
     match hosts {
         HttpHosts::All => true,
-        HttpHosts::List(list) => list.iter().find(|item| item.as_str() == host).is_some(),
+        HttpHosts::List(list) => list.iter().any(|item| item.as_str() == host),
     }
 }

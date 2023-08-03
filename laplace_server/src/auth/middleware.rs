@@ -75,8 +75,7 @@ where
             let lapp_name = request
                 .path()
                 .split('/')
-                .skip_while(|chunk| chunk.is_empty())
-                .next()
+                .find(|chunk| !chunk.is_empty())
                 .unwrap_or_default()
                 .to_string();
 
@@ -90,7 +89,7 @@ where
                 .unwrap_or_default();
 
             if lapp_name == Lapp::main_name() {
-                if access_token == laplace_access_token.as_ref() {
+                if access_token == laplace_access_token {
                     service.call(request).await
                 } else {
                     Ok(request.into_response(HttpResponse::Forbidden().finish()))
@@ -146,8 +145,7 @@ pub fn query_access_token_redirect(request: ServiceRequest) -> Result<ServiceRes
         let lapp_name = uri
             .path()
             .split('/')
-            .skip_while(|chunk| chunk.is_empty())
-            .next()
+            .find(|chunk| !chunk.is_empty())
             .unwrap_or(Lapp::main_name());
 
         let access_token_cookie = Cookie::build("access_token", access_token)

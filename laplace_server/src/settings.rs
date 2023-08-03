@@ -124,8 +124,8 @@ impl Settings {
         let config = Config::builder()
             .add_source(File::from(path.as_ref()))
             // Add in settings from the environment (with a prefix of LAPLACE)
-            // Eg.. `LAPLACE_HTTP.PORT=8090 laplace_server` would set the `http.port` key
-            .add_source(Environment::with_prefix("LAPLACE").separator("."))
+            // Eg.. `LAPLACE__HTTP__PORT=8090 laplace_server` would set the `http.port` key
+            .add_source(Environment::with_prefix("LAPLACE").separator("__"))
             .build()?;
         config.try_deserialize()
     }

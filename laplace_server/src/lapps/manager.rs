@@ -31,7 +31,7 @@ impl LappsManager {
             lapps.insert(name.clone(), SharedLapp::new(Lapp::new(name, dir.path())));
         }
 
-        let http_client = tokio::task::spawn_blocking(|| Client::new()).await?;
+        let http_client = tokio::task::spawn_blocking(Client::new).await?;
         Ok(Self {
             lapps,
             lapps_path,

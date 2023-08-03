@@ -9,10 +9,7 @@ use crate::error::{ServerError, ServerResult};
 use crate::lapps::{CommonLappGuard, CommonLappResponse, LappUpdateRequest, LappsProvider};
 
 pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse {
-    lapps_service
-        .into_inner()
-        .handle(|lapps_provider| process_get_lapps(lapps_provider))
-        .await
+    lapps_service.into_inner().handle(process_get_lapps).await
 }
 
 #[derive(MultipartForm)]
@@ -53,7 +50,7 @@ async fn process_add_lapp(lapps_provider: LappsProvider, lar: Tempfile) -> Serve
     let file_name = lar.file_name.as_ref().ok_or(ServerError::UnknownLappName)?;
     let lapp_name = file_name
         .strip_suffix(".zip")
-        .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));
+        .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(file_name));
 
     extract_lar(&lapps_provider, lapp_name, ZipArchive::new(&lar.file)?).await?;
 
