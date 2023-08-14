@@ -79,7 +79,7 @@ where
                 .unwrap_or_default()
                 .to_string();
 
-            if lapp_name.is_empty() || lapp_name == "static" {
+            if lapp_name.is_empty() || lapp_name == "static" || lapp_name == "favicon.ico" {
                 return service.call(request).await;
             }
 

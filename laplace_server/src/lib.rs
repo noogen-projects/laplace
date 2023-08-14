@@ -1,5 +1,5 @@
 use actix_easy_multipart::MultipartFormConfig;
-use actix_files::Files;
+use actix_files::{Files, NamedFile};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use const_format::concatcp;
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
@@ -95,6 +95,16 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             ))
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
+            .route(
+                "/favicon.ico",
+                web::get().to({
+                    let favicon_path = static_dir.join("favicon.ico");
+                    move || {
+                        let favicon_path = favicon_path.clone();
+                        async move { NamedFile::open(favicon_path) }
+                    }
+                }),
+            )
             .service(Files::new(&Lapp::main_static_uri(), &static_dir).index_file(Lapp::index_file_name()))
             .route(
                 "/",
