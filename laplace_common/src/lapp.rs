@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-pub use self::{access::*, settings::*};
+pub use self::access::*;
+pub use self::settings::*;
 
 pub mod access;
 pub mod settings;

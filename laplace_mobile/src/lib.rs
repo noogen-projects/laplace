@@ -1,7 +1,9 @@
-use std::{fs, path::PathBuf};
+use std::fs;
+use std::path::PathBuf;
 
 use actix_web::rt::System;
-use laplace_server::{auth::generate_token, settings::Settings};
+use laplace_server::auth::generate_token;
+use laplace_server::settings::Settings;
 use log::info;
 
 mod assets;
@@ -18,7 +20,7 @@ fn get_data_path() -> &'static str {
 #[cfg_attr(target_os = "android", ndk_glue::main(backtrace = "on"))]
 pub fn main() {
     let data_path = PathBuf::from(get_data_path());
-    let settings_path = data_path.join("settings.toml");
+    let settings_path = data_path.join("config.toml");
     let settings = if let Ok(settings) = Settings::new(&settings_path) {
         settings
     } else {

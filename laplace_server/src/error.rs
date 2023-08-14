@@ -84,7 +84,7 @@ pub enum ServerError {
     #[error("Lapp runtime error: {0}")]
     LappRuntimeFail(#[from] RuntimeError),
 
-    #[error("Lapp settings operation error: {0}")]
+    #[error("Lapp config operation error: {0}")]
     LappSettingsFail(#[from] LappSettingsError),
 
     #[error("Lapp file operation error: {0}")]

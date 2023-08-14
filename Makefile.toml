@@ -44,11 +44,11 @@ end
 '''
 dependencies = ["create_lapp_dir"]
 
-[tasks.copy_settings]
+[tasks.copy_config]
 script_runner = "@duckscript"
 script = '''
-rm lapps/${APP}/settings.toml
-cp examples/${APP}/settings.toml lapps/${APP}/settings.toml
+rm lapps/${APP}/config.toml
+cp examples/${APP}/config.toml lapps/${APP}/config.toml
 '''
 dependencies = ["create_lapp_dir"]
 
@@ -93,7 +93,7 @@ script = '''
 rm lapps/${APP}/${APP}_server.wasm
 cp target/wasm32-unknown-unknown/${MODE}/${APP}_server.wasm lapps/${APP}/${APP}_server.wasm
 '''
-dependencies = ["choose_profile", "copy_settings"]
+dependencies = ["choose_profile", "copy_config"]
 
 [tasks.deploy_server_wasi]
 script_runner = "@duckscript"
@@ -101,7 +101,7 @@ script = '''
 rm lapps/${APP}/${APP}_server.wasm
 cp target/wasm32-wasi/${MODE}/${APP}_server.wasm lapps/${APP}/${APP}_server.wasm
 '''
-dependencies = ["choose_profile", "copy_settings"]
+dependencies = ["choose_profile", "copy_config"]
 
 
 [tasks.client]

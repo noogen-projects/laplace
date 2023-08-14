@@ -81,13 +81,13 @@ impl LaplaceService {
         self.add_var(env::HTTP_HOST, self.http_host.clone());
         self.add_var(env::HTTP_PORT, self.http_port.to_string());
 
-        let config_path = working_dir.join("config").join("settings.toml");
+        let config_path = working_dir.join("config").join("config.toml");
         let envs: Vec<_> = self.envs.iter().collect();
         let (pipe_read, pipe_write) = make_pipe()?;
 
         let subprocess = Exec::cmd(bin_path)
             .env_extend(&envs)
-            .arg("--settings-path")
+            .arg("--config")
             .arg(config_path)
             .args(self.args.as_slice())
             .stdout(Redirection::Pipe)

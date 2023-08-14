@@ -63,14 +63,14 @@ impl Lapp {
         };
         if !lapp.is_main() {
             if let Err(err) = lapp.reload_settings() {
-                log::error!("Error when load settings for lapp '{}': {err:?}", lapp.name());
+                log::error!("Error when load config for lapp '{}': {err:?}", lapp.name());
             }
         }
         lapp
     }
 
-    pub const fn settings_file_name() -> &'static str {
-        "settings.toml"
+    pub const fn config_file_name() -> &'static str {
+        "config.toml"
     }
 
     pub const fn static_dir_name() -> &'static str {
@@ -95,12 +95,12 @@ impl Lapp {
 
     pub fn reload_settings(&mut self) -> LappSettingsResult<()> {
         self.lapp
-            .set_settings(LappSettings::load(self.root_dir().join(Self::settings_file_name()))?);
+            .set_settings(LappSettings::load(self.root_dir().join(Self::config_file_name()))?);
         Ok(())
     }
 
     pub fn save_settings(&mut self) -> LappSettingsResult<()> {
-        let path = self.root_dir().join(Self::settings_file_name());
+        let path = self.root_dir().join(Self::config_file_name());
         self.settings().save(path)
     }
 
