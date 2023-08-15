@@ -40,7 +40,7 @@ cargo +stable make all
 Or for a debug build, run:
 
 ```shell
-cargo +stable make all -p debug
+cargo +stable make -p debug all
 ```
 
 ## Run examples
@@ -54,12 +54,12 @@ cargo +stable make run
 Or for a debug build:
 
 ```shell
-cargo +stable make run -p debug
+cargo +stable make -p debug run
 ```
 
 Then visit [http://localhost:8080](http://localhost:8080). If you are running for the first time or the previous link
 did not work, then visit [http://localhost:8080/?access_token=24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR](http://localhost:8080/?access_token=24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR).
-You can change the default port, access token and other settings by editing `settings.toml` file.
+You can change the default port, access token and other settings by editing `config.toml` file.
 
 ## Development notes
 
