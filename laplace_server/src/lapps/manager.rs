@@ -8,6 +8,7 @@ use tokio::sync::RwLockWriteGuard;
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::SharedLapp;
+use crate::settings::LappsSettings;
 use crate::Lapp;
 
 pub struct LappsManager {
@@ -17,10 +18,9 @@ pub struct LappsManager {
 }
 
 impl LappsManager {
-    pub async fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
-        let lapps_path = lapps_path.into();
+    pub async fn new(settings: &LappsSettings) -> io::Result<Self> {
         let mut lapps = HashMap::new();
-        let mut read_dir = fs::read_dir(&lapps_path).await?;
+        let mut read_dir = fs::read_dir(&settings.path).await?;
 
         while let Some(dir) = read_dir.next_entry().await? {
             let name = dir.file_name().into_string().map_err(|invalid_name| {
@@ -28,13 +28,19 @@ impl LappsManager {
                 io::Error::from(io::ErrorKind::InvalidData)
             })?;
 
+            if let Some(allowed_lapps) = &settings.allowed {
+                if !allowed_lapps.contains(&name) {
+                    continue;
+                }
+            }
+
             lapps.insert(name.clone(), SharedLapp::new(Lapp::new(name, dir.path())));
         }
 
         let http_client = tokio::task::spawn_blocking(Client::new).await?;
         Ok(Self {
             lapps,
-            lapps_path,
+            lapps_path: settings.path.clone(),
             http_client,
         })
     }

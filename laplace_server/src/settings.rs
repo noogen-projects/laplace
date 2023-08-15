@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub use config::ConfigError;
@@ -101,11 +102,15 @@ const fn default_keep_log_for_days() -> usize {
 #[serde(default)]
 pub struct LappsSettings {
     pub path: PathBuf,
+    pub allowed: Option<HashSet<String>>,
 }
 
 impl Default for LappsSettings {
     fn default() -> Self {
-        Self { path: "lapps".into() }
+        Self {
+            path: "lapps".into(),
+            allowed: None,
+        }
     }
 }
 
@@ -125,7 +130,13 @@ impl Settings {
             .add_source(File::from(path.as_ref()))
             // Add in settings from the environment (with a prefix of LAPLACE)
             // Eg.. `LAPLACE__HTTP__PORT=8090 laplace_server` would set the `http.port` key
-            .add_source(Environment::with_prefix("LAPLACE").separator("__"))
+            .add_source(
+                Environment::with_prefix("LAPLACE")
+                    .separator("__")
+                    .with_list_parse_key("lapps.allowed")
+                    .list_separator(",")
+                    .try_parsing(true),
+            )
             .build()?;
         config.try_deserialize()
     }

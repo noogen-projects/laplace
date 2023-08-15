@@ -18,3 +18,4 @@ spec = "info,rustls=warn,actix_server=warn,actix_web=warn,regalloc=warn,wasmer_c
 
 [lapps]
 path = "lapps"
+#allowed = ["echo"]

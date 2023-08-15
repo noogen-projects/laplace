@@ -1,6 +1,5 @@
 use std::future::Future;
 use std::io;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use actix_web::HttpResponse;
@@ -10,14 +9,15 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::error::{error_response, ServerResult};
 use crate::lapps::{LappsManager, SharedLapp};
+use crate::settings::LappsSettings;
 
 #[derive(Clone, Deref)]
 #[deref(forward)]
 pub struct LappsProvider(Arc<RwLock<LappsManager>>);
 
 impl LappsProvider {
-    pub async fn new(lapps_path: impl Into<PathBuf>) -> io::Result<Self> {
-        let manager = LappsManager::new(lapps_path).await?;
+    pub async fn new(settings: &LappsSettings) -> io::Result<Self> {
+        let manager = LappsManager::new(settings).await?;
 
         Ok(Self(Arc::new(RwLock::new(manager))))
     }

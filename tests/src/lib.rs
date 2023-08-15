@@ -13,7 +13,7 @@ pub fn init_logger() {
     static INIT: Once = Once::new();
 
     INIT.call_once(|| {
-        let log_env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug");
+        let log_env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug,reqwest=info");
         let is_log_force = env::var("RUST_LOG_FORCE")
             .map(|force| !(force.trim().is_empty() || force.trim() == "0" || force.trim().to_lowercase() == "false"))
             .unwrap_or_default();

@@ -19,3 +19,4 @@ spec = "info,actix_server=warn,actix_web=warn,regalloc=warn,wasmer_compiler_cran
 
 [lapps]
 path = "../lapps"
+allowed = ["echo"]

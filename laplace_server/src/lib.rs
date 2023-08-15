@@ -49,11 +49,10 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = auth::prepare_access_token(settings.http.access_token.clone())?;
     let upload_file_limit = settings.http.upload_file_limit;
-    let lapps_dir = settings.lapps.path.clone();
-    let lapps_provider = LappsProvider::new(&lapps_dir).await.unwrap_or_else(|err| {
+    let lapps_provider = LappsProvider::new(&settings.lapps).await.unwrap_or_else(|err| {
         panic!(
-            "Lapps provider should be constructed from path {}: {err}",
-            lapps_dir.display()
+            "Lapps provider should be constructed from settings {:?}: {err}",
+            settings.lapps
         )
     });
 
@@ -118,7 +117,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .service(web_api::laplace::services(
                 laplace_uri,
                 &static_dir,
-                &lapps_dir,
+                &settings.lapps.path,
                 route_file_path,
             ))
             .service(web_api::lapp::services(route_file_path))
