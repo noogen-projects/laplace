@@ -100,7 +100,7 @@ pub enum ServerError {
     LappWasi(#[from] WasiError),
 
     #[error("Lapp instantiate error: {0}")]
-    LappInstantiateFail(#[from] InstantiationError),
+    LappInstantiateFail(Box<InstantiationError>),
 
     #[error("Wasm result value has wrong data length")]
     WrongResultLength,
@@ -119,6 +119,12 @@ pub enum ServerError {
 
     #[error("Blocking call error: {0}")]
     BlockingError(#[from] actix_web::error::BlockingError),
+}
+
+impl From<InstantiationError> for ServerError {
+    fn from(err: InstantiationError) -> Self {
+        Self::LappInstantiateFail(Box::new(err))
+    }
 }
 
 impl ResponseError for ServerError {}
