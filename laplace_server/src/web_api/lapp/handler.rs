@@ -96,12 +96,8 @@ pub async fn ws_start(
     lapps_service
         .into_inner()
         .handle_ws(lapp_name.into_inner(), move |lapps_provider, lapp_name| async move {
-            let lapp_service_sender = lapps_provider
-                .read_manager()
-                .await
-                .lapp(&lapp_name)?
-                .run_service_if_needed()
-                .await?;
+            let manager = lapps_provider.read_manager().await;
+            let lapp_service_sender = manager.lapp(&lapp_name)?.run_service_if_needed(manager.ctx().clone());
             process_ws_start(lapp_service_sender, lapp_name, request, stream).await
         })
         .await
@@ -135,7 +131,7 @@ pub async fn gossipsub_start(
             lapp_name.into_inner(),
             move |lapps_provider, lapp_name| async move {
                 let manager = lapps_provider.read_manager().await;
-                let lapp_service_sender = manager.lapp(&lapp_name)?.run_service_if_needed().await?;
+                let lapp_service_sender = manager.lapp(&lapp_name)?.run_service_if_needed(manager.ctx().clone());
 
                 let lapp = manager.lapp(&lapp_name)?;
                 let gossipsub_settings = lapp.read().await.settings().network().gossipsub().clone();

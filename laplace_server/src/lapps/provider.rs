@@ -6,9 +6,11 @@ use actix_web::HttpResponse;
 use derive_more::Deref;
 use laplace_common::lapp::Permission;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use truba::Context;
 
 use crate::error::{error_response, ServerResult};
 use crate::lapps::{LappsManager, SharedLapp};
+use crate::service::Addr;
 use crate::settings::LappsSettings;
 
 #[derive(Clone, Deref)]
@@ -16,8 +18,8 @@ use crate::settings::LappsSettings;
 pub struct LappsProvider(Arc<RwLock<LappsManager>>);
 
 impl LappsProvider {
-    pub async fn new(settings: &LappsSettings) -> io::Result<Self> {
-        let manager = LappsManager::new(settings).await?;
+    pub async fn new(settings: &LappsSettings, ctx: Context<Addr>) -> io::Result<Self> {
+        let manager = LappsManager::new(settings, ctx).await?;
 
         Ok(Self(Arc::new(RwLock::new(manager))))
     }

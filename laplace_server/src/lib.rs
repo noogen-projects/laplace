@@ -4,10 +4,12 @@ use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use const_format::concatcp;
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
 use rustls::ServerConfig;
+use truba::Context;
 pub use {actix_files, actix_web};
 
 use crate::error::AppResult;
 use crate::lapps::{Lapp, LappsProvider};
+use crate::service::Addr;
 use crate::settings::{LoggerSettings, Settings};
 
 pub mod auth;
@@ -49,12 +51,15 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     let web_root = settings.http.web_root.clone();
     let laplace_access_token = auth::prepare_access_token(settings.http.access_token.clone())?;
     let upload_file_limit = settings.http.upload_file_limit;
-    let lapps_provider = LappsProvider::new(&settings.lapps).await.unwrap_or_else(|err| {
-        panic!(
-            "Lapps provider should be constructed from settings {:?}: {err}",
-            settings.lapps
-        )
-    });
+    let ctx = Context::<Addr>::default();
+    let lapps_provider = LappsProvider::new(&settings.lapps, ctx.clone())
+        .await
+        .unwrap_or_else(|err| {
+            panic!(
+                "Lapps provider should be constructed from settings {:?}: {err}",
+                settings.lapps
+            )
+        });
 
     if settings.http.print_url {
         let access_query = (!laplace_access_token.is_empty())
@@ -142,5 +147,10 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     };
 
     log::info!("Run HTTP server");
-    http_server.run().await.map_err(Into::into)
+    http_server.run().await?;
+
+    log::info!("Shutdown the context");
+    ctx.shutdown().await;
+
+    Ok(())
 }

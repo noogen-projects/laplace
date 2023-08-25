@@ -12,6 +12,7 @@ use rusqlite::Connection;
 use serde::{Serialize, Serializer};
 use tokio::fs;
 use tokio::sync::{RwLock, RwLockReadGuard};
+use truba::{Context, Sender};
 use wasmer::{Exports, Function, FunctionEnv, Imports, Instance, Module, Store};
 use wasmer_wasi::WasiState;
 
@@ -22,6 +23,7 @@ use crate::lapps::wasm_interop::http::{self, HttpEnv};
 use crate::lapps::wasm_interop::{sleep, MemoryManagementHostData};
 use crate::lapps::{LappInstance, LappInstanceError};
 use crate::service;
+use crate::service::Addr;
 
 pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
 pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, PathBuf, CommonLappGuard<'a>>;
@@ -51,7 +53,6 @@ pub struct Lapp {
     #[deref_mut]
     lapp: CommonLapp,
     instance: Option<LappInstance>,
-    service_sender: Option<service::lapp::Sender>,
 }
 
 impl Lapp {
@@ -59,7 +60,6 @@ impl Lapp {
         let mut lapp = Self {
             lapp: CommonLapp::new(name.into(), root_dir.into(), Default::default()),
             instance: None,
-            service_sender: None,
         };
         if !lapp.is_main() {
             if let Err(err) = lapp.reload_settings() {
@@ -128,10 +128,6 @@ impl Lapp {
         self.instance.take()
     }
 
-    pub fn service_sender(&self) -> Option<service::lapp::Sender> {
-        self.service_sender.clone()
-    }
-
     pub fn process_http(&mut self, request: Request) -> ServerResult<Response> {
         match self.instance_mut() {
             Some(instance) => Ok(instance.process_http(request)?),
@@ -139,9 +135,10 @@ impl Lapp {
         }
     }
 
-    pub async fn service_stop(&mut self) -> bool {
-        if let Some(sender) = self.service_sender.take() {
-            service::LappService::stop(sender).await
+    pub async fn service_stop(&mut self, ctx: &Context<Addr>) -> bool {
+        if let Some(sender) = ctx.get_actor_sender::<service::lapp::Message>(&Addr::Lapp(self.lapp.name().to_string()))
+        {
+            sender.send(service::lapp::Message::Stop).is_ok()
         } else {
             false
         }
@@ -320,22 +317,32 @@ impl Lapp {
 }
 
 #[derive(Clone, Deref)]
-pub struct SharedLapp(Arc<RwLock<Lapp>>);
+pub struct SharedLapp {
+    name: String,
+    #[deref]
+    inner: Arc<RwLock<Lapp>>,
+}
 
 impl SharedLapp {
     pub fn new(lapp: Lapp) -> Self {
-        Self(Arc::new(RwLock::new(lapp)))
+        Self {
+            name: lapp.name().to_owned(),
+            inner: Arc::new(RwLock::new(lapp)),
+        }
     }
 
-    pub async fn run_service_if_needed(&self) -> ServerResult<service::lapp::Sender> {
-        if let Some(sender) = self.read().await.service_sender() {
-            Ok(sender)
-        } else {
-            let (service, sender) = service::LappService::new(self.clone());
-            actix::spawn(service.run());
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
-            self.write().await.service_sender = Some(sender.clone());
-            Ok(sender)
-        }
+    pub fn run_service_if_needed(&self, ctx: Context<Addr>) -> Sender<service::lapp::Message> {
+        let service_actor_id = Addr::Lapp(self.name.clone());
+
+        ctx.get_actor_sender::<service::lapp::Message>(&service_actor_id)
+            .unwrap_or_else(|| {
+                let sender = ctx.actor_sender::<service::lapp::Message>(service_actor_id);
+                service::LappService::new(self.clone()).run(ctx);
+                sender
+            })
     }
 }

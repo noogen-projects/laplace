@@ -18,9 +18,9 @@ enum WsError {
     Io(io::Error),
 }
 
-pub struct ActixMessage(pub Message);
+pub struct WsServiceMessage(pub Message);
 
-impl actix::Message for ActixMessage {
+impl actix::Message for WsServiceMessage {
     type Result = ();
 }
 
@@ -82,10 +82,10 @@ impl Actor for WebSocketService {
     }
 }
 
-impl Handler<ActixMessage> for WebSocketService {
+impl Handler<WsServiceMessage> for WebSocketService {
     type Result = ();
 
-    fn handle(&mut self, msg: ActixMessage, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: WsServiceMessage, ctx: &mut Self::Context) -> Self::Result {
         match msg.0 {
             Message::Text(text) => ctx.text(text),
         }

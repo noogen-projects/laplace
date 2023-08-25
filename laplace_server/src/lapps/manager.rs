@@ -5,9 +5,11 @@ use std::path::PathBuf;
 use reqwest::blocking::Client;
 use tokio::fs;
 use tokio::sync::RwLockWriteGuard;
+use truba::Context;
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::SharedLapp;
+use crate::service::Addr;
 use crate::settings::LappsSettings;
 use crate::Lapp;
 
@@ -15,10 +17,11 @@ pub struct LappsManager {
     lapps: HashMap<String, SharedLapp>,
     lapps_path: PathBuf,
     http_client: Client,
+    ctx: Context<Addr>,
 }
 
 impl LappsManager {
-    pub async fn new(settings: &LappsSettings) -> io::Result<Self> {
+    pub async fn new(settings: &LappsSettings, ctx: Context<Addr>) -> io::Result<Self> {
         let mut lapps = HashMap::new();
         let mut read_dir = fs::read_dir(&settings.path).await?;
 
@@ -42,7 +45,12 @@ impl LappsManager {
             lapps,
             lapps_path: settings.path.clone(),
             http_client,
+            ctx,
         })
+    }
+
+    pub fn ctx(&self) -> &Context<Addr> {
+        &self.ctx
     }
 
     pub fn insert_lapp(&mut self, lapp_name: impl Into<String>) {
@@ -59,7 +67,7 @@ impl LappsManager {
 
     pub async fn unload(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         lapp.take_instance();
-        lapp.service_stop().await;
+        lapp.service_stop(&self.ctx).await;
 
         Ok(())
     }

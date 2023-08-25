@@ -3,7 +3,7 @@ use laplace_server::settings::Settings;
 
 mod cli;
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() {
     let opts: cli::Opts = cli::Opts::parse();
     let settings = Settings::new(&opts.config).expect("Settings should be configured");
