@@ -55,13 +55,12 @@ impl WebSocketService {
             hb: Instant::now(),
             lapp_service_sender,
             ws_sender,
-            ws_receiver, //: Some(ws_receiver),
+            ws_receiver,
         }
     }
 
     pub fn run(mut self, ctx: Context<Addr>, actor_id: Addr) {
         let mut messages_in = ctx.actor_receiver::<WsServiceMessage>(actor_id);
-        // let mut ws_receiver = self.ws_receiver.take().expect("WS receiver should be exist");
         let mut hb_interval = time::interval(Self::HEARTBEAT_INTERVAL);
 
         truba::spawn_event_loop!(ctx, {

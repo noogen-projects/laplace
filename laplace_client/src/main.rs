@@ -273,11 +273,6 @@ impl Root {
         JsonFetcher::send_get(uri, move |response_result| callback.emit(response_result));
     }
 
-    pub fn send_post(ctx: &Context<Self>, uri: impl AsRef<str>, body: impl Into<JsValue>) {
-        let callback = callback(ctx);
-        JsonFetcher::send_post(uri, body, move |response_result| callback.emit(response_result));
-    }
-
     pub fn send_post_json(ctx: &Context<Self>, uri: impl AsRef<str>, body: impl Into<JsValue>) {
         let callback = callback(ctx);
         JsonFetcher::send_post_json(uri, body, move |response_result| callback.emit(response_result));
