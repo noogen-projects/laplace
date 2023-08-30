@@ -1,13 +1,13 @@
-use std::future::Future;
 use std::io;
 
 use derive_more::From;
 use laplace_wasm::Route;
-use tokio::sync::mpsc;
-use truba::{Context, UnboundedMpscChannel};
+use truba::{Context, Message, Sender, UnboundedMpscChannel};
 
 use crate::lapps::{LappInstanceError, SharedLapp};
-use crate::service::{gossipsub, websocket, Addr};
+use crate::service::gossipsub::GossipsubServiceMessage;
+use crate::service::websocket::{WsMessage, WsServiceMessage};
+use crate::service::{gossipsub, Addr};
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -18,29 +18,26 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub enum Message {
+pub enum LappServiceMessage {
     Stop,
 
     // WebSocket
-    NewWebSocket(actix::Addr<websocket::WebSocketService>),
-    WebSocket(websocket::Message),
+    NewWebSocket(Sender<WsServiceMessage>),
+    WebSocket(WsMessage),
 
     // GossipSub
-    NewGossipSub(gossipsub::Sender),
-    GossipSub(gossipsub::Message),
+    NewGossipSub(Sender<GossipsubServiceMessage>),
+    GossipSub(GossipsubServiceMessage),
 }
 
-impl truba::Message for Message {
+impl Message for LappServiceMessage {
     type Channel = UnboundedMpscChannel<Self>;
 }
 
-pub type Sender = mpsc::UnboundedSender<Message>;
-pub type Receiver = mpsc::UnboundedReceiver<Message>;
-
 pub struct LappService {
     lapp: SharedLapp,
-    gossipsub_sender: Option<gossipsub::Sender>,
-    websocket_sender: Option<actix::Addr<websocket::WebSocketService>>,
+    gossipsub_sender: Option<Sender<GossipsubServiceMessage>>,
+    websocket_sender: Option<Sender<WsServiceMessage>>,
 }
 
 impl LappService {
@@ -54,28 +51,28 @@ impl LappService {
 
     pub fn run(mut self, ctx: Context<Addr>) {
         let lapp_name = self.lapp.name().to_owned();
-        let mut messages_in = ctx.actor_receiver::<Message>(Addr::Lapp(lapp_name));
+        let mut messages_in = ctx.actor_receiver::<LappServiceMessage>(Addr::Lapp(lapp_name));
 
         truba::spawn_event_loop!(ctx, {
             Some(msg) = messages_in.recv() => {
                 match msg {
-                    Message::NewWebSocket(sender) => self.handle_new_websocket(sender),
-                    Message::WebSocket(msg) => self.handle_websocket(msg).await,
+                    LappServiceMessage::NewWebSocket(sender) => self.handle_new_websocket(sender),
+                    LappServiceMessage::WebSocket(msg) => self.handle_websocket(msg).await,
 
-                    Message::NewGossipSub(sender) => self.handle_new_gossipsub(sender),
-                    Message::GossipSub(msg) => self.handle_gossipsub(msg).await,
+                    LappServiceMessage::NewGossipSub(sender) => self.handle_new_gossipsub(sender),
+                    LappServiceMessage::GossipSub(msg) => self.handle_gossipsub(msg).await,
 
-                    Message::Stop => break,
+                    LappServiceMessage::Stop => break,
                 }
             }
         });
     }
 
-    fn handle_new_websocket(&mut self, addr: actix::Addr<websocket::WebSocketService>) {
-        self.websocket_sender.replace(addr);
+    fn handle_new_websocket(&mut self, sender: Sender<WsServiceMessage>) {
+        self.websocket_sender.replace(sender);
     }
 
-    async fn handle_websocket(&mut self, msg: websocket::Message) {
+    async fn handle_websocket(&mut self, msg: WsMessage) {
         log::info!("Receive websocket message: {msg:?}");
         let mut lapp = self.lapp.write().await;
         let Some(instance) = lapp.instance_mut() else {
@@ -83,49 +80,41 @@ impl LappService {
             return;
         };
         match instance.route_ws(&msg) {
-            Ok(routes) => {
-                let fut = self.process_routes(routes);
-                fut.await
-            },
+            Ok(routes) => self.process_routes(routes),
             Err(err) => log::error!("Handle websocket error: {err:?}"),
         }
     }
 
-    fn handle_new_gossipsub(&mut self, sender: gossipsub::Sender) {
+    fn handle_new_gossipsub(&mut self, sender: Sender<GossipsubServiceMessage>) {
         self.gossipsub_sender.replace(sender);
     }
 
-    async fn handle_gossipsub(&mut self, msg: gossipsub::Message) {
+    async fn handle_gossipsub(&mut self, GossipsubServiceMessage(msg): GossipsubServiceMessage) {
         let mut lapp = self.lapp.write().await;
         let Some(instance) = lapp.instance_mut() else {
             log::warn!("Handle gossipsub: instance not found for lapp {}", lapp.name());
             return;
         };
         match instance.route_gossipsub(&msg) {
-            Ok(routes) => {
-                let fut = self.process_routes(routes);
-                fut.await
-            },
+            Ok(routes) => self.process_routes(routes),
             Err(err) => log::error!("Handle gossipsub error: {err:?}"),
         }
     }
 
-    fn send_websocket(&self, msg: websocket::Message) -> impl Future<Output = ()> + Send {
-        let sender = self.websocket_sender.clone();
-        async move {
-            if let Some(addr) = sender {
-                if let Err(err) = addr.send(websocket::WsServiceMessage(msg)).await {
-                    log::error!("Websocket send error: {err:?}");
-                }
-            } else {
-                log::error!("Uninitialized websocket for msg {msg:?}");
+    fn send_websocket(&self, msg: WsMessage) {
+        let websocket_sender = self.websocket_sender.clone();
+        if let Some(sender) = websocket_sender {
+            if let Err(err) = sender.send(WsServiceMessage(msg)) {
+                log::error!("Websocket send error: {err:?}");
             }
+        } else {
+            log::error!("Uninitialized websocket for msg {msg:?}");
         }
     }
 
     pub fn send_gossipsub(&self, msg: gossipsub::Message) {
         if let Some(sender) = &self.gossipsub_sender {
-            if let Err(err) = sender.send(msg) {
+            if let Err(err) = sender.send(GossipsubServiceMessage(msg)) {
                 log::error!("Gossipsub send error: {err:?}");
             }
         } else {
@@ -133,20 +122,15 @@ impl LappService {
         }
     }
 
-    fn process_routes(&self, routes: Vec<Route>) -> impl Future<Output = ()> + Send {
+    fn process_routes(&self, routes: Vec<Route>) {
         log::info!("Routes: {routes:?}");
-        let mut futures = Vec::new();
 
         for route in routes {
             match route {
                 Route::Http(msg) => log::error!("Unexpected HTTP route: {msg:?}"),
-                Route::WebSocket(msg) => futures.push(self.send_websocket(msg)),
+                Route::WebSocket(msg) => self.send_websocket(msg),
                 Route::GossipSub(msg) => self.send_gossipsub(msg),
             }
-        }
-
-        async move {
-            futures::future::join_all(futures).await;
         }
     }
 }

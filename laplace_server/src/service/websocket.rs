@@ -1,14 +1,19 @@
 use std::io;
+use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
 
-use actix::{Actor, ActorContext, AsyncContext, Handler, Running, StreamHandler, WrapFuture};
-use actix_web_actors::ws;
+use axum::extract::ws::{Message, WebSocket};
 use derive_more::From;
-pub use laplace_wasm::route::websocket::Message;
+use futures::stream::{SplitSink, SplitStream};
+use futures::{SinkExt, StreamExt};
+pub use laplace_wasm::route::websocket::Message as WsMessage;
+use tokio::time;
+use truba::{Context, Sender, UnboundedMpscChannel};
 use wasmer::{ExportError, RuntimeError};
 
 use crate::lapps::LappInstanceError;
-use crate::service;
+use crate::service::lapp::LappServiceMessage;
+use crate::service::Addr;
 
 #[derive(Debug, From)]
 enum WsError {
@@ -18,10 +23,11 @@ enum WsError {
     Io(io::Error),
 }
 
-pub struct WsServiceMessage(pub Message);
+#[derive(Debug)]
+pub struct WsServiceMessage(pub WsMessage);
 
-impl actix::Message for WsServiceMessage {
-    type Result = ();
+impl truba::Message for WsServiceMessage {
+    type Channel = UnboundedMpscChannel<Self>;
 }
 
 #[derive(Debug)]
@@ -30,7 +36,9 @@ pub struct WebSocketService {
     /// otherwise we drop connection.
     hb: Instant,
 
-    lapp_service_sender: service::lapp::Sender,
+    lapp_service_sender: Sender<LappServiceMessage>,
+    ws_sender: SplitSink<WebSocket, Message>,
+    ws_receiver: SplitStream<WebSocket>,
 }
 
 impl WebSocketService {
@@ -40,99 +48,106 @@ impl WebSocketService {
     /// How long before lack of client response causes a timeout
     const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 
-    pub fn new(lapp_service_sender: service::lapp::Sender) -> Self {
+    pub fn new(web_socket: WebSocket, lapp_service_sender: Sender<LappServiceMessage>) -> Self {
+        let (ws_sender, ws_receiver) = web_socket.split();
+
         Self {
             hb: Instant::now(),
             lapp_service_sender,
+            ws_sender,
+            ws_receiver, //: Some(ws_receiver),
         }
+    }
+
+    pub fn run(mut self, ctx: Context<Addr>, actor_id: Addr) {
+        let mut messages_in = ctx.actor_receiver::<WsServiceMessage>(actor_id);
+        // let mut ws_receiver = self.ws_receiver.take().expect("WS receiver should be exist");
+        let mut hb_interval = time::interval(Self::HEARTBEAT_INTERVAL);
+
+        truba::spawn_event_loop!(ctx, {
+            _ = hb_interval.tick() => {
+                if self.handle_heartbeat().await.is_break() {
+                    break;
+                }
+            }
+            Some(msg) = self.ws_receiver.next() => {
+                if self.handle_ws_message(msg).is_break() {
+                    break;
+                }
+            },
+            Some(WsServiceMessage(msg)) = messages_in.recv() => {
+                match msg {
+                    WsMessage::Text(text) => if self.handle_text(text).await.is_break() {
+                        break;
+                    },
+                }
+            }
+        });
     }
 
     /// helper method that sends ping to client every second.
     ///
     /// also this method checks heartbeats from client
-    fn heartbeat(&self, ctx: &mut <Self as Actor>::Context) {
-        ctx.run_interval(Self::HEARTBEAT_INTERVAL, |act, ctx| {
-            // check client heartbeats
-            if Instant::now().duration_since(act.hb) > Self::CLIENT_TIMEOUT {
-                // heartbeat timed out
-                log::debug!("Websocket Client heartbeat failed, disconnecting!");
+    async fn handle_heartbeat(&mut self) -> ControlFlow<(), ()> {
+        // check client heartbeats
+        if Instant::now().duration_since(self.hb) > Self::CLIENT_TIMEOUT {
+            // heartbeat timed out
+            log::debug!("Websocket Client heartbeat failed, disconnecting!");
 
-                // stop actor
-                ctx.stop();
+            // don't try to send a ping
+            return ControlFlow::Break(());
+        }
 
-                // don't try to send a ping
-                return;
-            }
-
-            ctx.ping(b"");
-        });
-    }
-}
-
-impl Actor for WebSocketService {
-    type Context = ws::WebsocketContext<Self>;
-
-    /// Method is called on actor start. We start the heartbeat process here.
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.heartbeat(ctx);
-    }
-
-    fn stopping(&mut self, _: &mut Self::Context) -> Running {
-        Running::Stop
-    }
-}
-
-impl Handler<WsServiceMessage> for WebSocketService {
-    type Result = ();
-
-    fn handle(&mut self, msg: WsServiceMessage, ctx: &mut Self::Context) -> Self::Result {
-        match msg.0 {
-            Message::Text(text) => ctx.text(text),
+        if let Err(err) = self.ws_sender.send(Message::Ping(Vec::new())).await {
+            log::error!("WS error: {err:?}");
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
         }
     }
-}
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketService {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+    fn handle_ws_message(&mut self, msg: Result<Message, axum::Error>) -> ControlFlow<(), ()> {
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
                 log::error!("WS error: {err:?}");
-                ctx.stop();
-                return;
+                return ControlFlow::Break(());
             },
         };
 
-        // process websocket messages
-        log::debug!("WS message: {msg:?}");
         match msg {
-            ws::Message::Ping(msg) => {
+            Message::Text(text) => {
+                if let Err(err) = self
+                    .lapp_service_sender
+                    .send(LappServiceMessage::WebSocket(WsMessage::Text(text.to_string())))
+                {
+                    log::error!("Error occurs when send to lapp service: {err:?}");
+                }
+            },
+            Message::Binary(_bin) => {},
+            Message::Close(_close_frame) => {
+                return ControlFlow::Break(());
+            },
+
+            Message::Pong(_) => {
                 self.hb = Instant::now();
-                ctx.pong(&msg);
             },
-            ws::Message::Pong(_) => {
+            // You should never need to manually handle Message::Ping, as axum's websocket library
+            // will do so for you automagically by replying with Pong and copying the v according to
+            // spec. But if you need the contents of the pings you can see them here.
+            Message::Ping(_) => {
                 self.hb = Instant::now();
             },
-            ws::Message::Text(text) => {
-                let lapp_service_sender = self.lapp_service_sender.clone();
-                let fut = async move {
-                    if let Err(err) =
-                        lapp_service_sender.send(service::lapp::Message::WebSocket(Message::Text(text.to_string())))
-                    {
-                        log::error!("Error occurs when send to lapp service: {err:?}");
-                    }
-                };
-                ctx.wait(fut.into_actor(self));
-            },
-            ws::Message::Binary(bin) => ctx.binary(bin),
-            ws::Message::Close(reason) => {
-                ctx.close(reason);
-                ctx.stop();
-            },
-            ws::Message::Continuation(_) => {
-                ctx.stop();
-            },
-            ws::Message::Nop => (),
+        }
+        ControlFlow::Continue(())
+    }
+
+    async fn handle_text(&mut self, text: String) -> ControlFlow<(), ()> {
+        if let Err(err) = self.ws_sender.send(Message::Text(text)).await {
+            log::error!("WS send error: {err:?}");
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
         }
     }
 }

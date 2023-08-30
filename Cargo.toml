@@ -31,4 +31,3 @@ lto = true
 [workspace.dependencies]
 borsh = "0.10"
 tokio = { version = "1.29", features = ["full"] }
-tokio-tungstenite = "0.19"

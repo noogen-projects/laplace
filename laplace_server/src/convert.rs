@@ -1,14 +1,19 @@
-use std::iter::FromIterator;
-
-use actix_web::HttpRequest;
+use axum::body::Body;
+use axum::http::Request;
+use hyper::body;
 use laplace_wasm::http;
 
-pub fn to_wasm_http_request(request: &HttpRequest, body: Option<Vec<u8>>) -> http::Request {
-    http::Request {
-        method: request.method().clone(),
-        uri: request.uri().clone(),
-        version: request.version(),
-        headers: http::HeaderMap::from_iter(request.headers().clone()),
-        body: body.unwrap_or_default(),
-    }
+use crate::error::ServerResult;
+
+pub async fn to_wasm_http_request(request: Request<Body>) -> ServerResult<http::Request> {
+    let (parts, body) = request.into_parts();
+    let body = body::to_bytes(body).await?;
+
+    Ok(http::Request {
+        method: parts.method,
+        uri: parts.uri,
+        version: parts.version,
+        headers: parts.headers,
+        body: body.into(),
+    })
 }

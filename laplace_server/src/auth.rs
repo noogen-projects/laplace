@@ -2,8 +2,6 @@ use std::fs;
 use std::io::{BufReader, Write};
 use std::path::Path;
 
-use actix_web::dev::ServiceResponse;
-use actix_web::error::Error;
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
 use ring::rand;
 use rustls::PrivateKey;
@@ -12,8 +10,6 @@ use rustls_pemfile::{certs, pkcs8_private_keys};
 use crate::error::{AppError, AppResult};
 
 pub mod middleware;
-
-pub type AccessServiceResult = Result<ServiceResponse, Error>;
 
 pub fn prepare_access_token(maybe_access_token: Option<String>) -> AppResult<&'static str> {
     let access_token = if let Some(access_token) = maybe_access_token {

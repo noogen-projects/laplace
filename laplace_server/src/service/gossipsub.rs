@@ -4,7 +4,6 @@ use std::hash::{Hash, Hasher};
 use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::mpsc;
 use std::task::Poll;
 use std::time::Duration;
 
@@ -16,19 +15,27 @@ use libp2p::multiaddr::Protocol;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{mdns, Multiaddr, PeerId, Swarm};
 use thiserror::Error;
+use tokio::sync::mpsc::error::TryRecvError;
+use truba::{Context, Receiver, Sender, UnboundedMpscChannel};
 
 use crate::service;
+use crate::service::lapp::LappServiceMessage;
+use crate::service::Addr;
 
-pub type Sender = mpsc::Sender<Message>;
-pub type Receiver = mpsc::Receiver<Message>;
+#[derive(Debug)]
+pub struct GossipsubServiceMessage(pub Message);
+
+impl truba::Message for GossipsubServiceMessage {
+    type Channel = UnboundedMpscChannel<Self>;
+}
 
 pub struct GossipsubService {
     swarm: Swarm<gossipsub::Behaviour>,
     swarm_discovery: Swarm<mdns::async_io::Behaviour>,
     dial_ports: Vec<u16>,
     topic: Topic,
-    receiver: Receiver,
-    lapp_service_sender: service::lapp::Sender,
+    receiver: Receiver<GossipsubServiceMessage>,
+    lapp_service_sender: Sender<LappServiceMessage>,
     peers: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
@@ -36,15 +43,18 @@ impl GossipsubService {
     /// How often heartbeat pings are sent
     const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 
-    pub fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub fn run(
+        ctx: Context<Addr>,
+        actor_id: Addr,
         keypair: Keypair,
         peer_id: PeerId,
         explicit_peers: &[PeerId],
         address: Multiaddr,
         dial_ports: Vec<u16>,
         topic_name: impl Into<String>,
-        lapp_service_sender: service::lapp::Sender,
-    ) -> Result<(Self, Sender), Error> {
+        lapp_service_sender: Sender<LappServiceMessage>,
+    ) -> Result<(), Error> {
         let transport = executor::block_on(libp2p::development_transport(keypair.clone()))?;
         let message_id_fn = |message: &gossipsub::Message| {
             let mut hasher = DefaultHasher::new();
@@ -77,19 +87,19 @@ impl GossipsubService {
         let mut swarm_discovery = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
         swarm_discovery.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
-        let (sender, receiver) = mpsc::channel();
-        Ok((
-            Self {
-                swarm,
-                swarm_discovery,
-                dial_ports,
-                topic,
-                receiver,
-                lapp_service_sender,
-                peers: Default::default(),
-            },
-            sender,
-        ))
+        let receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
+        let service = Self {
+            swarm,
+            swarm_discovery,
+            dial_ports,
+            topic,
+            receiver,
+            lapp_service_sender,
+            peers: Default::default(),
+        };
+        ctx.spawn(service);
+
+        Ok(())
     }
 }
 
@@ -125,7 +135,7 @@ impl Future for GossipsubService {
 
         loop {
             if let Err(err) = match self.receiver.try_recv() {
-                Ok(Message::Text { msg, .. }) => {
+                Ok(GossipsubServiceMessage(Message::Text { msg, .. })) => {
                     let topic = self.topic.clone();
                     log::info!("Publish message: {msg}");
                     self.swarm
@@ -134,7 +144,7 @@ impl Future for GossipsubService {
                         .map(drop)
                         .map_err(Error::GossipsubPublishError)
                 },
-                Ok(Message::Dial(peer_id)) => {
+                Ok(GossipsubServiceMessage(Message::Dial(peer_id))) => {
                     log::info!("Dial peer: {peer_id}");
                     PeerId::from_str(&peer_id)
                         .map_err(|err| Error::ParsePeerIdError(format!("{err:?}")))
@@ -157,14 +167,14 @@ impl Future for GossipsubService {
                             }
                         })
                 },
-                Ok(Message::AddAddress(address)) => {
+                Ok(GossipsubServiceMessage(Message::AddAddress(address))) => {
                     log::info!("Add address: {address}");
                     Multiaddr::from_str(&address)
                         .map_err(Error::WrongMultiaddr)
                         .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
                 },
-                Err(mpsc::TryRecvError::Empty) => break,
-                Err(mpsc::TryRecvError::Disconnected) => return Poll::Ready(()),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => return Poll::Ready(()),
             } {
                 log::error!("P2P error for topic \"{}\": {err:?}", self.topic);
             }
@@ -181,12 +191,14 @@ impl Future for GossipsubService {
                     log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
                     if message.topic == self.topic.hash() {
                         // todo: use async send
-                        if let Err(err) =
-                            self.lapp_service_sender
-                                .send(service::lapp::Message::GossipSub(Message::Text {
+                        if let Err(err) = self
+                            .lapp_service_sender
+                            .send(service::lapp::LappServiceMessage::GossipSub(GossipsubServiceMessage(
+                                Message::Text {
                                     peer_id: peer_id.to_base58(),
                                     msg: text.to_string(),
-                                }))
+                                },
+                            )))
                         {
                             log::error!("Error occurs when send to lapp service: {err:?}");
                         }

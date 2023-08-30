@@ -136,9 +136,10 @@ impl Lapp {
     }
 
     pub async fn service_stop(&mut self, ctx: &Context<Addr>) -> bool {
-        if let Some(sender) = ctx.get_actor_sender::<service::lapp::Message>(&Addr::Lapp(self.lapp.name().to_string()))
+        if let Some(sender) =
+            ctx.get_actor_sender::<service::lapp::LappServiceMessage>(&Addr::Lapp(self.lapp.name().to_string()))
         {
-            sender.send(service::lapp::Message::Stop).is_ok()
+            sender.send(service::lapp::LappServiceMessage::Stop).is_ok()
         } else {
             false
         }
@@ -335,13 +336,13 @@ impl SharedLapp {
         &self.name
     }
 
-    pub fn run_service_if_needed(&self, ctx: Context<Addr>) -> Sender<service::lapp::Message> {
+    pub fn run_service_if_needed(&self, ctx: &Context<Addr>) -> Sender<service::lapp::LappServiceMessage> {
         let service_actor_id = Addr::Lapp(self.name.clone());
 
-        ctx.get_actor_sender::<service::lapp::Message>(&service_actor_id)
+        ctx.get_actor_sender::<service::lapp::LappServiceMessage>(&service_actor_id)
             .unwrap_or_else(|| {
-                let sender = ctx.actor_sender::<service::lapp::Message>(service_actor_id);
-                service::LappService::new(self.clone()).run(ctx);
+                let sender = ctx.actor_sender::<service::lapp::LappServiceMessage>(service_actor_id);
+                service::LappService::new(self.clone()).run(ctx.clone());
                 sender
             })
     }

@@ -1,37 +1,46 @@
 use std::io;
 
-use actix_easy_multipart::tempfile::Tempfile;
-use actix_easy_multipart::MultipartForm;
-use actix_web::{web, HttpResponse};
+use axum::extract::State;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
+use tempfile::NamedTempFile;
 use zip::ZipArchive;
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::{CommonLappGuard, CommonLappResponse, LappUpdateRequest, LappsProvider};
+use crate::web_api::err_into_json_response;
 
-pub async fn get_lapps(lapps_service: web::Data<LappsProvider>) -> HttpResponse {
-    lapps_service.into_inner().handle(process_get_lapps).await
+pub async fn get_lapps(State(lapps_provider): State<LappsProvider>) -> impl IntoResponse {
+    process_get_lapps(lapps_provider).await.map_err(err_into_json_response)
 }
 
-#[derive(MultipartForm)]
+#[derive(TryFromMultipart)]
 pub struct LarUpload {
-    pub lar: Tempfile,
+    // This field will be limited to the total size of the request body.
+    #[form_data(limit = "unlimited")]
+    pub lar: FieldData<NamedTempFile>,
 }
 
-pub async fn add_lapp(lapps_service: web::Data<LappsProvider>, form: MultipartForm<LarUpload>) -> HttpResponse {
-    lapps_service
-        .into_inner()
-        .handle(move |lapps_provider| async move { process_add_lapp(lapps_provider, form.into_inner().lar).await })
+pub async fn add_lapp(
+    State(lapps_provider): State<LappsProvider>,
+    TypedMultipart(form): TypedMultipart<LarUpload>,
+) -> impl IntoResponse {
+    process_add_lapp(lapps_provider, form.lar)
         .await
+        .map_err(err_into_json_response)
 }
 
-pub async fn update_lapp(lapps_service: web::Data<LappsProvider>, body: String) -> HttpResponse {
-    lapps_service
-        .into_inner()
-        .handle(move |lapps_provider| async move { process_update_lapp(lapps_provider, body).await })
+pub async fn update_lapp(
+    State(lapps_provider): State<LappsProvider>,
+    Json(update_request): Json<LappUpdateRequest>,
+) -> impl IntoResponse {
+    process_update_lapp(lapps_provider, update_request)
         .await
+        .map_err(err_into_json_response)
 }
 
-async fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<HttpResponse> {
+async fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<Response> {
     let manager = lapps_provider.read_manager().await;
 
     let mut lapps = Vec::new();
@@ -43,16 +52,16 @@ async fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<HttpRe
     }
     lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
 
-    Ok(HttpResponse::Ok().json(CommonLappResponse::lapps(lapps)))
+    Ok(Json(CommonLappResponse::lapps(lapps)).into_response())
 }
 
-async fn process_add_lapp(lapps_provider: LappsProvider, lar: Tempfile) -> ServerResult<HttpResponse> {
-    let file_name = lar.file_name.as_ref().ok_or(ServerError::UnknownLappName)?;
+async fn process_add_lapp(lapps_provider: LappsProvider, lar: FieldData<NamedTempFile>) -> ServerResult<Response> {
+    let file_name = lar.metadata.file_name.ok_or(ServerError::UnknownLappName)?;
     let lapp_name = file_name
         .strip_suffix(".zip")
-        .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(file_name));
+        .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));
 
-    extract_lar(&lapps_provider, lapp_name, ZipArchive::new(&lar.file)?).await?;
+    extract_lar(&lapps_provider, lapp_name, ZipArchive::new(lar.contents.as_file())?).await?;
 
     {
         let mut manager = lapps_provider.write_manager().await;
@@ -88,9 +97,11 @@ async fn extract_lar<R: io::Read + io::Seek>(
     archive.extract(lapp_dir).map_err(Into::into)
 }
 
-async fn process_update_lapp(lapps_provider: LappsProvider, body: String) -> ServerResult<HttpResponse> {
-    let request: LappUpdateRequest = serde_json::from_str(&body)?;
-    let update_query = request.into_query();
+async fn process_update_lapp(
+    lapps_provider: LappsProvider,
+    update_request: LappUpdateRequest,
+) -> ServerResult<Response> {
+    let update_query = update_request.into_query();
     let manager = lapps_provider.read_manager().await;
     let shared_lapp = manager.lapp(&update_query.lapp_name)?;
     let mut lapp = shared_lapp.write().await;
@@ -103,5 +114,5 @@ async fn process_update_lapp(lapps_provider: LappsProvider, body: String) -> Ser
             manager.unload(lapp).await?;
         }
     }
-    Ok(HttpResponse::Ok().json(CommonLappResponse::Updated { updated }))
+    Ok(Json(CommonLappResponse::Updated { updated }).into_response())
 }

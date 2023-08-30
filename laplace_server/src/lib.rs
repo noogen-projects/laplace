@@ -1,11 +1,22 @@
-use actix_easy_multipart::MultipartFormConfig;
-use actix_files::{Files, NamedFile};
-use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
+use std::net::{IpAddr, SocketAddr};
+use std::str::FromStr;
+use std::sync::Arc;
+
+use axum::extract::DefaultBodyLimit;
+use axum::http::{HeaderName, HeaderValue};
+use axum::response::Redirect;
+use axum::routing::get;
+use axum::{middleware, Router};
+use axum_server::tls_rustls::RustlsConfig;
 use const_format::concatcp;
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
 use rustls::ServerConfig;
+use tower::ServiceBuilder;
+use tower_http::compression::CompressionLayer;
+use tower_http::normalize_path::NormalizePathLayer;
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use truba::Context;
-pub use {actix_files, actix_web};
 
 use crate::error::AppResult;
 use crate::lapps::{Lapp, LappsProvider};
@@ -76,60 +87,49 @@ pub async fn run(settings: Settings) -> AppResult<()> {
 
     log::info!("Load lapps");
     lapps_provider.read_manager().await.load_lapps().await;
-    let lapps_provider = web::Data::new(lapps_provider);
 
     log::info!("Create HTTP server");
-    let http_server = HttpServer::new(move || {
-        let static_dir = web_root.join(Lapp::static_dir_name());
-        let laplace_uri = concatcp!("/", Lapp::main_name());
-        let route_file_path = concatcp!("/", Lapp::static_dir_name(), "/{file_path:.*}");
+    let static_dir = web_root.join(Lapp::static_dir_name());
+    let laplace_uri = concatcp!("/", Lapp::main_name());
 
-        App::new()
-            .app_data(web::Data::clone(&lapps_provider))
-            .app_data(
-                MultipartFormConfig::default()
-                    .total_limit(upload_file_limit)
-                    .memory_limit(upload_file_limit),
-            )
-            .wrap(middleware::DefaultHeaders::new().add(("X-Version", VERSION)))
-            .wrap(middleware::NormalizePath::trim())
-            .wrap(auth::middleware::CheckAccess::new(
-                web::Data::clone(&lapps_provider),
-                laplace_access_token,
-            ))
-            .wrap(middleware::Compress::default())
-            .wrap(middleware::Logger::default())
-            .route(
-                "/favicon.ico",
-                web::get().to({
-                    let favicon_path = static_dir.join("favicon.ico");
-                    move || {
-                        let favicon_path = favicon_path.clone();
-                        async move { NamedFile::open(favicon_path) }
-                    }
-                }),
-            )
-            .service(Files::new(&Lapp::main_static_uri(), &static_dir).index_file(Lapp::index_file_name()))
-            .route(
-                "/",
-                web::route().to(move || {
-                    let redirect = HttpResponse::Found()
-                        .append_header((http::header::LOCATION, laplace_uri))
-                        .finish();
-                    async { redirect }
-                }),
-            )
-            .service(web_api::laplace::services(
-                laplace_uri,
-                &static_dir,
-                &settings.lapps.path,
-                route_file_path,
-            ))
-            .service(web_api::lapp::services(route_file_path))
-    });
+    let router = Router::new()
+        .route("/", get(|| async { Redirect::to(laplace_uri) }))
+        .route_service("/favicon.ico", ServeFile::new(static_dir.join("favicon.ico")))
+        // .route_service(&Lapp::main_static_uri(), ServeFile::new(Lapp::index_file_name()))
+        .nest_service(&Lapp::main_static_uri(), ServeDir::new(&static_dir))
+        .fallback_service(ServeFile::new(Lapp::index_file_name()))
+        // .nest(
+        //     &Lapp::main_static_uri(),
+        //     Router::new()
+        //         .route_service("/", ServeFile::new(Lapp::index_file_name()))
+        //         .fallback_service(ServeDir::new(&static_dir)),
+        // )
+        .merge(web_api::laplace::router(laplace_uri, &static_dir, &settings.lapps.path))
+        .merge(web_api::lapp::router())
+        // .nest(
+        //     laplace_uri,
+        //     web_api::laplace::router(lapps_provider.clone(), &static_dir, &settings.lapps.path),
+        // )
+        // .nest("/:lapp_name", web_api::lapp::router(lapps_provider.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            (lapps_provider.clone(), laplace_access_token),
+            auth::middleware::check_access,
+        ))
+        .layer(
+            ServiceBuilder::new()
+                .layer(NormalizePathLayer::trim_trailing_slash())
+                .layer(DefaultBodyLimit::max(upload_file_limit))
+                .layer(CompressionLayer::new())
+                .layer(SetResponseHeaderLayer::if_not_present(
+                    HeaderName::from_static("x-version"),
+                    HeaderValue::from_static(VERSION),
+                )),
+        )
+        .with_state(lapps_provider);
 
-    let http_server_addr = (settings.http.host.as_str(), settings.http.port);
-    let http_server = if settings.ssl.enabled {
+    log::info!("Run HTTP server");
+    let http_server_addr = SocketAddr::new(IpAddr::from_str(&settings.http.host)?, settings.http.port);
+    if settings.ssl.enabled {
         let (certificates, private_key) = auth::prepare_certificates(
             &settings.ssl.certificate_path,
             &settings.ssl.private_key_path,
@@ -141,13 +141,14 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .with_no_client_auth()
             .with_single_cert(certificates, private_key)?;
 
-        http_server.bind_rustls(http_server_addr, config)?
+        axum_server::bind_rustls(http_server_addr, RustlsConfig::from_config(Arc::new(config)))
+            .serve(router.into_make_service())
+            .await?
     } else {
-        http_server.bind(http_server_addr)?
+        axum::Server::bind(&http_server_addr)
+            .serve(router.into_make_service())
+            .await?
     };
-
-    log::info!("Run HTTP server");
-    http_server.run().await?;
 
     log::info!("Shutdown the context");
     ctx.shutdown().await;

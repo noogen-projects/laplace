@@ -1,6 +1,6 @@
-use std::{fmt, io};
+use std::io;
+use std::net::AddrParseError;
 
-use actix_web::{HttpResponse, ResponseError};
 use flexi_logger::FlexiLoggerError;
 use laplace_common::lapp::Permission;
 use rcgen::RcgenError;
@@ -16,8 +16,14 @@ pub type AppResult<T> = Result<T, AppError>;
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("Web error: {0}")]
+    WebError(#[from] hyper::Error),
+
     #[error("IO error: {0}")]
     IoError(#[from] io::Error),
+
+    #[error("Parse addr error: {0}")]
+    AddrParseError(#[from] AddrParseError),
 
     #[error("Logger error: {0}")]
     LoggerError(#[from] FlexiLoggerError),
@@ -40,7 +46,10 @@ pub type ServerResult<T> = Result<T, ServerError>;
 #[derive(Debug, Error)]
 pub enum ServerError {
     #[error("Web error: {0}")]
-    WebError(#[from] actix_web::Error),
+    WebError(#[from] hyper::Error),
+
+    #[error("Http error: {0}")]
+    HttpError(#[from] axum::http::Error),
 
     #[error("P2p error: {0}")]
     P2pError(#[from] gossipsub::Error),
@@ -116,28 +125,10 @@ pub enum ServerError {
 
     #[error("Lapp initialization error: {0:?}")]
     LappInitError(String),
-
-    #[error("Blocking call error: {0}")]
-    BlockingError(#[from] actix_web::error::BlockingError),
 }
 
 impl From<InstantiationError> for ServerError {
     fn from(err: InstantiationError) -> Self {
         Self::LappInstantiateFail(Box::new(err))
     }
-}
-
-impl ResponseError for ServerError {}
-
-impl From<ServerError> for HttpResponse {
-    fn from(error: ServerError) -> Self {
-        error_response(error)
-    }
-}
-
-pub fn error_response(err: impl fmt::Debug) -> HttpResponse {
-    let error_message = format!("{err:#?}");
-    log::error!("Internal Server error: {error_message}");
-
-    HttpResponse::InternalServerError().body(error_message)
 }
