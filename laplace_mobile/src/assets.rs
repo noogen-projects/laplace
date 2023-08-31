@@ -1,11 +1,10 @@
-use std::{
-    error::Error,
-    ffi::{CStr, CString},
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::error::Error;
+use std::ffi::{CStr, CString};
+use std::path::{Path, PathBuf};
+use std::{fs, io};
 
-use jni::{objects::JObject, JNIEnv, JavaVM};
+use jni::objects::{JObject, JObjectArray, JString};
+use jni::{JNIEnv, JavaVM};
 use ndk::asset::Asset;
 
 pub type CopyResult<T> = Result<T, Box<dyn Error>>;
@@ -14,7 +13,7 @@ pub fn copy(asset_dirs: impl IntoIterator<Item = impl AsRef<Path>>, destination:
     // Create a VM for executing Java calls
     let ctx = ndk_context::android_context();
     let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }?;
-    let env = vm.attach_current_thread()?;
+    let mut env = vm.attach_current_thread()?;
 
     // Query the Asset Manager
     let asset_manager = env
@@ -29,8 +28,8 @@ pub fn copy(asset_dirs: impl IntoIterator<Item = impl AsRef<Path>>, destination:
     // Copy assets
     for asset_dir in asset_dirs {
         copy_recursively(
-            *env,
-            asset_manager,
+            &mut *env,
+            &asset_manager,
             asset_dir.as_ref().to_path_buf(),
             destination.as_ref().join(asset_dir),
         )?;
@@ -40,8 +39,8 @@ pub fn copy(asset_dirs: impl IntoIterator<Item = impl AsRef<Path>>, destination:
 }
 
 fn copy_recursively(
-    env: JNIEnv,
-    asset_manager: JObject,
+    env: &mut JNIEnv,
+    asset_manager: &JObject,
     asset_dir: PathBuf,
     destination_dir: PathBuf,
 ) -> CopyResult<()> {
@@ -56,18 +55,18 @@ fn copy_recursively(
     Ok(())
 }
 
-fn list(env: JNIEnv, asset_manager: JObject, asset_dir: &Path) -> CopyResult<Vec<String>> {
-    let asset_array = env
-        .call_method(asset_manager, "list", "(Ljava/lang/String;)[Ljava/lang/String;", &[env
-            .new_string(asset_dir.to_string_lossy())?
-            .into()])?
-        .l()?
-        .into_raw();
+fn list(env: &mut JNIEnv, asset_manager: &JObject, asset_dir: &Path) -> CopyResult<Vec<String>> {
+    let asset_array = JObjectArray::from(env
+        .call_method(asset_manager, "list", "(Ljava/lang/String;)[Ljava/lang/String;", &[
+            (&env.new_string(asset_dir.to_string_lossy())?).into(),
+        ])?
+        .l()?);
 
     let mut assets = Vec::new();
-    for index in 0..env.get_array_length(asset_array)? {
+    for index in 0..env.get_array_length(&asset_array)? {
+        let asset_string = JString::from(env.get_object_array_element(&asset_array, index)?);
         let asset: String = env
-            .get_string(env.get_object_array_element(asset_array, index)?.into())?
+            .get_string(&asset_string)?
             .into();
         assets.push(asset);
     }

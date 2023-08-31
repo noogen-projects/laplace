@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use actix_web::rt::System;
 use laplace_server::auth::generate_token;
 use laplace_server::settings::Settings;
 use log::info;
@@ -56,8 +55,11 @@ pub fn main() {
         assets::copy(["lapps", "static"], &settings.http.web_root).expect("Copy assets error");
     }
 
-    info!("Create actix system");
-    System::new()
+    info!("Create tokio runtime");
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Cannot build tokio runtime")
         .block_on(async move { laplace_server::run(settings).await })
-        .expect("Laplace run error")
+        .expect("Laplace run error");
 }

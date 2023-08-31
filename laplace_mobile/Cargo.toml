@@ -14,14 +14,14 @@ description = "The mobile server of the local-firs web-application platform"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-actix-web = "4.2"
-jni = "0.20"
+jni = "0.21"
 laplace_server = { path = "../laplace_server" }
 log = "0.4"
 ndk = "0.7"
 ndk-context = "0.1"
 ndk-glue = "0.7"
-toml = "0.5"
+tokio = { version = "1.29", features = ["full"] }
+toml = "0.7"
 
 [profile.release]
 lto = true
