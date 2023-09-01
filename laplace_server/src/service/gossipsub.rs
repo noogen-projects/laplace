@@ -2,23 +2,19 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::pin::Pin;
 use std::str::FromStr;
-use std::task::Poll;
 use std::time::Duration;
 
 pub use laplace_wasm::route::gossipsub::Message;
-use libp2p::futures::{executor, Future, StreamExt};
+use libp2p::futures::StreamExt;
 use libp2p::gossipsub::{self, IdentTopic as Topic, MessageAuthenticity, MessageId, ValidationMode};
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{mdns, Multiaddr, PeerId, Swarm};
 use thiserror::Error;
-use tokio::sync::mpsc::error::TryRecvError;
-use truba::{Context, Receiver, Sender, UnboundedMpscChannel};
+use truba::{Context, Sender, UnboundedMpscChannel};
 
-use crate::service;
 use crate::service::lapp::LappServiceMessage;
 use crate::service::Addr;
 
@@ -29,12 +25,16 @@ impl truba::Message for GossipsubServiceMessage {
     type Channel = UnboundedMpscChannel<Self>;
 }
 
+#[derive(NetworkBehaviour)]
+struct GossipsubServiceBehaviour {
+    gossipsub: gossipsub::Behaviour,
+    mdns: mdns::tokio::Behaviour,
+}
+
 pub struct GossipsubService {
-    swarm: Swarm<gossipsub::Behaviour>,
-    swarm_discovery: Swarm<mdns::async_io::Behaviour>,
+    swarm: Swarm<GossipsubServiceBehaviour>,
     dial_ports: Vec<u16>,
     topic: Topic,
-    receiver: Receiver<GossipsubServiceMessage>,
     lapp_service_sender: Sender<LappServiceMessage>,
     peers: HashMap<PeerId, Vec<Multiaddr>>,
 }
@@ -55,7 +55,7 @@ impl GossipsubService {
         topic_name: impl Into<String>,
         lapp_service_sender: Sender<LappServiceMessage>,
     ) -> Result<(), Error> {
-        let transport = executor::block_on(libp2p::development_transport(keypair.clone()))?;
+        let transport = libp2p::tokio_development_transport(keypair.clone())?;
         let message_id_fn = |message: &gossipsub::Message| {
             let mut hasher = DefaultHasher::new();
             message.data.hash(&mut hasher);
@@ -67,9 +67,8 @@ impl GossipsubService {
             .message_id_fn(message_id_fn)
             .build()
             .map_err(|err| Error::GossipsubUninit(err.into()))?;
-        let mut gossipsub_behaviour =
-            gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair.clone()), gossipsub_config)
-                .map_err(|err| Error::GossipsubUninit(err.into()))?;
+        let mut gossipsub_behaviour = gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair), gossipsub_config)
+            .map_err(|err| Error::GossipsubUninit(err.into()))?;
 
         let topic = Topic::new(topic_name);
         gossipsub_behaviour
@@ -79,140 +78,132 @@ impl GossipsubService {
             gossipsub_behaviour.add_explicit_peer(peer_id);
         }
 
-        let mut swarm = Swarm::with_threadpool_executor(transport, gossipsub_behaviour, peer_id);
+        let behaviour = GossipsubServiceBehaviour {
+            gossipsub: gossipsub_behaviour,
+            mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)?,
+        };
+        let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id).build();
         swarm.listen_on(address)?;
 
-        let transport = executor::block_on(libp2p::development_transport(keypair))?;
-        let behaviour = mdns::async_io::Behaviour::new(mdns::Config::default(), peer_id)?;
-        let mut swarm_discovery = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
-        swarm_discovery.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-
-        let receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
-        let service = Self {
+        let mut receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
+        let mut service = Self {
             swarm,
-            swarm_discovery,
             dial_ports,
             topic,
-            receiver,
             lapp_service_sender,
             peers: Default::default(),
         };
-        ctx.spawn(service);
+
+        truba::spawn_event_loop!(ctx, {
+            event = service.swarm.select_next_some() => match event {
+                SwarmEvent::Behaviour(GossipsubServiceBehaviourEvent::Mdns(event)) => service.handle_mdns(event),
+                SwarmEvent::Behaviour(GossipsubServiceBehaviourEvent::Gossipsub(event)) => service.handle_gossipsub(event),
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    log::info!("Local node is listening on {address}");
+                }
+                SwarmEvent::IncomingConnection {
+                    connection_id: _,
+                    local_addr,
+                    send_back_addr,
+                } => log::debug!("Local node incoming connection {local_addr}, {send_back_addr}"),
+                _ => {}
+            },
+            Some(msg) = receiver.recv() => if let Err(err) = service.handle_p2p(msg) {
+                log::error!("P2P error for topic \"{}\": {err:?}", service.topic);
+            },
+        });
 
         Ok(())
     }
-}
 
-impl Future for GossipsubService {
-    type Output = ();
+    fn handle_mdns(&mut self, event: mdns::Event) {
+        match event {
+            mdns::Event::Discovered(peers) => {
+                for (peer_id, address) in peers {
+                    log::info!("MDNS discovered a new peer: {peer_id} {address}");
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        while let Poll::Ready(Some(event)) = self.swarm_discovery.poll_next_unpin(cx) {
-            match event {
-                SwarmEvent::Behaviour(mdns::Event::Discovered(peers)) => {
-                    for (peer_id, address) in peers {
-                        log::info!("MDNS discovered {peer_id} {address}");
-                        let addresses = self.peers.entry(peer_id).or_default();
-                        if !addresses.contains(&address) {
-                            addresses.push(address);
-                        }
+                    self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                    let addresses = self.peers.entry(peer_id).or_default();
+                    if !addresses.contains(&address) {
+                        addresses.push(address);
                     }
-                },
-                SwarmEvent::Behaviour(mdns::Event::Expired(expired)) => {
-                    for (peer_id, address) in expired {
-                        log::info!("MDNS expired {peer_id} {address}");
-                        self.peers.remove(&peer_id);
-                    }
-                },
-                SwarmEvent::NewListenAddr { address, .. } => log::info!("MDNS listening on {address:?}"),
-                SwarmEvent::IncomingConnection {
-                    local_addr,
-                    send_back_addr,
-                } => log::info!("MDNS incoming connection {local_addr}, {send_back_addr}"),
-                _ => break,
+                }
+            },
+            mdns::Event::Expired(expired) => {
+                for (peer_id, address) in expired {
+                    log::info!("MDNS discover peer has expired: {peer_id} {address}");
+                    self.swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                    self.peers.remove(&peer_id);
+                }
+            },
+        }
+    }
+
+    fn handle_gossipsub(&mut self, event: gossipsub::Event) {
+        if let gossipsub::Event::Message {
+            propagation_source: peer_id,
+            message_id,
+            message,
+        } = event
+        {
+            let text = String::from_utf8_lossy(&message.data); // todo: catch error
+            log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
+            if message.topic == self.topic.hash() {
+                if let Err(err) = self
+                    .lapp_service_sender
+                    .send(LappServiceMessage::GossipSub(GossipsubServiceMessage(Message::Text {
+                        peer_id: peer_id.to_base58(),
+                        msg: text.to_string(),
+                    })))
+                {
+                    log::error!("Error occurs when send to lapp service: {err:?}");
+                }
             }
         }
+    }
 
-        loop {
-            if let Err(err) = match self.receiver.try_recv() {
-                Ok(GossipsubServiceMessage(Message::Text { msg, .. })) => {
-                    let topic = self.topic.clone();
-                    log::info!("Publish message: {msg}");
-                    self.swarm
-                        .behaviour_mut()
-                        .publish(topic, msg)
-                        .map(drop)
-                        .map_err(Error::GossipsubPublishError)
-                },
-                Ok(GossipsubServiceMessage(Message::Dial(peer_id))) => {
-                    log::info!("Dial peer: {peer_id}");
-                    PeerId::from_str(&peer_id)
-                        .map_err(|err| Error::ParsePeerIdError(format!("{err:?}")))
-                        .and_then(|peer_id| {
-                            if let Some(mut address) = self
-                                .peers
-                                .get(&peer_id)
-                                .and_then(|addresses| addresses.first())
-                                .cloned()
-                            {
-                                for port in self.dial_ports.clone() {
-                                    address.pop();
-                                    address.push(Protocol::Tcp(port));
-                                    log::info!("Dial address: {address}");
-                                    self.swarm.dial(address.clone()).map_err(Error::DialError)?;
-                                }
-                                Ok(())
-                            } else {
-                                Err(Error::DialError(libp2p::swarm::DialError::NoAddresses))
-                            }
-                        })
-                },
-                Ok(GossipsubServiceMessage(Message::AddAddress(address))) => {
-                    log::info!("Add address: {address}");
-                    Multiaddr::from_str(&address)
-                        .map_err(Error::WrongMultiaddr)
-                        .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
-                },
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => return Poll::Ready(()),
-            } {
-                log::error!("P2P error for topic \"{}\": {err:?}", self.topic);
-            }
-        }
-
-        while let Poll::Ready(Some(event)) = self.swarm.poll_next_unpin(cx) {
-            match event {
-                SwarmEvent::Behaviour(gossipsub::Event::Message {
-                    propagation_source: peer_id,
-                    message_id,
-                    message,
-                }) => {
-                    let text = String::from_utf8_lossy(&message.data); // todo: catch error
-                    log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
-                    if message.topic == self.topic.hash() {
-                        // todo: use async send
-                        if let Err(err) = self
-                            .lapp_service_sender
-                            .send(service::lapp::LappServiceMessage::GossipSub(GossipsubServiceMessage(
-                                Message::Text {
-                                    peer_id: peer_id.to_base58(),
-                                    msg: text.to_string(),
-                                },
-                            )))
+    fn handle_p2p(&mut self, GossipsubServiceMessage(msg): GossipsubServiceMessage) -> Result<(), Error> {
+        match msg {
+            Message::Text { msg, .. } => {
+                let topic = self.topic.clone();
+                log::info!("Publish message: {msg}");
+                self.swarm
+                    .behaviour_mut()
+                    .gossipsub
+                    .publish(topic, msg)
+                    .map(drop)
+                    .map_err(Error::GossipsubPublishError)
+            },
+            Message::Dial(peer_id) => {
+                log::info!("Dial peer: {peer_id}");
+                PeerId::from_str(&peer_id)
+                    .map_err(|err| Error::ParsePeerIdError(err.to_string()))
+                    .and_then(|peer_id| {
+                        if let Some(mut address) = self
+                            .peers
+                            .get(&peer_id)
+                            .and_then(|addresses| addresses.first())
+                            .cloned()
                         {
-                            log::error!("Error occurs when send to lapp service: {err:?}");
+                            for port in self.dial_ports.clone() {
+                                address.pop();
+                                address.push(Protocol::Tcp(port));
+                                log::info!("Dial address: {address}");
+                                self.swarm.dial(address.clone()).map_err(Error::DialError)?;
+                            }
+                            Ok(())
+                        } else {
+                            Err(Error::DialError(libp2p::swarm::DialError::NoAddresses))
                         }
-                    }
-                },
-                SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {address:?}"),
-                SwarmEvent::IncomingConnection {
-                    local_addr,
-                    send_back_addr,
-                } => log::info!("Incoming connection {local_addr}, {send_back_addr}"),
-                _ => break,
-            }
+                    })
+            },
+            Message::AddAddress(address) => {
+                log::info!("Add address: {address}");
+                Multiaddr::from_str(&address)
+                    .map_err(Error::WrongMultiaddr)
+                    .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
+            },
         }
-        Poll::Pending
     }
 }
 
@@ -221,7 +212,7 @@ pub fn decode_keypair(bytes: &mut [u8]) -> Result<Keypair, Error> {
 }
 
 pub fn decode_peer_id(bytes: &[u8]) -> Result<PeerId, Error> {
-    Ok(PeerId::from_bytes(bytes)?)
+    PeerId::from_bytes(bytes).map_err(|err| Error::ParsePeerIdError(err.to_string()))
 }
 
 #[derive(Error, Debug)]

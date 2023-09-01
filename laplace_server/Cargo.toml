@@ -26,15 +26,15 @@ futures = "0.3"
 hyper = "0.14"
 laplace_common = { path = "../laplace_common" }
 laplace_wasm = { path = "../laplace_wasm" }
-libp2p = { version = "0.51", features = [
-    "async-std",
-    "tcp",
+libp2p = { version = "0.52", features = [
     "dns",
-    "mdns",
     "gossipsub",
-    "websocket",
+    "macros",
+    "mdns",
     "noise",
-    "mplex",
+    "tcp",
+    "tokio",
+    "websocket",
     "yamux",
 ] }
 log = "0.4"

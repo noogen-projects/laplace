@@ -23,6 +23,7 @@ use crate::lapps::wasm_interop::http::{self, HttpEnv};
 use crate::lapps::wasm_interop::{sleep, MemoryManagementHostData};
 use crate::lapps::{LappInstance, LappInstanceError};
 use crate::service;
+use crate::service::lapp::LappServiceMessage;
 use crate::service::Addr;
 
 pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
@@ -336,12 +337,12 @@ impl SharedLapp {
         &self.name
     }
 
-    pub fn run_service_if_needed(&self, ctx: &Context<Addr>) -> Sender<service::lapp::LappServiceMessage> {
+    pub fn run_service_if_needed(&self, ctx: &Context<Addr>) -> Sender<LappServiceMessage> {
         let service_actor_id = Addr::Lapp(self.name.clone());
 
-        ctx.get_actor_sender::<service::lapp::LappServiceMessage>(&service_actor_id)
+        ctx.get_actor_sender::<LappServiceMessage>(&service_actor_id)
             .unwrap_or_else(|| {
-                let sender = ctx.actor_sender::<service::lapp::LappServiceMessage>(service_actor_id);
+                let sender = ctx.actor_sender::<LappServiceMessage>(service_actor_id);
                 service::LappService::new(self.clone()).run(ctx.clone());
                 sender
             })

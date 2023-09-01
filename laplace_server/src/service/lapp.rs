@@ -53,6 +53,7 @@ impl LappService {
         let lapp_name = self.lapp.name().to_owned();
         let mut messages_in = ctx.actor_receiver::<LappServiceMessage>(Addr::Lapp(lapp_name));
 
+        log::info!("Run LappService for lapp \"{}\"", self.lapp.name());
         truba::spawn_event_loop!(ctx, {
             Some(msg) = messages_in.recv() => {
                 match msg {
@@ -73,7 +74,6 @@ impl LappService {
     }
 
     async fn handle_websocket(&mut self, msg: WsMessage) {
-        log::info!("Receive websocket message: {msg:?}");
         let mut lapp = self.lapp.write().await;
         let Some(instance) = lapp.instance_mut() else {
             log::warn!("Handle websocket: instance not found for lapp {}", lapp.name());

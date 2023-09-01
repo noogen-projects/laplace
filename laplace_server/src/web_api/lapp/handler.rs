@@ -173,7 +173,7 @@ fn process_gossipsub_start(
 
     let gossipsub_actor_id = Addr::Lapp(lapp_name.clone());
     let gossipsub_service_sender = ctx.actor_sender::<GossipsubServiceMessage>(gossipsub_actor_id.clone());
-    log::info!("Start P2P for peer {peer_id}");
+    log::info!("Start Gossipsub of lapp \"{lapp_name}\" for peer {peer_id}");
 
     GossipsubService::run(
         ctx,

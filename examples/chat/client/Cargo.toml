@@ -16,9 +16,9 @@ anyhow = "1.0"
 bs58 = "0.5"
 chat_common = { path = "../common" }
 getrandom = { version = "0.2", features = ["js"] }
-gloo-timers = "0.2"
+gloo-timers = "0.3"
 laplace_yew = { path = "../../../laplace_yew" }
-libp2p-identity = { version = "0.1", features = ["ed25519", "peerid"] }
+libp2p-identity = { version = "0.2", features = ["ed25519", "peerid"] }
 pulldown-cmark = "0.9"
 serde_json = "1.0"
 wasm-web-helpers = "0.2"

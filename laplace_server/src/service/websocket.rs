@@ -63,24 +63,27 @@ impl WebSocketService {
         let mut messages_in = ctx.actor_receiver::<WsServiceMessage>(actor_id);
         let mut hb_interval = time::interval(Self::HEARTBEAT_INTERVAL);
 
-        truba::spawn_event_loop!(ctx, {
-            _ = hb_interval.tick() => {
-                if self.handle_heartbeat().await.is_break() {
-                    break;
-                }
-            }
-            Some(msg) = self.ws_receiver.next() => {
-                if self.handle_ws_message(msg).is_break() {
-                    break;
-                }
-            },
-            Some(WsServiceMessage(msg)) = messages_in.recv() => {
-                match msg {
-                    WsMessage::Text(text) => if self.handle_text(text).await.is_break() {
+        ctx.clone().spawn(async move {
+            truba::event_loop!(ctx, {
+                _ = hb_interval.tick() => {
+                    if self.handle_heartbeat().await.is_break() {
                         break;
-                    },
+                    }
                 }
-            }
+                Some(msg) = self.ws_receiver.next() => {
+                    if self.handle_ws_message(msg).is_break() {
+                        break;
+                    }
+                },
+                Some(WsServiceMessage(msg)) = messages_in.recv() => {
+                    match msg {
+                        WsMessage::Text(text) => if self.handle_text(text).await.is_break() {
+                            break;
+                        },
+                    }
+                }
+            });
+            self.close().await;
         });
     }
 
@@ -116,9 +119,10 @@ impl WebSocketService {
 
         match msg {
             Message::Text(text) => {
+                log::info!("Receive WS message: {text}");
                 if let Err(err) = self
                     .lapp_service_sender
-                    .send(LappServiceMessage::WebSocket(WsMessage::Text(text.to_string())))
+                    .send(LappServiceMessage::WebSocket(WsMessage::Text(text)))
                 {
                     log::error!("Error occurs when send to lapp service: {err:?}");
                 }
@@ -147,6 +151,12 @@ impl WebSocketService {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
+        }
+    }
+
+    async fn close(&mut self) {
+        if let Err(err) = self.ws_sender.send(Message::Close(None)).await {
+            log::error!("WS close send error: {err:?}");
         }
     }
 }
