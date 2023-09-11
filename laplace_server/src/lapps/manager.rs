@@ -60,14 +60,14 @@ impl LappsManager {
             .insert(lapp_name.clone(), SharedLapp::new(Lapp::new(lapp_name, root_dir)));
     }
 
-    pub async fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
+    pub fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         let http_client = self.http_client.clone();
-        lapp.instantiate(http_client).await
+        lapp.instantiate(http_client)
     }
 
-    pub async fn unload(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
+    pub fn unload(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         lapp.take_instance();
-        lapp.service_stop(&self.ctx).await;
+        lapp.service_stop(&self.ctx);
 
         Ok(())
     }
@@ -79,9 +79,7 @@ impl LappsManager {
                 log::info!("Load lapp '{name}'");
 
                 drop(lapp);
-                self.load(shared_lapp.write().await)
-                    .await
-                    .expect("Lapp should be loaded");
+                self.load(shared_lapp.write().await).expect("Lapp should be loaded");
             }
         }
     }

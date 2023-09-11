@@ -1,10 +1,8 @@
 #![no_main]
 
-use std::{
-    fs::{self, DirEntry, File},
-    io::{self, BufRead, BufReader},
-    path::Path,
-};
+use std::fs::{self, DirEntry, File};
+use std::io::{self, BufRead, BufReader};
+use std::path::Path;
 
 use laplace_wasm::http::{self, Method, Uri};
 use notes_common::{make_preview, Note, NoteContent, Response};
@@ -110,7 +108,7 @@ fn process_notes() -> Result<Vec<Note>, NoteError> {
                 notes.push(Note {
                     name,
                     content: NoteContent::Preview(preview),
-                })
+                });
             }
         }
     }

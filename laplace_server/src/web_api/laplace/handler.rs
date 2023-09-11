@@ -47,7 +47,7 @@ async fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<Respon
     for lapp in manager.lapps_iter() {
         let lapp = lapp.read().await;
         if !lapp.is_main() {
-            lapps.push(CommonLappGuard(lapp));
+            lapps.push(CommonLappGuard::from(lapp));
         }
     }
     lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
@@ -70,7 +70,7 @@ async fn process_add_lapp(lapps_provider: LappsProvider, lar: FieldData<NamedTem
         let shared_lapp = manager.lapp(lapp_name)?;
         let lapp = shared_lapp.write().await;
         if lapp.enabled() {
-            manager.load(lapp).await?;
+            manager.load(lapp)?;
         }
     }
 
@@ -109,9 +109,9 @@ async fn process_update_lapp(
     let updated = lapp.update(update_query)?;
     if updated.enabled.is_some() {
         if lapp.enabled() {
-            manager.load(lapp).await?;
+            manager.load(lapp)?;
         } else {
-            manager.unload(lapp).await?;
+            manager.unload(lapp)?;
         }
     }
     Ok(Json(CommonLappResponse::Updated { updated }).into_response())

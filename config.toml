@@ -18,4 +18,4 @@ spec = "info,hyper=info,rustls=info,regalloc=warn,wasmer_compiler_cranelift=warn
 
 [lapps]
 path = "lapps"
-#allowed = ["echo"]
+allowed = ["reels", "notes"]

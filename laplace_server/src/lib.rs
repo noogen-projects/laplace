@@ -95,22 +95,10 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     let router = Router::new()
         .route("/", get(|| async { Redirect::to(laplace_uri) }))
         .route_service("/favicon.ico", ServeFile::new(static_dir.join("favicon.ico")))
-        // .route_service(&Lapp::main_static_uri(), ServeFile::new(Lapp::index_file_name()))
         .nest_service(&Lapp::main_static_uri(), ServeDir::new(&static_dir))
         .fallback_service(ServeFile::new(Lapp::index_file_name()))
-        // .nest(
-        //     &Lapp::main_static_uri(),
-        //     Router::new()
-        //         .route_service("/", ServeFile::new(Lapp::index_file_name()))
-        //         .fallback_service(ServeDir::new(&static_dir)),
-        // )
         .merge(web_api::laplace::router(laplace_uri, &static_dir, &settings.lapps.path))
         .merge(web_api::lapp::router())
-        // .nest(
-        //     laplace_uri,
-        //     web_api::laplace::router(lapps_provider.clone(), &static_dir, &settings.lapps.path),
-        // )
-        // .nest("/:lapp_name", web_api::lapp::router(lapps_provider.clone()))
         .route_layer(middleware::from_fn_with_state(
             (lapps_provider.clone(), laplace_access_token),
             auth::middleware::check_access,

@@ -118,29 +118,3 @@ impl Deref for LappInstance {
         &self.instance
     }
 }
-
-// impl TryFrom<Instance> for LappInstance {
-//     type Error = wasmer::ExportError;
-//
-//     fn try_from(instance: Instance) -> Result<Self, Self::Error> {
-//         let memory = instance.exports.get_memory("memory")?.clone();
-//
-//         Ok(Self { instance, memory })
-//     }
-// }
-//
-// impl TryFrom<&Instance> for LappInstance {
-//     type Error = wasmer::ExportError;
-//
-//     fn try_from(instance: &Instance) -> Result<Self, Self::Error> {
-//         Self::try_from(instance.clone())
-//     }
-// }
-//
-// impl TryFrom<Arc<Instance>> for LappInstance {
-//     type Error = wasmer::ExportError;
-//
-//     fn try_from(instance: Arc<Instance>) -> Result<Self, Self::Error> {
-//         Self::try_from(&*instance)
-//     }
-// }

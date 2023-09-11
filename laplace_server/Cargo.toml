@@ -53,6 +53,6 @@ toml = "0.7"
 tower = "0.4"
 tower-http = { version = "0.4", features = ["fs", "set-header", "normalize-path", "compression-gzip"] }
 truba = "0.1"
-wasmer = "3.2.0-alpha.1"
-wasmer-wasi = "3.2.0-alpha.1"
+wasmer = "4.1"
+wasmer-wasix = "0.12"
 zip = "0.6"

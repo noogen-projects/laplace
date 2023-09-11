@@ -1,3 +1,4 @@
+use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -10,11 +11,11 @@ use laplace_wasm::http::{Request, Response};
 use reqwest::blocking::Client;
 use rusqlite::Connection;
 use serde::{Serialize, Serializer};
-use tokio::fs;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use truba::{Context, Sender};
 use wasmer::{Exports, Function, FunctionEnv, Imports, Instance, Module, Store};
-use wasmer_wasi::WasiState;
+use wasmer_wasix::virtual_fs::host_fs;
+use wasmer_wasix::WasiEnv;
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::settings::{FileSettings, LappSettings, LappSettingsResult};
@@ -29,13 +30,19 @@ use crate::service::Addr;
 pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
 pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, PathBuf, CommonLappGuard<'a>>;
 
-pub struct CommonLappGuard<'a>(pub RwLockReadGuard<'a, Lapp>);
+pub struct CommonLappGuard<'a>(pub RwLockReadGuard<'a, CommonLapp>);
 
-impl Deref for CommonLappGuard<'_> {
+impl<'a> Deref for CommonLappGuard<'a> {
     type Target = CommonLapp;
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<'a> From<RwLockReadGuard<'a, Lapp>> for CommonLappGuard<'a> {
+    fn from(lapp: RwLockReadGuard<'a, Lapp>) -> Self {
+        Self(RwLockReadGuard::map(lapp, |inner| &inner.lapp))
     }
 }
 
@@ -44,7 +51,7 @@ impl Serialize for CommonLappGuard<'_> {
     where
         S: Serializer,
     {
-        self.0.lapp.serialize(serializer)
+        self.0.serialize(serializer)
     }
 }
 
@@ -136,21 +143,19 @@ impl Lapp {
         }
     }
 
-    pub async fn service_stop(&mut self, ctx: &Context<Addr>) -> bool {
-        if let Some(sender) =
-            ctx.get_actor_sender::<service::lapp::LappServiceMessage>(&Addr::Lapp(self.lapp.name().to_string()))
-        {
-            sender.send(service::lapp::LappServiceMessage::Stop).is_ok()
+    pub fn service_stop(&mut self, ctx: &Context<Addr>) -> bool {
+        if let Some(sender) = ctx.get_actor_sender::<LappServiceMessage>(&Addr::Lapp(self.lapp.name().to_string())) {
+            sender.send(LappServiceMessage::Stop).is_ok()
         } else {
             false
         }
     }
 
-    pub async fn instantiate(&mut self, http_client: Client) -> ServerResult<()> {
-        let wasm_bytes = fs::read(self.server_module_file()).await?;
+    pub fn instantiate(&mut self, http_client: Client) -> ServerResult<()> {
+        let wasm_bytes = fs::read(self.server_module_file())?;
 
         let mut store = Store::default();
-        let module = Module::new(&store, &wasm_bytes)?;
+        let module = Module::new(&store, wasm_bytes)?;
 
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
@@ -160,7 +165,7 @@ impl Lapp {
 
         let dir_path = self.root_dir().join("data");
         if !dir_path.exists() && (is_allow_read || is_allow_write) {
-            fs::create_dir(&dir_path).await?;
+            fs::create_dir(&dir_path)?;
         }
 
         let mut wasi_env = None;
@@ -171,14 +176,14 @@ impl Lapp {
             .required_permissions()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
-            let env = WasiState::new(self.name())
-                .preopen(|preopen| {
+            let env = WasiEnv::builder(self.name())
+                .fs(Box::new(host_fs::FileSystem::default()))
+                .preopen_build(|preopen| {
                     preopen
                         .directory(&dir_path)
                         .alias("/")
                         .read(is_allow_read)
                         .write(is_allow_write)
-                        // todo: why this works always as true?
                         .create(is_allow_write)
                 })?
                 .finalize(&mut store)?;
@@ -231,8 +236,8 @@ impl Lapp {
         let instance = Instance::new(&mut store, &module, &imports)?;
         let memory_management = MemoryManagementHostData::from_exports(&instance.exports, &store)?;
 
-        if let Some(env) = wasi_env {
-            env.data_mut(&mut store).set_memory(memory_management.memory().clone());
+        if let Some(mut env) = wasi_env {
+            env.initialize(&mut store, instance.clone())?;
         }
 
         if let Some(env) = database_env {

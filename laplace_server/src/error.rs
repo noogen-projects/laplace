@@ -7,7 +7,7 @@ use rcgen::RcgenError;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
 use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
-use wasmer_wasi::{WasiError, WasiStateCreationError};
+use wasmer_wasix::{WasiError, WasiRuntimeError, WasiStateCreationError};
 
 use crate::lapps::{LappInstanceError, LappSettingsError};
 use crate::service::gossipsub;
@@ -104,6 +104,9 @@ pub enum ServerError {
 
     #[error("Lapp WASI state creation error: {0}")]
     LappWasiCreationFail(#[from] WasiStateCreationError),
+
+    #[error("Lapp WASI runtime error: {0}")]
+    LappWasiFail(#[from] WasiRuntimeError),
 
     #[error("Lapp WASI error: {0}")]
     LappWasi(#[from] WasiError),

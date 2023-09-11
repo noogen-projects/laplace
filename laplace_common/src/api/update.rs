@@ -1,4 +1,5 @@
-use std::{marker::PhantomData, ops::Deref};
+use std::marker::PhantomData;
+use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
