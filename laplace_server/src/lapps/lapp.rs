@@ -245,12 +245,10 @@ impl Lapp {
         if let Some(init) = instance.get_func(&mut store, "init") {
             let slice = init.typed::<(), u64>(&store)?.call_async(&mut store, ()).await?;
             let mut memory_manager = memory_management.to_manager(&mut store);
-            let bytes = unsafe {
-                memory_manager
-                    .wasm_slice_to_vec(slice)
-                    .await
-                    .map_err(LappInstanceError::MemoryManagementError)?
-            };
+            let bytes = memory_manager
+                .wasm_slice_to_vec(slice)
+                .await
+                .map_err(LappInstanceError::MemoryManagementError)?;
             Result::<(), String>::try_from_slice(&bytes)?.map_err(ServerError::LappInitError)?;
         }
 

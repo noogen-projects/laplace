@@ -50,7 +50,7 @@ impl LappInstance {
         let arg = self.bytes_to_wasm_slice(&bytes).await?;
 
         let slice = process_http_fn.call_async(&mut self.store, arg.into()).await?;
-        let bytes = unsafe { self.wasm_slice_to_vec(slice).await? };
+        let bytes = self.wasm_slice_to_vec(slice).await?;
 
         Ok(BorshDeserialize::deserialize(&mut bytes.as_slice())?)
     }
@@ -60,7 +60,7 @@ impl LappInstance {
         let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?).await?;
 
         let response_slice = route_ws_fn.call_async(&mut self.store, arg.into()).await?;
-        let bytes = unsafe { self.wasm_slice_to_vec(response_slice).await? };
+        let bytes = self.wasm_slice_to_vec(response_slice).await?;
 
         Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
@@ -72,7 +72,7 @@ impl LappInstance {
         let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?).await?;
 
         let response_slice = route_gossipsub.call_async(&mut self.store, arg.into()).await?;
-        let bytes = unsafe { self.wasm_slice_to_vec(response_slice).await? };
+        let bytes = self.wasm_slice_to_vec(response_slice).await?;
 
         Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
@@ -85,7 +85,7 @@ impl LappInstance {
             .await?)
     }
 
-    pub async unsafe fn move_from_memory(&mut self, offset: u32, size: usize) -> LappInstanceResult<Vec<u8>> {
+    pub async fn move_from_memory(&mut self, offset: usize, size: usize) -> LappInstanceResult<Vec<u8>> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
@@ -93,7 +93,7 @@ impl LappInstance {
             .await?)
     }
 
-    pub async unsafe fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<Vec<u8>> {
+    pub async fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<Vec<u8>> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
@@ -101,7 +101,7 @@ impl LappInstance {
             .await?)
     }
 
-    pub async unsafe fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<String> {
+    pub async fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<String> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)

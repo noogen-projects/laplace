@@ -29,13 +29,11 @@ pub fn invoke_http(caller: Caller<Ctx>, request_slice: u64) -> BoxedSendFuture<u
 pub async fn invoke_http_async(mut caller: Caller<'_, Ctx>, request_slice: u64) -> u64 {
     let memory_data = caller.data().memory_data().clone();
 
-    let request_bytes = unsafe {
-        memory_data
-            .to_manager(&mut caller)
-            .wasm_slice_to_vec(request_slice)
-            .await
-            .map_err(|_| http::InvokeError::CanNotReadWasmData)
-    };
+    let request_bytes = memory_data
+        .to_manager(&mut caller)
+        .wasm_slice_to_vec(request_slice)
+        .await
+        .map_err(|_| http::InvokeError::CanNotReadWasmData);
 
     let result = match caller.data().http.as_ref() {
         Some(http_ctx) => match request_bytes.and_then(|bytes| {

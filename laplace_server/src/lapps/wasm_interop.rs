@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::future::Future;
 use std::ptr::copy_nonoverlapping;
-use std::slice;
 use std::string::FromUtf8Error;
 
 use anyhow::anyhow;
@@ -92,12 +91,12 @@ where
         self.host_data.memory.grow_async(&mut self.store, pages).await
     }
 
-    pub fn is_memory_enough(&self, size: usize, offset: usize) -> bool {
+    pub fn is_memory_enough(&self, offset: usize, size: usize) -> bool {
         size <= self.memory().data_size(&self.store) - offset
     }
 
-    pub async fn grow_memory_if_needed(&mut self, size: usize, offset: usize) -> anyhow::Result<()> {
-        while !self.is_memory_enough(size, offset) {
+    pub async fn grow_memory_if_needed(&mut self, offset: usize, size: usize) -> anyhow::Result<()> {
+        while !self.is_memory_enough(offset, size) {
             log::trace!(
                 "Destination offset = {} and buffer len = {}, but memory data size = {}",
                 offset,
@@ -112,7 +111,7 @@ where
     pub async fn copy_to_memory(&mut self, src_bytes: &[u8]) -> MemoryManagementResult<u32> {
         let size = src_bytes.len();
         let offset = self.alloc(size as _).await?;
-        self.grow_memory_if_needed(size as _, offset as _).await?;
+        self.grow_memory_if_needed(offset as _, size).await?;
 
         // SAFETY: in this point memory has a required space
         unsafe {
@@ -126,7 +125,7 @@ where
         Ok(offset)
     }
 
-    pub async unsafe fn move_from_memory(&mut self, offset: u32, size: usize) -> MemoryManagementResult<Vec<u8>> {
+    pub async fn move_from_memory(&mut self, offset: usize, size: usize) -> MemoryManagementResult<Vec<u8>> {
         let memory = self.memory();
         log::trace!(
             "Move from memory: data_ptr = {}, data_size = {}, offset = {}, size = {}",
@@ -136,30 +135,29 @@ where
             size
         );
 
-        let data = slice::from_raw_parts(memory.data_ptr(&self.store).offset(offset as _), size).into();
-        self.dealloc(offset, size as _).await?;
+        let data = memory.data(&self.store)[offset..(offset + size)].to_vec();
+        unsafe { self.dealloc(offset as _, size as _).await? };
 
         Ok(data)
     }
 
-    pub async unsafe fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> MemoryManagementResult<Vec<u8>> {
+    pub async fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> MemoryManagementResult<Vec<u8>> {
         let slice = slice.into();
-        if self.is_memory_enough(slice.len() as _, slice.ptr() as _) {
-            let data = self.move_from_memory(slice.ptr(), slice.len() as _).await?;
+        let ptr = slice.ptr() as _;
+        let len = slice.len() as _;
 
-            Ok(data)
+        if self.is_memory_enough(ptr, len) {
+            self.move_from_memory(ptr, len).await
         } else {
             log::error!(
-                "WASM slice ptr = {}, len = {}, but memory data size = {}",
-                slice.ptr(),
-                slice.len(),
+                "WASM slice ptr = {ptr}, len = {len}, but memory data size = {}",
                 self.memory().data_size(&self.store)
             );
             Err(MemoryManagementError::WrongMemorySize)
         }
     }
 
-    pub async unsafe fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> MemoryManagementResult<String> {
+    pub async fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> MemoryManagementResult<String> {
         let data = self.wasm_slice_to_vec(slice).await?;
         String::from_utf8(data).map_err(Into::into)
     }

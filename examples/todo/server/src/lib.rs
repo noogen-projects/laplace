@@ -1,10 +1,8 @@
 use borsh::BorshSerialize;
+use laplace_wasm::database::{execute, query, Value};
+use laplace_wasm::http::{self, Method, Uri};
+use laplace_wasm::WasmSlice;
 pub use laplace_wasm::{alloc, dealloc};
-use laplace_wasm::{
-    database::{execute, query, Value},
-    http::{self, Method, Uri},
-    WasmSlice,
-};
 use sql_builder::{quote, SqlBuilder, SqlBuilderError};
 use thiserror::Error;
 use todo_common::{Response, Task};
@@ -12,7 +10,7 @@ use todo_common::{Response, Task};
 const TASKS_TABLE_NAME: &str = "Tasks";
 
 #[no_mangle]
-pub unsafe extern "C" fn init() -> WasmSlice {
+pub extern "C" fn init() -> WasmSlice {
     let result = execute(format!(
         r"CREATE TABLE IF NOT EXISTS {table}(
             description TEXT NOT NULL,

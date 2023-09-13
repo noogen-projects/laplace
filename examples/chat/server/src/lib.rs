@@ -5,8 +5,8 @@ pub use laplace_wasm::{alloc, dealloc};
 use laplace_wasm::{Route, WasmSlice};
 
 #[no_mangle]
-pub unsafe extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
-    let response = do_ws(msg.into_vec_in_wasm())
+pub extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
+    let response = do_ws(unsafe { msg.into_vec_in_wasm() })
         .map(WsResponse::Success)
         .unwrap_or_else(WsResponse::Error);
 
@@ -27,8 +27,8 @@ pub unsafe extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn route_gossipsub(msg: WasmSlice) -> WasmSlice {
-    let response = do_gossipsub(msg.into_vec_in_wasm())
+pub extern "C" fn route_gossipsub(msg: WasmSlice) -> WasmSlice {
+    let response = do_gossipsub(unsafe { msg.into_vec_in_wasm() })
         .map(WsResponse::Success)
         .unwrap_or_else(WsResponse::Error);
     let message = serde_json::to_string(&response).unwrap_or_else(WsResponse::make_error_json_string);

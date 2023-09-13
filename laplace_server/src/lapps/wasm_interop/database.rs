@@ -67,13 +67,11 @@ async fn run<T: BorshSerialize + Send>(
 ) -> u64 {
     let memory_data = caller.data().memory_data().clone();
 
-    let sql = unsafe {
-        memory_data
-            .to_manager(&mut caller)
-            .wasm_slice_to_string(sql_query_slice)
-            .await
-            .expect("SQL query should be converted to string")
-    };
+    let sql = memory_data
+        .to_manager(&mut caller)
+        .wasm_slice_to_string(sql_query_slice)
+        .await
+        .expect("SQL query should be converted to string");
 
     let result = match caller.data().database.as_ref() {
         Some(database_ctx) => {
