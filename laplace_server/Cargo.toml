@@ -18,7 +18,7 @@ axum_typed_multipart = "0.8"
 borsh = { workspace = true }
 bs58 = "0.5"
 cap-std = "2.0"
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.4", features = ["derive"] }
 config = "0.13"
 const_format = "0.2"
 cookie = "0.17"
