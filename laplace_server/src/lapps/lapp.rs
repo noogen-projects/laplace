@@ -1,31 +1,43 @@
 use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use borsh::BorshDeserialize;
+use cap_std::fs::Dir;
 use derive_more::{Deref, DerefMut};
 pub use laplace_common::api::{UpdateQuery, UpdateRequest as LappUpdateRequest};
 pub use laplace_common::lapp::access::*;
 use laplace_wasm::http::{Request, Response};
-use reqwest::blocking::Client;
+use reqwest::Client;
 use rusqlite::Connection;
 use serde::{Serialize, Serializer};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use truba::{Context, Sender};
-use wasmer::{Exports, Function, FunctionEnv, Imports, Instance, Module, Store};
-use wasmer_wasix::virtual_fs::host_fs;
-use wasmer_wasix::WasiEnv;
+use wasmtime::{Config, Engine, Linker, Module, Store};
+use wasmtime_wasi::preview2::preview1::add_to_linker_async;
+use wasmtime_wasi::preview2::{DirPerms, FilePerms, Table, WasiCtxBuilder};
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::settings::{FileSettings, LappSettings, LappSettingsResult};
-use crate::lapps::wasm_interop::database::{self, DatabaseEnv};
-use crate::lapps::wasm_interop::http::{self, HttpEnv};
-use crate::lapps::wasm_interop::{sleep, MemoryManagementHostData};
-use crate::lapps::{LappInstance, LappInstanceError};
+use crate::lapps::wasm_interop::database::DatabaseCtx;
+use crate::lapps::wasm_interop::http::HttpCtx;
+use crate::lapps::wasm_interop::{database, http, sleep, MemoryManagementHostData};
+use crate::lapps::{Ctx, LappInstance, LappInstanceError};
 use crate::service;
 use crate::service::lapp::LappServiceMessage;
 use crate::service::Addr;
+
+lazy_static::lazy_static! {
+    static ref ENGINE: Engine = {
+        let mut config = Config::new();
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+        config.wasm_component_model(true);
+        config.async_support(true);
+
+        Engine::new(&config).expect("Failed create engine")
+    };
+}
 
 pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
 pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, PathBuf, CommonLappGuard<'a>>;
@@ -136,9 +148,9 @@ impl Lapp {
         self.instance.take()
     }
 
-    pub fn process_http(&mut self, request: Request) -> ServerResult<Response> {
+    pub async fn process_http(&mut self, request: Request) -> ServerResult<Response> {
         match self.instance_mut() {
-            Some(instance) => Ok(instance.process_http(request)?),
+            Some(instance) => Ok(instance.process_http(request).await?),
             None => Err(ServerError::LappNotLoaded(self.name().to_string())),
         }
     }
@@ -151,11 +163,12 @@ impl Lapp {
         }
     }
 
-    pub fn instantiate(&mut self, http_client: Client) -> ServerResult<()> {
+    pub async fn instantiate(&mut self, http_client: Client) -> ServerResult<()> {
         let wasm_bytes = fs::read(self.server_module_file())?;
+        let module = Module::new(&ENGINE, wasm_bytes)?;
 
-        let mut store = Store::default();
-        let module = Module::new(&store, wasm_bytes)?;
+        let mut linker = Linker::new(&ENGINE);
+        add_to_linker_async(&mut linker)?;
 
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
@@ -168,100 +181,74 @@ impl Lapp {
             fs::create_dir(&dir_path)?;
         }
 
-        let mut wasi_env = None;
-        let mut database_env = None;
-        let mut http_env = None;
+        let mut wasi = WasiCtxBuilder::new();
+        wasi.inherit_stdout();
 
-        let mut imports = if self
+        if self
             .required_permissions()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
-            let env = WasiEnv::builder(self.name())
-                .fs(Box::new(host_fs::FileSystem::default()))
-                .preopen_build(|preopen| {
-                    preopen
-                        .directory(&dir_path)
-                        .alias("/")
-                        .read(is_allow_read)
-                        .write(is_allow_write)
-                        .create(is_allow_write)
-                })?
-                .finalize(&mut store)?;
+            let preopened_dir = Dir::open_ambient_dir(&dir_path, cap_std::ambient_authority())?;
+            let mut perms = DirPerms::empty();
+            let mut file_perms = FilePerms::empty();
 
-            let imports = env.import_object(&mut store, &module)?;
-            wasi_env = Some(env);
-            imports
-        } else {
-            Imports::default()
-        };
+            if is_allow_read {
+                perms |= DirPerms::READ;
+                file_perms |= FilePerms::READ;
+            }
 
-        let mut exports = Exports::new();
+            if is_allow_write {
+                perms |= DirPerms::MUTATE;
+                file_perms |= FilePerms::WRITE;
+            }
+
+            wasi.preopened_dir(preopened_dir, perms, file_perms, "/");
+        }
+
+        let mut table = Table::new();
+        let wasi = wasi.build(&mut table)?;
+
+        let ctx = Ctx::new(wasi, table);
+        let mut store = Store::new(&ENGINE, ctx);
 
         if is_allow_db_access {
             let database_path = self.get_database_path();
-            let connection = Arc::new(Mutex::new(Connection::open(database_path)?));
+            let connection = Connection::open(database_path)?;
 
-            let env = FunctionEnv::new(&mut store, DatabaseEnv {
-                memory_data: None,
-                connection: connection.clone(),
-            });
-            let execute_fn = Function::new_typed_with_env(&mut store, &env, database::execute);
-            let query_fn = Function::new_typed_with_env(&mut store, &env, database::query);
-            let query_row_fn = Function::new_typed_with_env(&mut store, &env, database::query_row);
-
-            exports.insert("db_execute", execute_fn);
-            exports.insert("db_query", query_fn);
-            exports.insert("db_query_row", query_row_fn);
-            database_env = Some(env);
+            store.data_mut().database = Some(DatabaseCtx::new(connection));
+            linker.func_wrap1_async("env", "db_execute", database::execute)?;
+            linker.func_wrap1_async("env", "db_query", database::query)?;
+            linker.func_wrap1_async("env", "db_query_row", database::query_row)?;
         }
 
         if is_allow_http {
-            let env = FunctionEnv::new(&mut store, HttpEnv {
-                memory_data: None,
-                client: http_client,
-                settings: self.lapp.settings().network().http().clone(),
-            });
-            let invoke_http_fn = Function::new_typed_with_env(&mut store, &env, http::invoke_http);
-
-            exports.insert("invoke_http", invoke_http_fn);
-            http_env = Some(env);
+            store.data_mut().http = Some(HttpCtx::new(http_client, self.lapp.settings().network().http().clone()));
+            linker.func_wrap1_async("env", "invoke_http", http::invoke_http)?;
         }
 
         if is_allow_sleep {
-            let invoke_sleep_fn = Function::new_typed(&mut store, sleep::invoke_sleep);
-            exports.insert("invoke_sleep", invoke_sleep_fn);
+            linker.func_wrap1_async("env", "invoke_sleep", sleep::invoke_sleep)?;
         }
 
-        imports.register_namespace("env", exports);
-        let instance = Instance::new(&mut store, &module, &imports)?;
-        let memory_management = MemoryManagementHostData::from_exports(&instance.exports, &store)?;
+        let instance = linker.instantiate_async(&mut store, &module).await?;
+        let memory_management = MemoryManagementHostData::from_instance(&instance, &mut store)?;
+        store.data_mut().memory_data = Some(memory_management.clone());
 
-        if let Some(mut env) = wasi_env {
-            env.initialize(&mut store, instance.clone())?;
+        if let Some(initialize) = instance.get_func(&mut store, "_initialize") {
+            initialize.call_async(&mut store, &[], &mut Vec::new()).await?;
         }
 
-        if let Some(env) = database_env {
-            env.as_mut(&mut store).memory_data = Some(memory_management.clone());
+        if let Some(start) = instance.get_func(&mut store, "_start") {
+            start.call_async(&mut store, &[], &mut Vec::new()).await?;
         }
 
-        if let Some(env) = http_env {
-            env.as_mut(&mut store).memory_data = Some(memory_management.clone());
-        }
-
-        if let Ok(initialize) = instance.exports.get_function("_initialize") {
-            initialize.call(&mut store, &[])?;
-        }
-
-        if let Ok(start) = instance.exports.get_function("_start") {
-            start.call(&mut store, &[])?;
-        }
-
-        if let Ok(init) = instance.exports.get_function("init") {
-            let slice = init.typed::<(), u64>(&store)?.call(&mut store)?;
+        if let Some(init) = instance.get_func(&mut store, "init") {
+            let slice = init.typed::<(), u64>(&store)?.call_async(&mut store, ()).await?;
             let mut memory_manager = memory_management.to_manager(&mut store);
             let bytes = unsafe {
                 memory_manager
                     .wasm_slice_to_vec(slice)
+                    .await
                     .map_err(LappInstanceError::MemoryManagementError)?
             };
             Result::<(), String>::try_from_slice(&bytes)?.map_err(ServerError::LappInitError)?;

@@ -89,7 +89,7 @@ pub async fn http(
 
 async fn process_http(lapp: SharedLapp, request: Request<Body>) -> ServerResult<Response<Full<Bytes>>> {
     let request = convert::to_wasm_http_request(request).await?;
-    let response: http::Response = lapp.write().await.process_http(request)?;
+    let response: http::Response = lapp.write().await.process_http(request).await?;
 
     Response::builder()
         .status(response.status)

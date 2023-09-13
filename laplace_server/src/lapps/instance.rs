@@ -6,17 +6,21 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use laplace_wasm::route::{gossipsub, websocket, Route};
 use laplace_wasm::{http, WasmSlice};
 use thiserror::Error;
-use wasmer::{Instance, Store};
+use wasmtime::{Instance, Store};
+use wasmtime_wasi::preview2::preview1::{WasiPreview1Adapter, WasiPreview1View};
+use wasmtime_wasi::preview2::{Table, WasiCtx, WasiView};
 
+use crate::lapps::wasm_interop::database::DatabaseCtx;
+use crate::lapps::wasm_interop::http::HttpCtx;
 use crate::lapps::wasm_interop::{MemoryManagementError, MemoryManagementHostData};
 
 #[derive(Debug, Error)]
 pub enum LappInstanceError {
-    #[error("Get instance export: {0}")]
-    ExportError(#[from] wasmer::ExportError),
+    #[error("Wasm function does not found: {0}")]
+    WasmFunctionNotFound(String),
 
-    #[error("Execution abort: {0}")]
-    RuntimeError(#[from] wasmer::RuntimeError),
+    #[error("Wasm error: {0}")]
+    WasmError(#[from] anyhow::Error),
 
     #[error("Can't deserialize string: {0:?}")]
     DeserializeStringError(#[from] FromUtf8Error),
@@ -33,81 +37,84 @@ pub type LappInstanceResult<T> = Result<T, LappInstanceError>;
 pub struct LappInstance {
     pub instance: Instance,
     pub memory_management: MemoryManagementHostData,
-    pub store: Store,
+    pub store: Store<Ctx>,
 }
 
 impl LappInstance {
-    pub fn process_http(&mut self, request: http::Request) -> LappInstanceResult<http::Response> {
+    pub async fn process_http(&mut self, request: http::Request) -> LappInstanceResult<http::Response> {
         let process_http_fn = self
             .instance
-            .exports
-            .get_typed_function::<u64, u64>(&self.store, "process_http")?;
+            .get_typed_func::<u64, u64>(&mut self.store, "process_http")?;
 
         let bytes = request.try_to_vec()?;
-        let arg = self.bytes_to_wasm_slice(&bytes)?;
+        let arg = self.bytes_to_wasm_slice(&bytes).await?;
 
-        let slice = process_http_fn.call(&mut self.store, arg.into())?;
-        let bytes = unsafe { self.wasm_slice_to_vec(slice)? };
+        let slice = process_http_fn.call_async(&mut self.store, arg.into()).await?;
+        let bytes = unsafe { self.wasm_slice_to_vec(slice).await? };
 
         Ok(BorshDeserialize::deserialize(&mut bytes.as_slice())?)
     }
 
-    pub fn route_ws(&mut self, msg: &websocket::Message) -> LappInstanceResult<Vec<Route>> {
-        let route_ws_fn = self.exports.get_function("route_ws")?.typed::<u64, u64>(&self.store)?;
-        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
+    pub async fn route_ws(&mut self, msg: &websocket::Message) -> LappInstanceResult<Vec<Route>> {
+        let route_ws_fn = self.instance.get_typed_func::<u64, u64>(&mut self.store, "route_ws")?;
+        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?).await?;
 
-        let response_slice = route_ws_fn.call(&mut self.store, arg.into())?;
-        let bytes = unsafe { self.wasm_slice_to_vec(response_slice)? };
+        let response_slice = route_ws_fn.call_async(&mut self.store, arg.into()).await?;
+        let bytes = unsafe { self.wasm_slice_to_vec(response_slice).await? };
 
         Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
 
-    pub fn route_gossipsub(&mut self, msg: &gossipsub::Message) -> LappInstanceResult<Vec<Route>> {
+    pub async fn route_gossipsub(&mut self, msg: &gossipsub::Message) -> LappInstanceResult<Vec<Route>> {
         let route_gossipsub = self
-            .exports
-            .get_function("route_gossipsub")?
-            .typed::<u64, u64>(&self.store)?;
-        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?)?;
+            .instance
+            .get_typed_func::<u64, u64>(&mut self.store, "route_gossipsub")?;
+        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?).await?;
 
-        let response_slice = route_gossipsub.call(&mut self.store, arg.into())?;
-        let bytes = unsafe { self.wasm_slice_to_vec(response_slice)? };
+        let response_slice = route_gossipsub.call_async(&mut self.store, arg.into()).await?;
+        let bytes = unsafe { self.wasm_slice_to_vec(response_slice).await? };
 
         Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
 
-    pub fn copy_to_memory(&mut self, src: *const u8, size: usize) -> LappInstanceResult<u32> {
+    pub async fn copy_to_memory(&mut self, src_bytes: &[u8]) -> LappInstanceResult<u32> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
-            .copy_to_memory(src, size)?)
+            .copy_to_memory(src_bytes)
+            .await?)
     }
 
-    pub unsafe fn move_from_memory(&mut self, offset: u32, size: usize) -> LappInstanceResult<Vec<u8>> {
+    pub async unsafe fn move_from_memory(&mut self, offset: u32, size: usize) -> LappInstanceResult<Vec<u8>> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
-            .move_from_memory(offset, size)?)
+            .move_from_memory(offset, size)
+            .await?)
     }
 
-    pub unsafe fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<Vec<u8>> {
+    pub async unsafe fn wasm_slice_to_vec(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<Vec<u8>> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
-            .wasm_slice_to_vec(slice)?)
+            .wasm_slice_to_vec(slice)
+            .await?)
     }
 
-    pub unsafe fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<String> {
+    pub async unsafe fn wasm_slice_to_string(&mut self, slice: impl Into<WasmSlice>) -> LappInstanceResult<String> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
-            .wasm_slice_to_string(slice)?)
+            .wasm_slice_to_string(slice)
+            .await?)
     }
 
-    pub fn bytes_to_wasm_slice(&mut self, bytes: impl AsRef<[u8]>) -> LappInstanceResult<WasmSlice> {
+    pub async fn bytes_to_wasm_slice(&mut self, bytes: impl AsRef<[u8]>) -> LappInstanceResult<WasmSlice> {
         Ok(self
             .memory_management
             .to_manager(&mut self.store)
-            .bytes_to_wasm_slice(bytes)?)
+            .bytes_to_wasm_slice(bytes)
+            .await?)
     }
 }
 
@@ -116,5 +123,59 @@ impl Deref for LappInstance {
 
     fn deref(&self) -> &Self::Target {
         &self.instance
+    }
+}
+
+pub struct Ctx {
+    pub wasi: WasiCtx,
+    pub table: Table,
+    pub adapter: WasiPreview1Adapter,
+    pub memory_data: Option<MemoryManagementHostData>,
+    pub database: Option<DatabaseCtx>,
+    pub http: Option<HttpCtx>,
+}
+
+impl Ctx {
+    pub fn new(wasi: WasiCtx, table: Table) -> Self {
+        Self {
+            wasi,
+            table,
+            adapter: WasiPreview1Adapter::new(),
+            memory_data: None,
+            database: None,
+            http: None,
+        }
+    }
+
+    pub fn memory_data(&self) -> &MemoryManagementHostData {
+        self.memory_data.as_ref().expect("Memory data is empty")
+    }
+}
+
+impl WasiView for Ctx {
+    fn table(&self) -> &Table {
+        &self.table
+    }
+
+    fn table_mut(&mut self) -> &mut Table {
+        &mut self.table
+    }
+
+    fn ctx(&self) -> &WasiCtx {
+        &self.wasi
+    }
+
+    fn ctx_mut(&mut self) -> &mut WasiCtx {
+        &mut self.wasi
+    }
+}
+
+impl WasiPreview1View for Ctx {
+    fn adapter(&self) -> &WasiPreview1Adapter {
+        &self.adapter
+    }
+
+    fn adapter_mut(&mut self) -> &mut WasiPreview1Adapter {
+        &mut self.adapter
     }
 }

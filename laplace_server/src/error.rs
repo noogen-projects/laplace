@@ -6,8 +6,6 @@ use laplace_common::lapp::Permission;
 use rcgen::RcgenError;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
-use wasmer::{CompileError, ExportError, InstantiationError, RuntimeError};
-use wasmer_wasix::{WasiError, WasiRuntimeError, WasiStateCreationError};
 
 use crate::lapps::{LappInstanceError, LappSettingsError};
 use crate::service::gossipsub;
@@ -45,6 +43,9 @@ pub type ServerResult<T> = Result<T, ServerError>;
 
 #[derive(Debug, Error)]
 pub enum ServerError {
+    #[error("Lapp wasm error: {0}")]
+    LappWasm(#[from] anyhow::Error),
+
     #[error("Web error: {0}")]
     WebError(#[from] hyper::Error),
 
@@ -87,32 +88,11 @@ pub enum ServerError {
     #[error("Permission '{}' denied for lapp '{0}'", .1.as_str())]
     LappPermissionDenied(String, Permission),
 
-    #[error("Lapp export error: {0}")]
-    LappExportFail(#[from] ExportError),
-
-    #[error("Lapp runtime error: {0}")]
-    LappRuntimeFail(#[from] RuntimeError),
-
     #[error("Lapp config operation error: {0}")]
     LappSettingsFail(#[from] LappSettingsError),
 
     #[error("Lapp file operation error: {0}")]
     LappIoError(#[from] io::Error),
-
-    #[error("Lapp compile error: {0}")]
-    LappCompileFail(#[from] CompileError),
-
-    #[error("Lapp WASI state creation error: {0}")]
-    LappWasiCreationFail(#[from] WasiStateCreationError),
-
-    #[error("Lapp WASI runtime error: {0}")]
-    LappWasiFail(#[from] WasiRuntimeError),
-
-    #[error("Lapp WASI error: {0}")]
-    LappWasi(#[from] WasiError),
-
-    #[error("Lapp instantiate error: {0}")]
-    LappInstantiateFail(Box<InstantiationError>),
 
     #[error("Wasm result value has wrong data length")]
     WrongResultLength,
@@ -128,10 +108,4 @@ pub enum ServerError {
 
     #[error("Lapp initialization error: {0:?}")]
     LappInitError(String),
-}
-
-impl From<InstantiationError> for ServerError {
-    fn from(err: InstantiationError) -> Self {
-        Self::LappInstantiateFail(Box::new(err))
-    }
 }

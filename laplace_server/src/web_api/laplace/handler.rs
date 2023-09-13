@@ -70,7 +70,7 @@ async fn process_add_lapp(lapps_provider: LappsProvider, lar: FieldData<NamedTem
         let shared_lapp = manager.lapp(lapp_name)?;
         let lapp = shared_lapp.write().await;
         if lapp.enabled() {
-            manager.load(lapp)?;
+            manager.load(lapp).await?;
         }
     }
 
@@ -109,7 +109,7 @@ async fn process_update_lapp(
     let updated = lapp.update(update_query)?;
     if updated.enabled.is_some() {
         if lapp.enabled() {
-            manager.load(lapp)?;
+            manager.load(lapp).await?;
         } else {
             manager.unload(lapp)?;
         }

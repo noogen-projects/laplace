@@ -11,11 +11,13 @@ repository = "https://github.com/noogen-projects/laplace"
 description = "The server of the local-first web-application platform"
 
 [dependencies]
+anyhow = "1.0"
 axum = { version = "0.6", features = ["ws", "multipart"] }
 axum-server = { version = "0.5", features = ["tls-rustls"] }
 axum_typed_multipart = "0.8"
 borsh = { workspace = true }
 bs58 = "0.5"
+cap-std = "2.0"
 clap = { version = "4.0", features = ["derive"] }
 config = "0.13"
 const_format = "0.2"
@@ -26,6 +28,7 @@ futures = "0.3"
 hyper = "0.14"
 laplace_common = { path = "../laplace_common" }
 laplace_wasm = { path = "../laplace_wasm" }
+lazy_static = "1.4"
 libp2p = { version = "0.52", features = [
     "dns",
     "gossipsub",
@@ -53,6 +56,6 @@ toml = "0.7"
 tower = "0.4"
 tower-http = { version = "0.4", features = ["fs", "set-header", "normalize-path", "compression-gzip"] }
 truba = "0.1"
-wasmer = "4.1"
-wasmer-wasix = "0.12"
+wasmtime = { git = "https://github.com/alexcrichton/wasmtime.git", branch = "fix-string-boundary-issues" }#{ git = "https://github.com/bytecodealliance/wasmtime.git" }
+wasmtime-wasi = { git = "https://github.com/alexcrichton/wasmtime.git", branch = "fix-string-boundary-issues", features = ["tokio"] }
 zip = "0.6"

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
-use reqwest::blocking::Client;
+use reqwest::Client;
 use tokio::fs;
 use tokio::sync::RwLockWriteGuard;
 use truba::Context;
@@ -40,11 +40,10 @@ impl LappsManager {
             lapps.insert(name.clone(), SharedLapp::new(Lapp::new(name, dir.path())));
         }
 
-        let http_client = tokio::task::spawn_blocking(Client::new).await?;
         Ok(Self {
             lapps,
             lapps_path: settings.path.clone(),
-            http_client,
+            http_client: Client::new(),
             ctx,
         })
     }
@@ -60,9 +59,9 @@ impl LappsManager {
             .insert(lapp_name.clone(), SharedLapp::new(Lapp::new(lapp_name, root_dir)));
     }
 
-    pub fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
+    pub async fn load(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
         let http_client = self.http_client.clone();
-        lapp.instantiate(http_client)
+        lapp.instantiate(http_client).await
     }
 
     pub fn unload(&self, mut lapp: RwLockWriteGuard<'_, Lapp>) -> ServerResult<()> {
@@ -79,7 +78,9 @@ impl LappsManager {
                 log::info!("Load lapp '{name}'");
 
                 drop(lapp);
-                self.load(shared_lapp.write().await).expect("Lapp should be loaded");
+                self.load(shared_lapp.write().await)
+                    .await
+                    .expect("Lapp should be loaded");
             }
         }
     }

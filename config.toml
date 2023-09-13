@@ -14,8 +14,8 @@ certificate_path = "cert/cert.pem"
 mdns_discovery_enabled = true
 
 [log]
-spec = "info,hyper=info,rustls=info,regalloc=warn,wasmer_compiler_cranelift=warn,cranelift_codegen=warn,h2=info,netlink_proto=info"
+spec = "info,hyper=info,rustls=info,regalloc=warn,cranelift_codegen=info,h2=info,netlink_proto=info"
 
 [lapps]
 path = "lapps"
-allowed = ["reels", "notes"]
+#allowed = ["echo"]

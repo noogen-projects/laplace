@@ -1,29 +1,37 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use borsh::BorshSerialize;
 use laplace_wasm::database::{Row, Value};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension};
-use wasmer::FunctionEnvMut;
+use tokio::sync::Mutex;
+use wasmtime::Caller;
 
-use crate::lapps::wasm_interop::MemoryManagementHostData;
+use crate::lapps::wasm_interop::BoxedSendFuture;
+use crate::lapps::Ctx;
 
-#[derive(Clone)]
-pub struct DatabaseEnv {
-    pub memory_data: Option<MemoryManagementHostData>,
+pub struct DatabaseCtx {
     pub connection: Arc<Mutex<Connection>>,
 }
 
-pub fn execute(env: FunctionEnvMut<DatabaseEnv>, sql_query_slice: u64) -> u64 {
-    run(env, sql_query_slice, do_execute)
+impl DatabaseCtx {
+    pub fn new(connection: Connection) -> Self {
+        Self {
+            connection: Arc::new(Mutex::new(connection)),
+        }
+    }
 }
 
-pub fn query(env: FunctionEnvMut<DatabaseEnv>, sql_query_slice: u64) -> u64 {
-    run(env, sql_query_slice, do_query)
+pub fn execute(caller: Caller<Ctx>, sql_query_slice: u64) -> BoxedSendFuture<u64> {
+    Box::new(run(caller, sql_query_slice, do_execute))
 }
 
-pub fn query_row(env: FunctionEnvMut<DatabaseEnv>, sql_query_slice: u64) -> u64 {
-    run(env, sql_query_slice, do_query_row)
+pub fn query(caller: Caller<Ctx>, sql_query_slice: u64) -> BoxedSendFuture<u64> {
+    Box::new(run(caller, sql_query_slice, do_query))
+}
+
+pub fn query_row(caller: Caller<Ctx>, sql_query_slice: u64) -> BoxedSendFuture<u64> {
+    Box::new(run(caller, sql_query_slice, do_query_row))
 }
 
 pub fn do_execute(connection: &Connection, sql: String) -> Result<u64, String> {
@@ -52,31 +60,34 @@ pub fn do_query_row(connection: &Connection, sql: String) -> Result<Option<Row>,
         .map_err(|err| format!("{:?}", err))
 }
 
-fn run<T: BorshSerialize>(
-    mut env: FunctionEnvMut<DatabaseEnv>,
+async fn run<T: BorshSerialize + Send>(
+    mut caller: Caller<'_, Ctx>,
     sql_query_slice: u64,
     fun: impl Fn(&Connection, String) -> Result<T, String>,
 ) -> u64 {
-    let memory_data = env.data().memory_data.clone().expect("Memory data must not be empty");
+    let memory_data = caller.data().memory_data().clone();
 
     let sql = unsafe {
         memory_data
-            .to_manager(&mut env)
+            .to_manager(&mut caller)
             .wasm_slice_to_string(sql_query_slice)
+            .await
             .expect("SQL query should be converted to string")
     };
 
-    let result = env
-        .data()
-        .connection
-        .try_lock()
-        .map_err(|err| format!("{:?}", err))
-        .and_then(|connection| fun(&connection, sql));
+    let result = match caller.data().database.as_ref() {
+        Some(database_ctx) => {
+            let connection = database_ctx.connection.lock().await;
+            fun(&connection, sql)
+        },
+        None => Err("Database context not found".to_string()),
+    };
 
     let serialized = result.try_to_vec().expect("Result should be serializable");
     memory_data
-        .to_manager(&mut env)
+        .to_manager(&mut caller)
         .bytes_to_wasm_slice(&serialized)
+        .await
         .expect("Result should be to move to WASM")
         .into()
 }

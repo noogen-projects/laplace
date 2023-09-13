@@ -9,7 +9,6 @@ use futures::{SinkExt, StreamExt};
 pub use laplace_wasm::route::websocket::Message as WsMessage;
 use tokio::time;
 use truba::{Context, Sender, UnboundedMpscChannel};
-use wasmer::{ExportError, RuntimeError};
 
 use crate::lapps::LappInstanceError;
 use crate::service::lapp::LappServiceMessage;
@@ -17,8 +16,6 @@ use crate::service::Addr;
 
 #[derive(Debug, From)]
 enum WsError {
-    Export(ExportError),
-    Runtime(RuntimeError),
     Instance(LappInstanceError),
     Io(io::Error),
 }

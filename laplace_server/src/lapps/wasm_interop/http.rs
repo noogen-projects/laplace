@@ -4,48 +4,60 @@ use std::time::Duration;
 use borsh::{BorshDeserialize, BorshSerialize};
 use laplace_common::lapp::{HttpHosts, HttpMethod, HttpMethods, HttpSettings};
 use laplace_wasm::http;
-use reqwest::blocking::Client;
-use wasmer::FunctionEnvMut;
+use reqwest::Client;
+use wasmtime::Caller;
 
-use crate::lapps::wasm_interop::MemoryManagementHostData;
+use crate::lapps::wasm_interop::BoxedSendFuture;
+use crate::lapps::Ctx;
 
 #[derive(Clone)]
-pub struct HttpEnv {
-    pub memory_data: Option<MemoryManagementHostData>,
+pub struct HttpCtx {
     pub client: Client,
     pub settings: HttpSettings,
 }
 
-pub fn invoke_http(mut env: FunctionEnvMut<HttpEnv>, request_slice: u64) -> u64 {
-    let memory_data = env.data().memory_data.clone().expect("Memory data must not be empty");
+impl HttpCtx {
+    pub fn new(client: Client, settings: HttpSettings) -> Self {
+        Self { client, settings }
+    }
+}
+
+pub fn invoke_http(caller: Caller<Ctx>, request_slice: u64) -> BoxedSendFuture<u64> {
+    Box::new(invoke_http_async(caller, request_slice))
+}
+
+pub async fn invoke_http_async(mut caller: Caller<'_, Ctx>, request_slice: u64) -> u64 {
+    let memory_data = caller.data().memory_data().clone();
 
     let request_bytes = unsafe {
         memory_data
-            .to_manager(&mut env)
+            .to_manager(&mut caller)
             .wasm_slice_to_vec(request_slice)
+            .await
             .map_err(|_| http::InvokeError::CanNotReadWasmData)
     };
 
-    let result = request_bytes
-        .and_then(|bytes| {
+    let result = match caller.data().http.as_ref() {
+        Some(http_ctx) => match request_bytes.and_then(|bytes| {
             BorshDeserialize::try_from_slice(&bytes).map_err(|_| http::InvokeError::FailDeserializeRequest)
-        })
-        .and_then(|request| do_invoke_http(&env.data().client, request, &env.data().settings));
+        }) {
+            Ok(request) => do_invoke_http(http_ctx, request).await,
+            Err(err) => Err(err),
+        },
+        None => Err(http::InvokeError::EmptyContext),
+    };
 
     let serialized = result.try_to_vec().expect("Result should be serializable");
     memory_data
-        .to_manager(&mut env)
+        .to_manager(&mut caller)
         .bytes_to_wasm_slice(&serialized)
+        .await
         .expect("Result should be to move to WASM")
         .into()
 }
 
-pub fn do_invoke_http(
-    client: &Client,
-    request: http::Request,
-    settings: &HttpSettings,
-) -> http::InvokeResult<http::Response> {
-    log::debug!("Invoke HTTP: {request:#?},\n{settings:#?}");
+pub async fn do_invoke_http(ctx: &HttpCtx, request: http::Request) -> http::InvokeResult<http::Response> {
+    log::debug!("Invoke HTTP: {request:#?},\n{:#?}", ctx.settings);
     let http::Request {
         method,
         uri,
@@ -56,26 +68,28 @@ pub fn do_invoke_http(
 
     log::debug!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
 
-    if !is_method_allowed(&method, &settings.methods) {
+    if !is_method_allowed(&method, &ctx.settings.methods) {
         return Err(http::InvokeError::ForbiddenMethod(method.to_string()));
     }
 
-    if !is_host_allowed(uri.host().unwrap_or(""), &settings.hosts) {
+    if !is_host_allowed(uri.host().unwrap_or(""), &ctx.settings.hosts) {
         return Err(http::InvokeError::ForbiddenHost(uri.host().unwrap_or("").into()));
     }
 
-    client
+    match ctx
+        .client
         .request(method, uri.to_string())
         .version(version)
         .body(body)
         .headers(headers)
-        .timeout(Duration::from_millis(settings.timeout_ms))
+        .timeout(Duration::from_millis(ctx.settings.timeout_ms))
         .send()
-        .map_err(|err| http::InvokeError::FailRequest(err.status().map(|status| status.as_u16()), format!("{}", err)))
-        .map(|response| {
+        .await
+    {
+        Ok(response) => {
             log::debug!("Invoke HTTP response: {response:#?}");
 
-            http::Response {
+            Ok(http::Response {
                 status: response.status(),
                 version: response.version(),
                 headers: http::HeaderMap::from_iter(
@@ -85,12 +99,17 @@ pub fn do_invoke_http(
                         .map(|(name, value)| (name.clone(), value.clone())),
                 ),
                 body: {
-                    let body = response.bytes().map(|bytes| bytes.to_vec()).unwrap_or_default();
+                    let body = response.bytes().await.map(|bytes| bytes.to_vec()).unwrap_or_default();
                     log::debug!("Invoke HTTP response body: {}", String::from_utf8_lossy(&body));
                     body
                 },
-            }
-        })
+            })
+        },
+        Err(err) => Err(http::InvokeError::FailRequest(
+            err.status().map(|status| status.as_u16()),
+            format!("{}", err),
+        )),
+    }
 }
 
 fn is_method_allowed(method: &http::Method, methods: &HttpMethods) -> bool {

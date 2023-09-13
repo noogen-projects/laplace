@@ -186,7 +186,7 @@ dependencies = ["choose_profile", "mobile_assets"]
 
 
 [tasks.run]
-env = { RUSTFLAGS = "", RUST_LOG = "debug,hyper=info,rustls=info,libp2p_gossipsub=info,regalloc=warn,wasmer_wasi=info,wasmer_compiler_cranelift=warn,cranelift_codegen=warn,h2=info,netlink_proto=info" }
+env = { RUSTFLAGS = "", RUST_LOG = "debug,hyper=info,rustls=info,libp2p_gossipsub=info,regalloc=warn,wasmtime_wasi=warn,wasmtime_jit=info,wasmtime_cranelift=info,cranelift_codegen=info,h2=info,netlink_proto=info" }
 run_task = "run_laplace"
 dependencies = ["laplace", "examples"]
 

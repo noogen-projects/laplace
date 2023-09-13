@@ -20,6 +20,9 @@ pub type InvokeResult<T> = std::result::Result<T, InvokeError>;
 
 #[derive(Debug, Error, BorshDeserialize, BorshSerialize)]
 pub enum InvokeError {
+    #[error("HTTP context is empty")]
+    EmptyContext,
+
     #[error("Read from WASM error")]
     CanNotReadWasmData,
 

@@ -11,8 +11,6 @@ use crate::service::{gossipsub, Addr};
 
 #[derive(Debug, From)]
 pub enum Error {
-    Export(wasmer::ExportError),
-    Runtime(wasmer::RuntimeError),
     Instance(LappInstanceError),
     Io(io::Error),
 }
@@ -79,7 +77,7 @@ impl LappService {
             log::warn!("Handle websocket: instance not found for lapp {}", lapp.name());
             return;
         };
-        match instance.route_ws(&msg) {
+        match instance.route_ws(&msg).await {
             Ok(routes) => self.process_routes(routes),
             Err(err) => log::error!("Handle websocket error: {err:?}"),
         }
@@ -95,7 +93,7 @@ impl LappService {
             log::warn!("Handle gossipsub: instance not found for lapp {}", lapp.name());
             return;
         };
-        match instance.route_gossipsub(&msg) {
+        match instance.route_gossipsub(&msg).await {
             Ok(routes) => self.process_routes(routes),
             Err(err) => log::error!("Handle gossipsub error: {err:?}"),
         }

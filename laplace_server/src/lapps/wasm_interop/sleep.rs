@@ -1,5 +1,10 @@
-use std::{thread, time::Duration};
+use std::time::Duration;
 
-pub fn invoke_sleep(millis: u64) {
-    thread::sleep(Duration::from_millis(millis));
+use wasmtime::Caller;
+
+use crate::lapps::wasm_interop::BoxedSendFuture;
+use crate::lapps::Ctx;
+
+pub fn invoke_sleep(_caller: Caller<Ctx>, millis: u64) -> BoxedSendFuture<()> {
+    Box::new(tokio::time::sleep(Duration::from_millis(millis)))
 }
