@@ -1,10 +1,13 @@
 use wasm_dom::UnwrapThrowExt;
 use web_sys::Node;
-use yew::{virtual_dom::VNode, Component, Context, Html, Properties};
+use yew::virtual_dom::VNode;
+use yew::{Component, Context, Html, Properties};
 
 #[derive(Debug, Clone, Eq, PartialEq, Properties)]
 pub struct RawHtmlProps {
     pub inner_html: String,
+
+    #[prop_or_default]
     pub styles: Option<String>,
 }
 

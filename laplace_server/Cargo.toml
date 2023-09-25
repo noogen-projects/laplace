@@ -56,6 +56,6 @@ toml = "0.7"
 tower = "0.4"
 tower-http = { version = "0.4", features = ["fs", "set-header", "normalize-path", "compression-gzip"] }
 truba = "0.1"
-wasmtime = { git = "https://github.com/alexcrichton/wasmtime.git", branch = "fix-string-boundary-issues" }#{ git = "https://github.com/bytecodealliance/wasmtime.git" }
-wasmtime-wasi = { git = "https://github.com/alexcrichton/wasmtime.git", branch = "fix-string-boundary-issues", features = ["tokio"] }
+wasmtime = { git = "https://github.com/bytecodealliance/wasmtime.git" }
+wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime.git", features = ["tokio"] }
 zip = "0.6"
