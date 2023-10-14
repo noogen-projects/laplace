@@ -34,13 +34,13 @@ cargo install --force cargo-make wasm-bindgen-cli
 To build Laplace and all examples, run:
 
 ```shell
-cargo +stable make all
+cargo make all
 ```
 
 Or for a debug build, run:
 
 ```shell
-cargo +stable make -p debug all
+cargo make -p debug all
 ```
 
 ## Run examples
@@ -48,13 +48,13 @@ cargo +stable make -p debug all
 Run the Laplace server:
 
 ```shell
-cargo +stable make run
+cargo make run
 ```
 
 Or for a debug build:
 
 ```shell
-cargo +stable make -p debug run
+cargo make -p debug run
 ```
 
 Then visit [http://localhost:8080](http://localhost:8080). If you are running for the first time or the previous link
@@ -66,20 +66,20 @@ You can change the default port, access token and other settings by editing `con
 To check the project, use the following command:
 
 ```shell script
-cargo +stable check --workspace --all-features --all-targets
+cargo make check
 ```
 
 To run all tests, use the following command:
 
 ```shell script
-cargo +stable test --all-features --all-targets
+cargo make test
 ```
 
 To check and perform formatting, use the following commands:
 
 ```shell script
-cargo +nightly fmt --check
-cargo +nightly fmt
+cargo make checkfmt
+cargo make fmt
 ```
 
 To enable autoformatting for IntelliJ IDEA with the Rust plugin:
@@ -91,5 +91,5 @@ To enable autoformatting for IntelliJ IDEA with the Rust plugin:
 To run clippy, use the following command:
 
 ```shell script
-cargo +stable clippy --all-targets --all-features -- -D warnings
+cargo make clippy
 ```
