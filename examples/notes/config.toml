@@ -5,6 +5,7 @@ description = "The Notes local-first web app example"
 tags = ["example", "notes"]
 access_token = "RwUWYSsd0pq5lwLxd2jOl06Mh2hkGLwZ9DoCUh7VzzUfU2oxrhpr72boZ4lkd8Fy"
 additional_static_dirs = ["data"]
+data_dir = "data"
 
 [permissions]
 required = ["file_read", "file_write", "client_http"]

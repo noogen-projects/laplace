@@ -176,9 +176,13 @@ impl Lapp {
         let is_allow_http = self.is_allowed_permission(Permission::Http);
         let is_allow_sleep = self.is_allowed_permission(Permission::Sleep);
 
-        let dir_path = self.root_dir().join("data");
-        if !dir_path.exists() && (is_allow_read || is_allow_write) {
-            fs::create_dir(&dir_path)?;
+        let data_dir_path = if self.data_dir().is_absolute() {
+            self.data_dir().to_owned()
+        } else {
+            self.root_dir().join(self.data_dir())
+        };
+        if !data_dir_path.exists() && (is_allow_read || is_allow_write) {
+            fs::create_dir(&data_dir_path)?;
         }
 
         let mut wasi = WasiCtxBuilder::new();
@@ -188,7 +192,7 @@ impl Lapp {
             .required_permissions()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
-            let preopened_dir = Dir::open_ambient_dir(&dir_path, cap_std::ambient_authority())?;
+            let preopened_dir = Dir::open_ambient_dir(&data_dir_path, cap_std::ambient_authority())?;
             let mut perms = DirPerms::empty();
             let mut file_perms = FilePerms::empty();
 

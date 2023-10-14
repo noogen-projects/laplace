@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 pub use self::access::*;
@@ -80,6 +82,11 @@ impl<PathT> Lapp<PathT> {
     #[inline]
     pub fn root_dir(&self) -> &PathT {
         &self.root_dir
+    }
+
+    #[inline]
+    pub fn data_dir(&self) -> &Path {
+        &self.settings.application.data_dir
     }
 
     #[inline]

@@ -14,6 +14,12 @@ pub struct ApplicationSettings {
     pub tags: Option<Vec<String>>,
     pub access_token: Option<String>,
     pub additional_static_dirs: Vec<PathBuf>,
+    #[serde(default = "default_data_dir")]
+    pub data_dir: PathBuf,
+}
+
+fn default_data_dir() -> PathBuf {
+    PathBuf::from("data")
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
