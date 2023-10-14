@@ -69,7 +69,7 @@ pub enum Error {
 }
 
 extern "C" {
-    fn invoke_http(sql_query: WasmSlice) -> WasmSlice;
+    fn invoke_http(request: WasmSlice) -> WasmSlice;
 }
 
 pub fn invoke(request: Request) -> Result<Response> {
