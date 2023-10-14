@@ -1,5 +1,6 @@
-use crate::WasmSlice;
 use borsh::{BorshDeserialize, BorshSerialize};
+
+use crate::WasmSlice;
 
 extern "C" {
     fn db_execute(sql_query: WasmSlice) -> WasmSlice;

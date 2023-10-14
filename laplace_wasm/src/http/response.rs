@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::{fmt, io};
 
-use borsh::maybestd::io::Write;
+use borsh::io::Write;
 use borsh::{BorshDeserialize, BorshSerialize};
 use http;
 

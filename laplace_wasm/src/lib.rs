@@ -1,6 +1,7 @@
 pub extern crate borsh;
 
-pub use self::{route::Route, slice::*};
+pub use self::route::Route;
+pub use self::slice::*;
 
 pub mod database;
 pub mod http;

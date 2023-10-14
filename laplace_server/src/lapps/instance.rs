@@ -2,7 +2,7 @@ use std::io;
 use std::ops::Deref;
 use std::string::FromUtf8Error;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use laplace_wasm::route::{gossipsub, websocket, Route};
 use laplace_wasm::{http, WasmSlice};
 use thiserror::Error;
@@ -46,7 +46,7 @@ impl LappInstance {
             .instance
             .get_typed_func::<u64, u64>(&mut self.store, "process_http")?;
 
-        let bytes = request.try_to_vec()?;
+        let bytes = borsh::to_vec(&request)?;
         let arg = self.bytes_to_wasm_slice(&bytes).await?;
 
         let slice = process_http_fn.call_async(&mut self.store, arg.into()).await?;
@@ -57,7 +57,7 @@ impl LappInstance {
 
     pub async fn route_ws(&mut self, msg: &websocket::Message) -> LappInstanceResult<Vec<Route>> {
         let route_ws_fn = self.instance.get_typed_func::<u64, u64>(&mut self.store, "route_ws")?;
-        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?).await?;
+        let arg = self.bytes_to_wasm_slice(&borsh::to_vec(&msg)?).await?;
 
         let response_slice = route_ws_fn.call_async(&mut self.store, arg.into()).await?;
         let bytes = self.wasm_slice_to_vec(response_slice).await?;
@@ -69,7 +69,7 @@ impl LappInstance {
         let route_gossipsub = self
             .instance
             .get_typed_func::<u64, u64>(&mut self.store, "route_gossipsub")?;
-        let arg = self.bytes_to_wasm_slice(&msg.try_to_vec()?).await?;
+        let arg = self.bytes_to_wasm_slice(&borsh::to_vec(&msg)?).await?;
 
         let response_slice = route_gossipsub.call_async(&mut self.store, arg.into()).await?;
         let bytes = self.wasm_slice_to_vec(response_slice).await?;

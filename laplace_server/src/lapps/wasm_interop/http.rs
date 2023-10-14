@@ -1,7 +1,7 @@
 use std::iter::FromIterator;
 use std::time::Duration;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use laplace_common::lapp::{HttpHosts, HttpMethod, HttpMethods, HttpSettings};
 use laplace_wasm::http;
 use reqwest::Client;
@@ -45,7 +45,7 @@ pub async fn invoke_http_async(mut caller: Caller<'_, Ctx>, request_slice: u64) 
         None => Err(http::InvokeError::EmptyContext),
     };
 
-    let serialized = result.try_to_vec().expect("Result should be serializable");
+    let serialized = borsh::to_vec(&result).expect("Result should be serializable");
     memory_data
         .to_manager(&mut caller)
         .bytes_to_wasm_slice(&serialized)

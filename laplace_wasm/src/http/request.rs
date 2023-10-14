@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{self, Read};
 use std::str::FromStr;
 
-use borsh::maybestd::io::Write;
+use borsh::io::Write;
 use borsh::{BorshDeserialize, BorshSerialize};
 use http;
 

@@ -1,5 +1,6 @@
 use anyhow::{Error, Result};
-use yew::{html::Scope, Component};
+use yew::html::Scope;
+use yew::Component;
 
 pub trait MsgError {
     type Map;

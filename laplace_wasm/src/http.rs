@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 use std::iter::FromIterator;
 
-use borsh::maybestd::io::Write;
+use borsh::io::Write;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use http::header::{self, HeaderName};
 pub use http::{self as types, HeaderMap, HeaderValue, Method, StatusCode, Uri, Version};
@@ -73,7 +73,7 @@ extern "C" {
 }
 
 pub fn invoke(request: Request) -> Result<Response> {
-    let request_bytes = request.try_to_vec().map_err(Error::FailSerializeRequest)?;
+    let request_bytes = borsh::to_vec(&request).map_err(Error::FailSerializeRequest)?;
     let response_bytes = unsafe { invoke_http(WasmSlice::from(request_bytes)).into_vec_in_wasm() };
     let response: InvokeResult<Response> =
         BorshDeserialize::try_from_slice(&response_bytes).map_err(Error::FailDeserializeResponse)?;

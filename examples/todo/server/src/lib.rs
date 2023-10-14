@@ -1,4 +1,3 @@
-use borsh::BorshSerialize;
 use laplace_wasm::database::{execute, query, Value};
 use laplace_wasm::http::{self, Method, Uri};
 use laplace_wasm::WasmSlice;
@@ -19,10 +18,7 @@ pub extern "C" fn init() -> WasmSlice {
         table = TASKS_TABLE_NAME
     ));
 
-    let data = result
-        .map(drop)
-        .try_to_vec()
-        .expect("Init result should be serializable");
+    let data = borsh::to_vec(&result.map(drop)).expect("Init result should be serializable");
     WasmSlice::from(data)
 }
 

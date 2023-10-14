@@ -1,4 +1,4 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use chat_common::{WsMessage, WsResponse};
 use laplace_wasm::route::{gossipsub, websocket};
 pub use laplace_wasm::{alloc, dealloc};
@@ -23,7 +23,7 @@ pub extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
             vec![Route::WebSocket(websocket::Message::Text(message))]
         },
     };
-    WasmSlice::from(routes.try_to_vec().expect("Routes should be serializable"))
+    WasmSlice::from(borsh::to_vec(&routes).expect("Routes should be serializable"))
 }
 
 #[no_mangle]
@@ -33,7 +33,7 @@ pub extern "C" fn route_gossipsub(msg: WasmSlice) -> WasmSlice {
         .unwrap_or_else(WsResponse::Error);
     let message = serde_json::to_string(&response).unwrap_or_else(WsResponse::make_error_json_string);
     let routes = vec![Route::WebSocket(websocket::Message::Text(message))];
-    WasmSlice::from(routes.try_to_vec().expect("Routes should be serializable"))
+    WasmSlice::from(borsh::to_vec(&routes).expect("Routes should be serializable"))
 }
 
 fn do_ws(msg: Vec<u8>) -> Result<WsMessage, String> {

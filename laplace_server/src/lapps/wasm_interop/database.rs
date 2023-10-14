@@ -81,7 +81,7 @@ async fn run<T: BorshSerialize + Send>(
         None => Err("Database context not found".to_string()),
     };
 
-    let serialized = result.try_to_vec().expect("Result should be serializable");
+    let serialized = borsh::to_vec(&result).expect("Result should be serializable");
     memory_data
         .to_manager(&mut caller)
         .bytes_to_wasm_slice(&serialized)
