@@ -193,3 +193,19 @@ dependencies = ["laplace", "examples"]
 
 [tasks.all]
 dependencies = ["laplace", "examples", "mobile"]
+
+
+[tasks.checkfmt]
+command = "cargo"
+toolchain = "nightly"
+args = ["fmt", "--", "--check"]
+
+[tasks.fmt]
+command = "cargo"
+toolchain = "nightly"
+args = ["fmt"]
+
+[tasks.clippy]
+command = "cargo"
+toolchain = "stable"
+args = ["clippy", "--all-targets", "--all-features"]
