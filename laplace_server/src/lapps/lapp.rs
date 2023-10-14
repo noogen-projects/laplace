@@ -205,9 +205,8 @@ impl Lapp {
             wasi.preopened_dir(preopened_dir, perms, file_perms, "/");
         }
 
-        let mut table = Table::new();
-        let wasi = wasi.build(&mut table)?;
-
+        let wasi = wasi.build();
+        let table = Table::new();
         let ctx = Ctx::new(wasi, table);
         let mut store = Store::new(&ENGINE, ctx);
 

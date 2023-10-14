@@ -20,4 +20,4 @@ todo_common = { path = "../common" }
 wasm-dom = "1.0"
 wasm-web-helpers = "0.2"
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
-yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
+yew = { workspace = true }

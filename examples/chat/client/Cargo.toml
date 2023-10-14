@@ -33,5 +33,5 @@ web-sys = { version = "0.3", features = [
     "Selection",
     "HtmlCollection",
 ] }
-yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
-yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
+yew = { workspace = true }
+yew-mdc-widgets = { workspace = true }

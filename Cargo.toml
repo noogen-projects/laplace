@@ -31,3 +31,5 @@ lto = true
 [workspace.dependencies]
 borsh = "0.10"
 tokio = { version = "1.32", features = ["full"] }
+yew = { version = "0.21", features = ["csr"] }
+yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }

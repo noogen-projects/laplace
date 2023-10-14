@@ -15,4 +15,4 @@ description = "The WASM client yew helpers of the local-firs web-application pla
 anyhow = "1.0"
 wasm-dom = "1.0"
 web-sys = { version = "0.3", features = ["Window", "Document"] }
-yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
+yew = { workspace = true }
