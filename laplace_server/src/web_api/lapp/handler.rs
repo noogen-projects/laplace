@@ -12,8 +12,8 @@ use tower_http::services::ServeFile;
 use truba::{Context, Sender};
 
 use crate::convert;
-use crate::error::ServerResult;
-use crate::lapps::{Lapp, LappsProvider, Permission, SharedLapp};
+use crate::error::{ServerError, ServerResult};
+use crate::lapps::{LappsProvider, Permission};
 use crate::service::gossipsub::{self, decode_keypair, decode_peer_id, GossipsubService, GossipsubServiceMessage};
 use crate::service::lapp::LappServiceMessage;
 use crate::service::websocket::{WebSocketService, WsServiceMessage};
@@ -26,9 +26,8 @@ pub async fn index_file(
 ) -> impl IntoResponse {
     lapps_provider
         .handle_client_http(lapp_name, move |lapps_provider, lapp_name| async move {
-            let manager = lapps_provider.read_manager().await;
-            let lapp = manager.lapp(&lapp_name)?;
-            let index_file = lapp.read().await.index_file();
+            let lapp_dir = lapps_provider.read_manager().await.lapp_dir(&lapp_name);
+            let index_file = lapp_dir.index_file();
 
             Ok(ServeFile::new(index_file)
                 .oneshot(request)
@@ -46,16 +45,12 @@ pub async fn static_file(
     lapps_provider
         .handle_client_http(lapp_name, move |lapps_provider, lapp_name| async move {
             let manager = lapps_provider.read_manager().await;
-
             let lapp_dir = manager.lapp_dir(&lapp_name);
-            let mut fs_file_path = lapp_dir.join(Lapp::static_dir_name()).join(&file_path);
 
+            let mut fs_file_path = lapp_dir.static_dir().join(&file_path);
             if !fs_file_path.exists() {
                 let additional_dirs = manager
-                    .lapp(&lapp_name)?
-                    .read()
-                    .await
-                    .settings()
+                    .lapp_settings(&lapp_name)?
                     .application
                     .additional_static_dirs
                     .clone();
@@ -83,13 +78,20 @@ pub async fn http(
     request: Request<Body>,
 ) -> impl IntoResponse {
     lapps_provider
-        .handle_client_http_lapp(lapp_name, move |_, lapp| process_http(lapp, request))
+        .handle_client_http(lapp_name, move |lapps_provider, lapp_name| {
+            process_http(lapps_provider, lapp_name, request)
+        })
         .await
 }
 
-async fn process_http(lapp: SharedLapp, request: Request<Body>) -> ServerResult<Response<Full<Bytes>>> {
+async fn process_http(
+    lapps_provider: LappsProvider,
+    lapp_name: String,
+    request: Request<Body>,
+) -> ServerResult<Response<Full<Bytes>>> {
     let request = convert::to_wasm_http_request(request).await?;
-    let response: http::Response = lapp.write().await.process_http(request).await?;
+    let process_http_fut = lapps_provider.read_manager().await.process_http(lapp_name, request);
+    let response: http::Response = process_http_fut.await?;
 
     Response::builder()
         .status(response.status)
@@ -105,8 +107,12 @@ pub async fn ws_start(
     lapps_provider
         .handle_ws(lapp_name, move |lapps_provider, lapp_name| async move {
             let manager = lapps_provider.read_manager().await;
-            let lapp_service_sender = manager.lapp(&lapp_name)?.run_service_if_needed(manager.ctx());
-            process_ws_start(manager.ctx().clone(), ws, lapp_service_sender, lapp_name).await
+            let run_lapp_service_fut = manager.run_lapp_service_if_needed(&lapp_name);
+            let ctx = manager.ctx().clone();
+            drop(manager);
+
+            let lapp_service_sender = run_lapp_service_fut.await?;
+            process_ws_start(ctx, ws, lapp_service_sender, lapp_name).await
         })
         .await
 }
@@ -117,17 +123,20 @@ async fn process_ws_start(
     lapp_service_sender: Sender<LappServiceMessage>,
     lapp_name: String,
 ) -> ServerResult<impl IntoResponse> {
-    let ws_actor_id = Addr::Lapp(lapp_name.clone());
-    let ws_service_sender = ctx.actor_sender::<WsServiceMessage>(ws_actor_id.clone());
+    let ws_service_addr = Addr::Lapp(lapp_name);
+    let lapp_name = ws_service_addr.as_lapp_name();
+    let ws_service_sender = ctx.actor_sender::<WsServiceMessage>(ws_service_addr.clone());
 
     lapp_service_sender
         .send(LappServiceMessage::NewWebSocket(ws_service_sender))
-        .map_err(|err| log::error!("Error occurs when send to lapp service: {err:?}, lapp: {lapp_name}"))
-        .ok();
+        .map_err(|err| {
+            log::error!("Error occurs when send to lapp service: {err:?}, lapp: {lapp_name}");
+            ServerError::LappServiceSendError(lapp_name.into())
+        })?;
 
     Ok(ws.on_upgrade({
         move |web_socket| async move {
-            WebSocketService::new(web_socket, lapp_service_sender).run(ctx, ws_actor_id);
+            WebSocketService::new(web_socket, lapp_service_sender).run(ctx, ws_service_addr);
         }
     }))
 }
@@ -143,17 +152,13 @@ pub async fn gossipsub_start(
             lapp_name,
             move |lapps_provider, lapp_name| async move {
                 let manager = lapps_provider.read_manager().await;
-                let lapp_service_sender = manager.lapp(&lapp_name)?.run_service_if_needed(manager.ctx());
+                let run_lapp_service_fut = manager.run_lapp_service_if_needed(&lapp_name);
+                let gossipsub_settings = manager.lapp_settings(&lapp_name)?.network().gossipsub().clone();
+                let ctx = manager.ctx().clone();
+                drop(manager);
 
-                let lapp = manager.lapp(&lapp_name)?;
-                let gossipsub_settings = lapp.read().await.settings().network().gossipsub().clone();
-                process_gossipsub_start(
-                    manager.ctx().clone(),
-                    lapp_name,
-                    lapp_service_sender,
-                    peer,
-                    gossipsub_settings,
-                )
+                let lapp_service_sender = run_lapp_service_fut.await?;
+                process_gossipsub_start(ctx, lapp_name, lapp_service_sender, peer, gossipsub_settings)
             },
         )
         .await
@@ -171,13 +176,13 @@ fn process_gossipsub_start(
     let address = settings.addr.parse().map_err(gossipsub::Error::from)?;
     let dial_ports = settings.dial_ports.clone();
 
-    let gossipsub_actor_id = Addr::Lapp(lapp_name.clone());
-    let gossipsub_service_sender = ctx.actor_sender::<GossipsubServiceMessage>(gossipsub_actor_id.clone());
+    let gossipsub_service_addr = Addr::Lapp(lapp_name.clone());
+    let gossipsub_service_sender = ctx.actor_sender::<GossipsubServiceMessage>(gossipsub_service_addr.clone());
     log::info!("Start Gossipsub of lapp \"{lapp_name}\" for peer {peer_id}");
 
     GossipsubService::run(
         ctx,
-        gossipsub_actor_id,
+        gossipsub_service_addr,
         keypair,
         peer_id,
         &[],
@@ -189,8 +194,10 @@ fn process_gossipsub_start(
 
     lapp_service_sender
         .send(LappServiceMessage::NewGossipSub(gossipsub_service_sender))
-        .map_err(|err| log::error!("Error occurs when send to lapp service: {err:?}"))
-        .ok();
+        .map_err(|err| {
+            log::error!("Error occurs when send to lapp service: {err:?}");
+            ServerError::LappServiceSendError(lapp_name)
+        })?;
 
     Ok(StatusCode::OK)
 }

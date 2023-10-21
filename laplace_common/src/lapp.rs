@@ -49,29 +49,8 @@ impl<PathT> Lapp<PathT> {
         format!("/{}/{}/{}", Self::main_name(), first.as_ref(), second.as_ref())
     }
 
-    #[inline]
-    pub fn is_main(&self) -> bool {
-        self.name() == Self::main_name()
-    }
-
-    #[inline]
-    pub fn enabled(&self) -> bool {
-        self.settings.application.enabled
-    }
-
-    #[inline]
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.settings.application.enabled = enabled;
-    }
-
-    #[inline]
-    pub fn switch_enabled(&mut self) {
-        self.set_enabled(!self.enabled());
-    }
-
-    #[inline]
-    pub fn title(&self) -> &str {
-        &self.settings.application.title
+    pub fn is_main(name: impl AsRef<str>) -> bool {
+        Self::main_name() == name.as_ref()
     }
 
     #[inline]
@@ -115,34 +94,7 @@ impl<PathT> Lapp<PathT> {
         format!("/{}/{}/{}", self.name(), first.as_ref(), second.as_ref())
     }
 
-    pub fn required_permissions(&self) -> impl Iterator<Item = Permission> + '_ {
-        self.settings.permissions.required.iter().copied()
-    }
-
-    pub fn allowed_permissions(&self) -> impl Iterator<Item = Permission> + '_ {
-        self.settings.permissions.allowed.iter().copied()
-    }
-
     pub fn is_allowed_permission(&self, permission: Permission) -> bool {
-        self.settings.permissions.allowed.contains(&permission)
-    }
-
-    pub fn allow_permission(&mut self, permission: Permission) -> bool {
-        if !self.is_allowed_permission(permission) {
-            self.settings.permissions.allowed.push(permission);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn deny_permission(&mut self, permission: Permission) -> bool {
-        let index = self.allowed_permissions().position(|allowed| allowed == permission);
-        if let Some(index) = index {
-            self.settings.permissions.allowed.remove(index);
-            true
-        } else {
-            false
-        }
+        self.settings.permissions.is_allowed(permission)
     }
 }

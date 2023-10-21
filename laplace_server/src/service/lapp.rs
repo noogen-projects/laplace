@@ -1,10 +1,17 @@
+use std::future::Future;
 use std::io;
 
 use derive_more::From;
+use futures::FutureExt;
+use laplace_wasm::http::{Request, Response};
 use laplace_wasm::Route;
+use reqwest::Client;
+use tokio::runtime::Handle;
+use tokio::sync::oneshot;
 use truba::{Context, Message, Sender, UnboundedMpscChannel};
 
-use crate::lapps::{LappInstanceError, SharedLapp};
+use crate::error::{ServerError, ServerResult};
+use crate::lapps::{Lapp, LappInstanceError};
 use crate::service::gossipsub::GossipsubServiceMessage;
 use crate::service::websocket::{WsMessage, WsServiceMessage};
 use crate::service::{gossipsub, Addr};
@@ -19,6 +26,8 @@ pub enum Error {
 pub enum LappServiceMessage {
     Stop,
 
+    Http(HttpMessage),
+
     // WebSocket
     NewWebSocket(Sender<WsServiceMessage>),
     WebSocket(WsMessage),
@@ -32,14 +41,32 @@ impl Message for LappServiceMessage {
     type Channel = UnboundedMpscChannel<Self>;
 }
 
+impl LappServiceMessage {
+    pub fn new_http(request: Request) -> (Self, oneshot::Receiver<ServerResult<Response>>) {
+        let (response_out, response_in) = oneshot::channel();
+        let message = Self::Http(HttpMessage {
+            request: Box::new(request),
+            response_out,
+        });
+
+        (message, response_in)
+    }
+}
+
+#[derive(Debug)]
+pub struct HttpMessage {
+    pub request: Box<Request>,
+    pub response_out: oneshot::Sender<ServerResult<Response>>,
+}
+
 pub struct LappService {
-    lapp: SharedLapp,
+    lapp: Lapp,
     gossipsub_sender: Option<Sender<GossipsubServiceMessage>>,
     websocket_sender: Option<Sender<WsServiceMessage>>,
 }
 
 impl LappService {
-    pub fn new(lapp: SharedLapp) -> Self {
+    pub fn new(lapp: Lapp) -> Self {
         Self {
             lapp,
             gossipsub_sender: None,
@@ -47,24 +74,69 @@ impl LappService {
         }
     }
 
-    pub fn run(mut self, ctx: Context<Addr>) {
+    pub fn run(mut self, ctx: Context<Addr>, http_client: Client) -> impl Future<Output = ServerResult<()>> {
         let lapp_name = self.lapp.name().to_owned();
-        let mut messages_in = ctx.actor_receiver::<LappServiceMessage>(Addr::Lapp(lapp_name));
+        let (instantiate_sender, instantiate_receiver) = oneshot::channel();
 
-        log::info!("Run LappService for lapp \"{}\"", self.lapp.name());
-        truba::spawn_event_loop!(ctx, {
-            Some(msg) = messages_in.recv() => {
-                match msg {
-                    LappServiceMessage::NewWebSocket(sender) => self.handle_new_websocket(sender),
-                    LappServiceMessage::WebSocket(msg) => self.handle_websocket(msg).await,
+        log::info!("Run lapp service for lapp \"{lapp_name}\"");
 
-                    LappServiceMessage::NewGossipSub(sender) => self.handle_new_gossipsub(sender),
-                    LappServiceMessage::GossipSub(msg) => self.handle_gossipsub(msg).await,
+        let handle = Handle::current();
+        std::thread::spawn(move || {
+            handle.block_on(async move {
+                let mut messages_in = ctx.actor_receiver::<LappServiceMessage>(Addr::Lapp(self.lapp.name().to_owned()));
+                let instantiate_result = self.lapp.instantiate(http_client).await;
+                let is_instantiated = instantiate_result.is_ok();
 
-                    LappServiceMessage::Stop => break,
+                if let Err(instantiate_result) = instantiate_sender.send(instantiate_result) {
+                    log::error!("Instantiate receiver dropped, instantiate result: {instantiate_result:?}");
                 }
-            }
+
+                if is_instantiated {
+                    truba::event_loop!(ctx, {
+                        Some(msg) = messages_in.recv() => {
+                            match msg {
+                                LappServiceMessage::Http(msg) => self.handle_http(msg).await,
+
+                                LappServiceMessage::NewWebSocket(sender) => self.handle_new_websocket(sender),
+                                LappServiceMessage::WebSocket(msg) => self.handle_websocket(msg).await,
+
+                                LappServiceMessage::NewGossipSub(sender) => self.handle_new_gossipsub(sender),
+                                LappServiceMessage::GossipSub(msg) => self.handle_gossipsub(msg).await,
+
+                                LappServiceMessage::Stop => break,
+                            }
+                        }
+                    });
+                }
+            });
         });
+
+        instantiate_receiver.map(move |result| {
+            result
+                .map_err(|_| ServerError::LappInitError(format!("Lapp service for lapp \"{lapp_name}\" is dropped")))?
+        })
+    }
+
+    pub fn is_run(ctx: &Context<Addr>, service_actor_id: &Addr) -> bool {
+        ctx.get_actor_sender::<LappServiceMessage>(service_actor_id).is_some()
+    }
+
+    pub fn stop(ctx: &Context<Addr>, service_actor_id: &Addr) {
+        if let Some(sender) = ctx.get_actor_sender::<LappServiceMessage>(service_actor_id) {
+            if let Err(err) = sender.send(LappServiceMessage::Stop) {
+                log::error!("Cannot stop lapp service '{service_actor_id}': {err}");
+            }
+            drop(ctx.extract_actor_channel::<LappServiceMessage>(service_actor_id));
+        }
+    }
+
+    async fn handle_http(&mut self, msg: HttpMessage) {
+        let HttpMessage { request, response_out } = msg;
+
+        let result = self.lapp.process_http(*request).await;
+        if let Err(err) = response_out.send(result) {
+            log::error!("Cannot process HTTP for lapp '{}': {err:?}", self.lapp.name());
+        }
     }
 
     fn handle_new_websocket(&mut self, sender: Sender<WsServiceMessage>) {
@@ -72,9 +144,8 @@ impl LappService {
     }
 
     async fn handle_websocket(&mut self, msg: WsMessage) {
-        let mut lapp = self.lapp.write().await;
-        let Some(instance) = lapp.instance_mut() else {
-            log::warn!("Handle websocket: instance not found for lapp {}", lapp.name());
+        let Some(instance) = self.lapp.instance_mut() else {
+            log::warn!("Handle websocket: instance not found for lapp {}", self.lapp.name());
             return;
         };
         match instance.route_ws(&msg).await {
@@ -88,9 +159,8 @@ impl LappService {
     }
 
     async fn handle_gossipsub(&mut self, GossipsubServiceMessage(msg): GossipsubServiceMessage) {
-        let mut lapp = self.lapp.write().await;
-        let Some(instance) = lapp.instance_mut() else {
-            log::warn!("Handle gossipsub: instance not found for lapp {}", lapp.name());
+        let Some(instance) = self.lapp.instance_mut() else {
+            log::warn!("Handle gossipsub: instance not found for lapp {}", self.lapp.name());
             return;
         };
         match instance.route_gossipsub(&msg).await {

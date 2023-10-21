@@ -10,6 +10,7 @@ use super::Permission;
 pub struct ApplicationSettings {
     pub title: String,
     pub enabled: bool,
+    pub autoload: bool,
     pub description: Option<String>,
     pub tags: Option<Vec<String>>,
     pub access_token: Option<String>,
@@ -27,6 +28,39 @@ fn default_data_dir() -> PathBuf {
 pub struct PermissionsSettings {
     pub required: Vec<Permission>,
     pub allowed: Vec<Permission>,
+}
+
+impl PermissionsSettings {
+    pub fn is_allowed(&self, permission: Permission) -> bool {
+        self.allowed.contains(&permission)
+    }
+
+    pub fn allow(&mut self, permission: Permission) -> bool {
+        if !self.is_allowed(permission) {
+            self.allowed.push(permission);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn deny(&mut self, permission: Permission) -> bool {
+        let index = self.allowed.iter().position(|allowed| *allowed == permission);
+        if let Some(index) = index {
+            self.allowed.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn required(&self) -> impl Iterator<Item = Permission> + '_ {
+        self.required.iter().copied()
+    }
+
+    pub fn allowed(&self) -> impl Iterator<Item = Permission> + '_ {
+        self.allowed.iter().copied()
+    }
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -302,6 +336,8 @@ pub struct LappRequestsSettings {
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LappSettings {
+    #[serde(default)]
+    pub lapp_name: String,
     pub application: ApplicationSettings,
     pub permissions: PermissionsSettings,
     pub database: Option<DatabaseSettings>,
@@ -310,6 +346,36 @@ pub struct LappSettings {
 }
 
 impl LappSettings {
+    #[inline]
+    pub fn name(&self) -> &str {
+        &self.lapp_name
+    }
+
+    #[inline]
+    pub fn title(&self) -> &str {
+        &self.application.title
+    }
+
+    #[inline]
+    pub fn enabled(&self) -> bool {
+        self.application.enabled
+    }
+
+    #[inline]
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.application.enabled = enabled;
+    }
+
+    #[inline]
+    pub fn switch_enabled(&mut self) {
+        self.set_enabled(!self.enabled());
+    }
+
+    #[inline]
+    pub fn autoload(&self) -> bool {
+        self.application.autoload
+    }
+
     pub fn database(&self) -> &DatabaseSettings {
         static DEFAULT: DatabaseSettings = DatabaseSettings::new();
 

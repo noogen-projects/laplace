@@ -4,7 +4,7 @@ use std::ops::Deref;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::lapp::{Lapp, Permission};
+use crate::lapp::{LappSettings, Permission};
 
 #[skip_serializing_none]
 #[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -21,6 +21,16 @@ impl UpdateQuery {
             lapp_name: lapp_name.into(),
             ..Default::default()
         }
+    }
+
+    pub fn is_applied(&self) -> bool {
+        let Self {
+            lapp_name: _,
+            enabled,
+            allow_permission,
+            deny_permission,
+        } = self;
+        enabled.is_some() || allow_permission.is_some() || deny_permission.is_some()
     }
 
     pub fn enabled(mut self, enabled: impl Into<Option<bool>>) -> Self {
@@ -50,7 +60,7 @@ impl UpdateQuery {
         self.into()
     }
 
-    pub fn into_response<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>>>(self) -> Response<'a, PathT, LappT> {
+    pub fn into_response<'a, LS: Deref<Target = LappSettings>>(self) -> Response<'a, LS> {
         self.into()
     }
 }
@@ -80,12 +90,12 @@ impl From<UpdateQuery> for UpdateRequest {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum Response<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> {
+pub enum Response<'a, LS: Deref<Target = LappSettings> + 'a> {
     Lapps {
-        lapps: Vec<LappT>,
+        lapps: Vec<LS>,
 
         #[serde(skip)]
-        _marker: PhantomData<&'a Lapp<PathT>>,
+        _marker: PhantomData<&'a LappSettings>,
     },
 
     Updated {
@@ -93,8 +103,8 @@ pub enum Response<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> {
     },
 }
 
-impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> Response<'a, PathT, LappT> {
-    pub fn lapps(lapps: impl Into<Vec<LappT>>) -> Self {
+impl<'a, LS: Deref<Target = LappSettings> + 'a> Response<'a, LS> {
+    pub fn lapps(lapps: impl Into<Vec<LS>>) -> Self {
         Self::Lapps {
             lapps: lapps.into(),
             _marker: Default::default(),
@@ -102,8 +112,8 @@ impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> Response<'a, Pat
     }
 }
 
-impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<Vec<LappT>> for Response<'a, PathT, LappT> {
-    fn from(lapps: Vec<LappT>) -> Self {
+impl<'a, LS: Deref<Target = LappSettings> + 'a> From<Vec<LS>> for Response<'a, LS> {
+    fn from(lapps: Vec<LS>) -> Self {
         Self::Lapps {
             lapps,
             _marker: Default::default(),
@@ -111,7 +121,7 @@ impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<Vec<LappT>>
     }
 }
 
-impl<'a, PathT: Clone, LappT: Deref<Target = Lapp<PathT>> + 'a> From<UpdateQuery> for Response<'a, PathT, LappT> {
+impl<'a, LS: Deref<Target = LappSettings> + 'a> From<UpdateQuery> for Response<'a, LS> {
     fn from(updated: UpdateQuery) -> Self {
         Self::Updated { updated }
     }
@@ -157,26 +167,26 @@ mod tests {
 
     #[test]
     fn serialize_lapps_response() {
-        let response = Response::<'_, String, &Lapp<String>>::from(vec![]);
+        let response = Response::<'_, &LappSettings>::from(vec![]);
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(json, r#"{"lapps":[]}"#);
     }
 
     #[test]
     fn serialize_updated_response() {
-        let response = Response::Updated::<'_, String, &Lapp<String>> {
+        let response = Response::Updated::<'_, &LappSettings> {
             updated: UpdateQuery::new("test"),
         };
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(json, r#"{"updated":{"lapp_name":"test"}}"#);
 
-        let response = Response::Updated::<'_, String, &Lapp<String>> {
+        let response = Response::Updated::<'_, &LappSettings> {
             updated: UpdateQuery::new("test").enabled(true),
         };
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(json, r#"{"updated":{"lapp_name":"test","enabled":true}}"#);
 
-        let response = Response::Updated::<'_, String, &Lapp<String>> {
+        let response = Response::Updated::<'_, &LappSettings> {
             updated: UpdateQuery::new("test")
                 .enabled(true)
                 .allow_permission(Permission::Http)

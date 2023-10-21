@@ -8,7 +8,7 @@ use tempfile::NamedTempFile;
 use zip::ZipArchive;
 
 use crate::error::{ServerError, ServerResult};
-use crate::lapps::{CommonLappGuard, CommonLappResponse, LappUpdateRequest, LappsProvider};
+use crate::lapps::{CommonLappGuard, CommonLappResponse, Lapp, LappUpdateRequest, LappsProvider};
 use crate::web_api::err_into_json_response;
 
 pub async fn get_lapps(State(lapps_provider): State<LappsProvider>) -> impl IntoResponse {
@@ -44,10 +44,9 @@ async fn process_get_lapps(lapps_provider: LappsProvider) -> ServerResult<Respon
     let manager = lapps_provider.read_manager().await;
 
     let mut lapps = Vec::new();
-    for lapp in manager.lapps_iter() {
-        let lapp = lapp.read().await;
-        if !lapp.is_main() {
-            lapps.push(CommonLappGuard::from(lapp));
+    for (lapp_name, lapp_settings) in manager.lapp_settings_iter() {
+        if !Lapp::is_main(lapp_name) {
+            lapps.push(CommonLappGuard(lapp_settings));
         }
     }
     lapps.sort_unstable_by(|lapp_a, lapp_b| lapp_a.name().cmp(lapp_b.name()));
@@ -62,17 +61,7 @@ async fn process_add_lapp(lapps_provider: LappsProvider, lar: FieldData<NamedTem
         .unwrap_or_else(|| file_name.strip_suffix(".lar").unwrap_or(&file_name));
 
     extract_lar(&lapps_provider, lapp_name, ZipArchive::new(lar.contents.as_file())?).await?;
-
-    {
-        let mut manager = lapps_provider.write_manager().await;
-        manager.insert_lapp(lapp_name);
-
-        let shared_lapp = manager.lapp(lapp_name)?;
-        let lapp = shared_lapp.write().await;
-        if lapp.enabled() {
-            manager.load(lapp).await?;
-        }
-    }
+    lapps_provider.write_manager().await.insert_lapp_settings(lapp_name);
 
     process_get_lapps(lapps_provider).await
 }
@@ -102,17 +91,11 @@ async fn process_update_lapp(
     update_request: LappUpdateRequest,
 ) -> ServerResult<Response> {
     let update_query = update_request.into_query();
-    let manager = lapps_provider.read_manager().await;
-    let shared_lapp = manager.lapp(&update_query.lapp_name)?;
-    let mut lapp = shared_lapp.write().await;
+    let updated = lapps_provider
+        .write_manager()
+        .await
+        .update_lapp_settings(update_query)
+        .await?;
 
-    let updated = lapp.update(update_query)?;
-    if updated.enabled.is_some() {
-        if lapp.enabled() {
-            manager.load(lapp).await?;
-        } else {
-            manager.unload(lapp)?;
-        }
-    }
     Ok(Json(CommonLappResponse::Updated { updated }).into_response())
 }

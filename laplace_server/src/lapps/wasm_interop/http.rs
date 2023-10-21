@@ -55,7 +55,7 @@ pub async fn invoke_http_async(mut caller: Caller<'_, Ctx>, request_slice: u64) 
 }
 
 pub async fn do_invoke_http(ctx: &HttpCtx, request: http::Request) -> http::InvokeResult<http::Response> {
-    log::debug!("Invoke HTTP: {request:#?},\n{:#?}", ctx.settings);
+    log::trace!("Invoke HTTP: {request:#?},\n{:#?}", ctx.settings);
     let http::Request {
         method,
         uri,
@@ -64,7 +64,7 @@ pub async fn do_invoke_http(ctx: &HttpCtx, request: http::Request) -> http::Invo
         body,
     } = request;
 
-    log::debug!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
+    log::trace!("Invoke HTTP body: {}", String::from_utf8_lossy(&body));
 
     if !is_method_allowed(&method, &ctx.settings.methods) {
         return Err(http::InvokeError::ForbiddenMethod(method.to_string()));
@@ -85,7 +85,7 @@ pub async fn do_invoke_http(ctx: &HttpCtx, request: http::Request) -> http::Invo
         .await
     {
         Ok(response) => {
-            log::debug!("Invoke HTTP response: {response:#?}");
+            log::trace!("Invoke HTTP response: {response:#?}");
 
             Ok(http::Response {
                 status: response.status(),
@@ -98,7 +98,7 @@ pub async fn do_invoke_http(ctx: &HttpCtx, request: http::Request) -> http::Invo
                 ),
                 body: {
                     let body = response.bytes().await.map(|bytes| bytes.to_vec()).unwrap_or_default();
-                    log::debug!("Invoke HTTP response body: {}", String::from_utf8_lossy(&body));
+                    log::trace!("Invoke HTTP response body: {}", String::from_utf8_lossy(&body));
                     body
                 },
             })

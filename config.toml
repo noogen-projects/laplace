@@ -18,4 +18,4 @@ spec = "info,hyper=info,rustls=info,regalloc=warn,cranelift_codegen=info,h2=info
 
 [lapps]
 path = "lapps"
-#allowed = ["echo"]
+#allowed = ["echo", "notes"]

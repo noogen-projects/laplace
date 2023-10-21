@@ -1,7 +1,6 @@
 use std::fs;
 use std::ops::Deref;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 
 use borsh::BorshDeserialize;
 use cap_std::fs::Dir;
@@ -12,8 +11,6 @@ use laplace_wasm::http::{Request, Response};
 use reqwest::Client;
 use rusqlite::Connection;
 use serde::{Serialize, Serializer};
-use tokio::sync::{RwLock, RwLockReadGuard};
-use truba::{Context, Sender};
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi::preview2::preview1::add_to_linker_async;
 use wasmtime_wasi::preview2::{DirPerms, FilePerms, Table, WasiCtxBuilder};
@@ -24,9 +21,6 @@ use crate::lapps::wasm_interop::database::DatabaseCtx;
 use crate::lapps::wasm_interop::http::HttpCtx;
 use crate::lapps::wasm_interop::{database, http, sleep, MemoryManagementHostData};
 use crate::lapps::{Ctx, LappInstance, LappInstanceError};
-use crate::service;
-use crate::service::lapp::LappServiceMessage;
-use crate::service::Addr;
 
 lazy_static::lazy_static! {
     static ref ENGINE: Engine = {
@@ -40,21 +34,15 @@ lazy_static::lazy_static! {
 }
 
 pub type CommonLapp = laplace_common::lapp::Lapp<PathBuf>;
-pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, PathBuf, CommonLappGuard<'a>>;
+pub type CommonLappResponse<'a> = laplace_common::api::Response<'a, CommonLappGuard<'a>>;
 
-pub struct CommonLappGuard<'a>(pub RwLockReadGuard<'a, CommonLapp>);
+pub struct CommonLappGuard<'a>(pub &'a LappSettings);
 
 impl<'a> Deref for CommonLappGuard<'a> {
-    type Target = CommonLapp;
+    type Target = LappSettings;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'a> From<RwLockReadGuard<'a, Lapp>> for CommonLappGuard<'a> {
-    fn from(lapp: RwLockReadGuard<'a, Lapp>) -> Self {
-        Self(RwLockReadGuard::map(lapp, |inner| &inner.lapp))
+        self.0
     }
 }
 
@@ -67,6 +55,42 @@ impl Serialize for CommonLappGuard<'_> {
     }
 }
 
+pub struct LappDir(pub PathBuf);
+
+impl LappDir {
+    pub fn root_dir(&self) -> &Path {
+        &self.0
+    }
+
+    pub fn static_dir(&self) -> PathBuf {
+        self.root_dir().join(Lapp::static_dir_name())
+    }
+
+    pub fn index_file(&self) -> PathBuf {
+        self.static_dir().join(Lapp::index_file_name())
+    }
+}
+
+impl Deref for LappDir {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for LappDir {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl From<LappDir> for PathBuf {
+    fn from(dir: LappDir) -> Self {
+        dir.0
+    }
+}
+
 #[derive(Deref, DerefMut)]
 pub struct Lapp {
     #[deref]
@@ -76,17 +100,11 @@ pub struct Lapp {
 }
 
 impl Lapp {
-    pub fn new(name: impl Into<String>, root_dir: impl Into<PathBuf>) -> Self {
-        let mut lapp = Self {
-            lapp: CommonLapp::new(name.into(), root_dir.into(), Default::default()),
+    pub fn new(name: impl Into<String>, root_dir: impl Into<PathBuf>, settings: LappSettings) -> Self {
+        Self {
+            lapp: CommonLapp::new(name.into(), root_dir.into(), settings),
             instance: None,
-        };
-        if !lapp.is_main() {
-            if let Err(err) = lapp.reload_settings() {
-                log::error!("Error when load config for lapp '{}': {err:?}", lapp.name());
-            }
         }
-        lapp
     }
 
     pub const fn config_file_name() -> &'static str {
@@ -105,6 +123,10 @@ impl Lapp {
         CommonLapp::main_name()
     }
 
+    pub fn is_main(name: impl AsRef<str>) -> bool {
+        CommonLapp::is_main(name)
+    }
+
     pub fn main_static_uri() -> String {
         CommonLapp::main_static_uri()
     }
@@ -113,31 +135,24 @@ impl Lapp {
         CommonLapp::main_uri(tail)
     }
 
-    pub fn reload_settings(&mut self) -> LappSettingsResult<()> {
-        self.lapp
-            .set_settings(LappSettings::load(self.root_dir().join(Self::config_file_name()))?);
-        Ok(())
+    pub fn settings_path(lapp_path: impl AsRef<Path>) -> PathBuf {
+        lapp_path.as_ref().join(Self::config_file_name())
+    }
+
+    pub fn load_settings(lapp_name: impl AsRef<str>, lapp_path: impl AsRef<Path>) -> Option<LappSettings> {
+        let lapp_name = lapp_name.as_ref();
+
+        if !Lapp::is_main(lapp_name) {
+            LappSettings::load(lapp_name, Self::settings_path(lapp_path))
+                .map_err(|err| log::error!("Error when load config for lapp '{lapp_name}': {err:?}"))
+                .ok()
+        } else {
+            None
+        }
     }
 
     pub fn save_settings(&mut self) -> LappSettingsResult<()> {
-        let path = self.root_dir().join(Self::config_file_name());
-        self.settings().save(path)
-    }
-
-    pub fn static_dir(&self) -> PathBuf {
-        self.root_dir().join(Self::static_dir_name())
-    }
-
-    pub fn index_file(&self) -> PathBuf {
-        self.static_dir().join(Self::index_file_name())
-    }
-
-    pub fn server_module_file(&self) -> PathBuf {
-        self.root_dir().join(format!("{}_server.wasm", self.name()))
-    }
-
-    pub fn is_loaded(&self) -> bool {
-        self.instance.is_some()
+        self.settings().save(Self::settings_path(self.root_dir()))
     }
 
     pub fn instance_mut(&mut self) -> Option<&mut LappInstance> {
@@ -155,12 +170,8 @@ impl Lapp {
         }
     }
 
-    pub fn service_stop(&mut self, ctx: &Context<Addr>) -> bool {
-        if let Some(sender) = ctx.get_actor_sender::<LappServiceMessage>(&Addr::Lapp(self.lapp.name().to_string())) {
-            sender.send(LappServiceMessage::Stop).is_ok()
-        } else {
-            false
-        }
+    pub fn server_module_file(&self) -> PathBuf {
+        self.root_dir().join(format!("{}_server.wasm", self.name()))
     }
 
     pub async fn instantiate(&mut self, http_client: Client) -> ServerResult<()> {
@@ -189,7 +200,9 @@ impl Lapp {
         wasi.inherit_stdout();
 
         if self
-            .required_permissions()
+            .settings()
+            .permissions
+            .required()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
             let preopened_dir = Dir::open_ambient_dir(&data_dir_path, cap_std::ambient_authority())?;
@@ -263,43 +276,6 @@ impl Lapp {
         Ok(())
     }
 
-    pub fn update(&mut self, mut query: UpdateQuery) -> LappSettingsResult<UpdateQuery> {
-        if let Some(enabled) = query.enabled {
-            if self.enabled() != enabled {
-                self.set_enabled(enabled);
-            } else {
-                query.enabled = None;
-            }
-        }
-
-        if let Some(permission) = query.allow_permission {
-            if !self.allow_permission(permission) {
-                query.allow_permission = None;
-            }
-        }
-
-        if let Some(permission) = query.deny_permission {
-            if !self.deny_permission(permission) {
-                query.deny_permission = None;
-            }
-        }
-
-        self.save_settings()?;
-        Ok(query)
-    }
-
-    pub fn check_enabled_and_allow_permissions(&self, permissions: &[Permission]) -> ServerResult<()> {
-        if !self.enabled() {
-            return Err(ServerError::LappNotEnabled(self.name().into()));
-        };
-        for &permission in permissions {
-            if !self.is_allowed_permission(permission) {
-                return Err(ServerError::LappPermissionDenied(self.name().into(), permission));
-            }
-        }
-        Ok(())
-    }
-
     fn get_database_path(&self) -> PathBuf {
         let database_path = self.settings().database().path();
 
@@ -308,36 +284,5 @@ impl Lapp {
         } else {
             database_path.into()
         }
-    }
-}
-
-#[derive(Clone, Deref)]
-pub struct SharedLapp {
-    name: String,
-    #[deref]
-    inner: Arc<RwLock<Lapp>>,
-}
-
-impl SharedLapp {
-    pub fn new(lapp: Lapp) -> Self {
-        Self {
-            name: lapp.name().to_owned(),
-            inner: Arc::new(RwLock::new(lapp)),
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn run_service_if_needed(&self, ctx: &Context<Addr>) -> Sender<LappServiceMessage> {
-        let service_actor_id = Addr::Lapp(self.name.clone());
-
-        ctx.get_actor_sender::<LappServiceMessage>(&service_actor_id)
-            .unwrap_or_else(|| {
-                let sender = ctx.actor_sender::<LappServiceMessage>(service_actor_id);
-                service::LappService::new(self.clone()).run(ctx.clone());
-                sender
-            })
     }
 }

@@ -108,4 +108,7 @@ pub enum ServerError {
 
     #[error("Lapp initialization error: {0:?}")]
     LappInitError(String),
+
+    #[error("Fail to send lapp service for lapp '{0}'")]
+    LappServiceSendError(String),
 }

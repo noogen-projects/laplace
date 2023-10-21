@@ -9,7 +9,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use truba::Context;
 
 use crate::error::ServerResult;
-use crate::lapps::{LappsManager, SharedLapp};
+use crate::lapps::LappsManager;
 use crate::service::Addr;
 use crate::settings::LappsSettings;
 use crate::web_api::{err_into_json_response, ResultResponse};
@@ -55,32 +55,9 @@ impl LappsProvider {
             lapps_provider
                 .read_manager()
                 .await
-                .lapp(&lapp_name)?
-                .read()
-                .await
-                .check_enabled_and_allow_permissions(permissions)?;
+                .check_enabled_and_allow_permissions(&lapp_name, permissions)?;
 
             handler(lapps_provider, lapp_name).await
-        })
-        .await
-    }
-
-    pub async fn handle_allowed_lapp<Fut, Res>(
-        self,
-        permissions: &[Permission],
-        lapp_name: String,
-        handler: impl FnOnce(String, SharedLapp) -> Fut,
-    ) -> ResultResponse<Res>
-    where
-        Fut: Future<Output = ServerResult<Res>>,
-        Res: IntoResponse,
-    {
-        self.handle(move |lapps_provider| async move {
-            let manager = lapps_provider.read_manager().await;
-            let lapp = manager.lapp(&lapp_name)?;
-            lapp.read().await.check_enabled_and_allow_permissions(permissions)?;
-
-            handler(lapp_name, lapp).await
         })
         .await
     }
@@ -95,19 +72,6 @@ impl LappsProvider {
         Res: IntoResponse,
     {
         self.handle_allowed(&[Permission::ClientHttp], lapp_name, handler).await
-    }
-
-    pub async fn handle_client_http_lapp<Fut, Res>(
-        self,
-        lapp_name: String,
-        handler: impl FnOnce(String, SharedLapp) -> Fut,
-    ) -> ResultResponse<Res>
-    where
-        Fut: Future<Output = ServerResult<Res>>,
-        Res: IntoResponse,
-    {
-        self.handle_allowed_lapp(&[Permission::ClientHttp], lapp_name, handler)
-            .await
     }
 
     pub async fn handle_ws<Fut, Res>(

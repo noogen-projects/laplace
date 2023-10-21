@@ -47,18 +47,9 @@ pub async fn check_access<B>(
                 Ok(response)
             }
         } else {
-            match lapps_provider.read_manager().await.lapp(&lapp_name) {
-                Ok(lapp) => {
-                    if access_token
-                        == lapp
-                            .read()
-                            .await
-                            .settings()
-                            .application
-                            .access_token
-                            .as_deref()
-                            .unwrap_or_default()
-                    {
+            match lapps_provider.read_manager().await.lapp_settings(&lapp_name) {
+                Ok(lapp_settings) => {
+                    if access_token == lapp_settings.application.access_token.as_deref().unwrap_or_default() {
                         Ok(next.run(request).await)
                     } else {
                         log::warn!(
@@ -102,12 +93,12 @@ pub fn query_access_token_redirect<B>(request: Request<B>) -> Result<Response, R
             .find(|chunk| !chunk.is_empty())
             .unwrap_or(Lapp::main_name());
 
-        let access_token_cookie = Cookie::build("access_token", access_token)
+        let access_token_cookie = Cookie::build(("access_token", access_token))
             .domain(uri.host().unwrap_or(""))
             .path(format!("/{}", lapp_name))
             .http_only(true)
             .max_age(Duration::days(365 * 10)) // 10 years
-            .finish();
+            .build();
 
         let mut response = Redirect::to(&format!("{}{}", uri.path(), new_query)).into_response();
         response.headers_mut().insert(

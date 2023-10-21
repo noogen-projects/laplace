@@ -86,7 +86,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
     }
 
     log::info!("Load lapps");
-    lapps_provider.read_manager().await.load_lapps().await;
+    lapps_provider.read_manager().await.autoload_lapps().await;
 
     log::info!("Create HTTP server");
     let static_dir = web_root.join(Lapp::static_dir_name());

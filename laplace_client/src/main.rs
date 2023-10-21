@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use anyhow::{anyhow, Context as _, Error};
 use laplace_common::api::{Response as CommonLappResponse, UpdateQuery};
-use laplace_common::lapp::{Lapp as CommonLapp, Permission};
+use laplace_common::lapp::{Lapp as CommonLapp, LappSettings, Permission};
 use laplace_yew::error::MsgError;
 use wasm_web_helpers::error::Result;
 use wasm_web_helpers::fetch::{JsonFetcher, Response};
@@ -24,10 +24,10 @@ use self::i18n::label::*;
 mod i18n;
 
 type Lapp = CommonLapp<String>;
-type LappResponse = CommonLappResponse<'static, String, Cow<'static, CommonLapp<String>>>;
+type LappResponse = CommonLappResponse<'static, Cow<'static, LappSettings>>;
 
 struct Root {
-    lapps: Vec<Lapp>,
+    lapps: Vec<LappSettings>,
 }
 
 #[derive(Debug)]
@@ -89,26 +89,33 @@ impl Component for Root {
         match msg {
             Msg::Fetch(response) => match response {
                 LappResponse::Lapps { lapps, .. } => {
-                    self.lapps = lapps.into_iter().map(|lapp| lapp.into_owned()).collect();
+                    self.lapps = lapps
+                        .into_iter()
+                        .map(|lapp_settings| lapp_settings.into_owned())
+                        .collect();
                     true
                 },
                 LappResponse::Updated { updated } => {
-                    if let Some(lapp) = self.lapps.iter_mut().find(|lapp| lapp.name() == updated.lapp_name) {
+                    if let Some(lapp_settings) = self
+                        .lapps
+                        .iter_mut()
+                        .find(|lapp_settings| lapp_settings.name() == updated.lapp_name)
+                    {
                         let mut should_render = false;
 
                         if let Some(enabled) = updated.enabled {
-                            if lapp.enabled() != enabled {
-                                lapp.set_enabled(enabled);
+                            if lapp_settings.enabled() != enabled {
+                                lapp_settings.set_enabled(enabled);
                                 should_render = true;
                             }
                         }
 
                         if let Some(permission) = updated.allow_permission {
-                            should_render = lapp.allow_permission(permission);
+                            should_render = lapp_settings.permissions.allow(permission);
                         }
 
                         if let Some(permission) = updated.deny_permission {
-                            should_render = lapp.deny_permission(permission);
+                            should_render = lapp_settings.permissions.deny(permission);
                         }
 
                         should_render
@@ -278,22 +285,22 @@ impl Root {
         JsonFetcher::send_post_json(uri, body, move |response_result| callback.emit(response_result));
     }
 
-    fn view_lapp(&self, ctx: &Context<Self>, lapp: &Lapp) -> Html {
-        let lapp_name = lapp.name().to_string();
+    fn view_lapp(&self, ctx: &Context<Self>, lapp_settings: &LappSettings) -> Html {
+        let lapp_name = lapp_settings.name().to_string();
 
         let enable_switch = Switch::new()
             .on_click(ctx.link().callback(move |_| Msg::SwitchLapp(lapp_name.clone())))
-            .turn(lapp.enabled());
+            .turn(lapp_settings.enabled());
 
         let permissions = ChipSet::new()
-            .id(format!("{}--permissions", lapp.name()))
+            .id(format!("{}--permissions", lapp_settings.name()))
             .filter()
-            .chips(lapp.required_permissions().map(|permission| {
+            .chips(lapp_settings.permissions.required().map(|permission| {
                 Chip::simple()
-                    .id(format!("{}--{}", lapp.name(), permission.as_str()))
+                    .id(format!("{}--{}", lapp_settings.name(), permission.as_str()))
                     .checkmark()
                     .text(permission.as_str())
-                    .select(lapp.is_allowed_permission(permission))
+                    .select(lapp_settings.permissions.is_allowed(permission))
             }))
             .on_selection(ctx.link().callback(|event: CustomEvent| {
                 PermissionUpdate::try_from_chip_selection_detail(event.detail())
@@ -301,17 +308,17 @@ impl Root {
                     .unwrap_or_else(Msg::Error)
             }));
 
-        let lapp_ref = if let Some(access_token) = lapp.settings().application.access_token.as_deref() {
-            format!("{}?access_token={}", lapp.name(), access_token)
+        let lapp_ref = if let Some(access_token) = lapp_settings.application.access_token.as_deref() {
+            format!("{}?access_token={access_token}", lapp_settings.name())
         } else {
-            lapp.name().to_string()
+            lapp_settings.name().to_string()
         };
 
         html! {
             <>
                 <div class = "lapps-table-row">
                     <div class = "lapps-table-col">
-                        <big><a href = { lapp_ref }>{ lapp.title() }</a></big>
+                        <big><a href = { lapp_ref }>{ lapp_settings.title() }</a></big>
                     </div>
                     <div class = "lapps-table-col">
                         { enable_switch }
