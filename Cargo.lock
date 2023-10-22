@@ -2452,7 +2452,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af3d77000817fd9e7db159e8d52ed9b5941a2cdbfbdc8ca646e59887ae2b2dd1"
 dependencies = [
- "indexmap 2.0.2",
+ "indexmap 1.9.3",
 ]
 
 [[package]]
@@ -6525,7 +6525,7 @@ dependencies = [
 [[package]]
 name = "yew-mdc-widgets"
 version = "0.4.5"
-source = "git+https://github.com/noogen-projects/yew-mdc-widgets#9838d0148f62835fd91d39aa5b8b9f027c2da1b1"
+source = "git+https://github.com/noogen-projects/yew-mdc-widgets#3906ca15265bcfbbb7f604461f4a429801ff3bdc"
 dependencies = [
  "const_format",
  "gloo 0.10.0",
