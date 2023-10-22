@@ -10,8 +10,8 @@ use libp2p::futures::StreamExt;
 use libp2p::gossipsub::{self, IdentTopic as Topic, MessageAuthenticity, MessageId, ValidationMode};
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{mdns, Multiaddr, PeerId, Swarm};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::{mdns, noise, tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder};
 use thiserror::Error;
 use truba::{Context, Sender, UnboundedMpscChannel};
 
@@ -55,7 +55,6 @@ impl GossipsubService {
         topic_name: impl Into<String>,
         lapp_service_sender: Sender<LappServiceMessage>,
     ) -> Result<(), Error> {
-        let transport = libp2p::tokio_development_transport(keypair.clone())?;
         let message_id_fn = |message: &gossipsub::Message| {
             let mut hasher = DefaultHasher::new();
             message.data.hash(&mut hasher);
@@ -67,22 +66,30 @@ impl GossipsubService {
             .message_id_fn(message_id_fn)
             .build()
             .map_err(|err| Error::GossipsubUninit(err.into()))?;
-        let mut gossipsub_behaviour = gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair), gossipsub_config)
-            .map_err(|err| Error::GossipsubUninit(err.into()))?;
+
+        let behaviour = GossipsubServiceBehaviour {
+            gossipsub: gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair.clone()), gossipsub_config)
+                .map_err(|err| Error::GossipsubUninit(err.into()))?,
+            mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)?,
+        };
+
+        let mut swarm = SwarmBuilder::with_existing_identity(keypair)
+            .with_tokio()
+            .with_tcp(tcp::Config::default(), noise::Config::new, yamux::Config::default)?
+            .with_behaviour(|_keypair| Ok(behaviour))
+            .map_err(|err| Error::WrongBehaviour(err.to_string()))?
+            .build();
 
         let topic = Topic::new(topic_name);
-        gossipsub_behaviour
+        swarm
+            .behaviour_mut()
+            .gossipsub
             .subscribe(&topic)
             .map_err(Error::GossipsubSubscribtionError)?;
         for peer_id in explicit_peers {
-            gossipsub_behaviour.add_explicit_peer(peer_id);
+            swarm.behaviour_mut().gossipsub.add_explicit_peer(peer_id);
         }
 
-        let behaviour = GossipsubServiceBehaviour {
-            gossipsub: gossipsub_behaviour,
-            mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)?,
-        };
-        let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id).build();
         swarm.listen_on(address)?;
 
         let mut receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
@@ -217,6 +224,9 @@ pub fn decode_peer_id(bytes: &[u8]) -> Result<PeerId, Error> {
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Noise error: {0}")]
+    NoiseError(#[from] libp2p::noise::Error),
+
     #[error("Hash error: {0}")]
     HashError(#[from] libp2p::multihash::Error),
 
@@ -231,6 +241,9 @@ pub enum Error {
 
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+
+    #[error("Wrong behaviour: {0}")]
+    WrongBehaviour(String),
 
     #[error("Gossipsub uninitialize: {0}")]
     GossipsubUninit(String),
