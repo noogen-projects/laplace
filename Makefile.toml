@@ -1,6 +1,7 @@
 [config]
 default_to_workspace = false
 additional_profiles = ["debug"]
+skip_core_tasks = true
 
 
 [tasks.choose_profile.env]
@@ -215,7 +216,52 @@ command = "cargo"
 toolchain = "stable"
 args = ["clippy", "--all-targets", "--all-features"]
 
-[tasks.test]
+#######
+# Tests
+#######
+
+[tasks.laplace_client_test]
 command = "cargo"
 toolchain = "stable"
-args = ["test", "--all-features", "--all-targets"]
+args = ["test", "-p", "laplace_client", "--all-features", "--all-targets"]
+
+[tasks.laplace_common_test]
+command = "cargo"
+toolchain = "stable"
+args = ["test", "-p", "laplace_common", "--all-features", "--all-targets"]
+
+[tasks.laplace_server_test]
+command = "cargo"
+toolchain = "stable"
+args = ["test", "-p", "laplace_server", "--all-features", "--all-targets"]
+
+[tasks.laplace_wasm_test]
+command = "cargo"
+toolchain = "stable"
+args = ["test", "-p", "laplace_wasm", "--all-features", "--all-targets"]
+
+[tasks.laplace_wasm_macro_test]
+command = "cargo"
+toolchain = "stable"
+args = ["test", "-p", "laplace_wasm_macro", "--all-features", "--all-targets"]
+
+[tasks.laplace_yew_test]
+command = "cargo"
+toolchain = "stable"
+args = ["test", "-p", "laplace_yew", "--all-features", "--all-targets"]
+
+[tasks.integration_test]
+command = "cargo"
+toolchain = "stable"
+args = ["test", "-p", "tests", "--all-features"]
+
+[tasks.test]
+dependencies = [
+    "laplace_client_test",
+    "laplace_common_test",
+    "laplace_server_test",
+    "laplace_wasm_test",
+    "laplace_wasm_macro_test",
+    "laplace_yew_test",
+    "integration_test",
+]
