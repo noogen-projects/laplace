@@ -54,6 +54,14 @@ impl FileSettings for LappSettings {
             }
         }
 
+        if let Some(autoload) = query.autoload {
+            if self.autoload() != autoload {
+                self.set_autoload(autoload);
+            } else {
+                query.autoload = None;
+            }
+        }
+
         if let Some(permission) = query.allow_permission {
             if !self.permissions.allow(permission) {
                 query.allow_permission = None;

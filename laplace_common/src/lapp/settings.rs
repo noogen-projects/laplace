@@ -376,6 +376,16 @@ impl LappSettings {
         self.application.autoload
     }
 
+    #[inline]
+    pub fn set_autoload(&mut self, autoload: bool) {
+        self.application.autoload = autoload;
+    }
+
+    #[inline]
+    pub fn switch_autoload(&mut self) {
+        self.set_autoload(!self.autoload());
+    }
+
     pub fn database(&self) -> &DatabaseSettings {
         static DEFAULT: DatabaseSettings = DatabaseSettings::new();
 

@@ -11,6 +11,7 @@ use crate::lapp::{LappSettings, Permission};
 pub struct UpdateQuery {
     pub lapp_name: String,
     pub enabled: Option<bool>,
+    pub autoload: Option<bool>,
     pub allow_permission: Option<Permission>,
     pub deny_permission: Option<Permission>,
 }
@@ -27,14 +28,20 @@ impl UpdateQuery {
         let Self {
             lapp_name: _,
             enabled,
+            autoload,
             allow_permission,
             deny_permission,
         } = self;
-        enabled.is_some() || allow_permission.is_some() || deny_permission.is_some()
+        enabled.is_some() || autoload.is_some() || allow_permission.is_some() || deny_permission.is_some()
     }
 
     pub fn enabled(mut self, enabled: impl Into<Option<bool>>) -> Self {
         self.enabled = enabled.into();
+        self
+    }
+
+    pub fn autoload(mut self, autoload: impl Into<Option<bool>>) -> Self {
+        self.autoload = autoload.into();
         self
     }
 
@@ -143,13 +150,14 @@ mod tests {
 
         let request = UpdateQuery::new("test")
             .enabled(true)
+            .autoload(true)
             .allow_permission(Permission::Http)
             .deny_permission(Permission::Tcp)
             .into_request();
         let json = serde_json::to_string(&request).unwrap();
         assert_eq!(
             json,
-            r#"{"update":{"lapp_name":"test","enabled":true,"allow_permission":"http","deny_permission":"tcp"}}"#
+            r#"{"update":{"lapp_name":"test","enabled":true,"autoload":true,"allow_permission":"http","deny_permission":"tcp"}}"#
         );
     }
 
@@ -189,13 +197,14 @@ mod tests {
         let response = Response::Updated::<'_, &LappSettings> {
             updated: UpdateQuery::new("test")
                 .enabled(true)
+                .autoload(true)
                 .allow_permission(Permission::Http)
                 .deny_permission(Permission::Tcp),
         };
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(
             json,
-            r#"{"updated":{"lapp_name":"test","enabled":true,"allow_permission":"http","deny_permission":"tcp"}}"#
+            r#"{"updated":{"lapp_name":"test","enabled":true,"autoload":true,"allow_permission":"http","deny_permission":"tcp"}}"#
         );
     }
 }

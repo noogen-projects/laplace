@@ -65,6 +65,7 @@ impl PermissionUpdate {
 enum Msg {
     Fetch(LappResponse),
     SwitchLapp(String),
+    SwitchAutoload(String),
     UpdatePermission(PermissionUpdate),
     AddLar,
     Error(Error),
@@ -110,6 +111,13 @@ impl Component for Root {
                             }
                         }
 
+                        if let Some(autoload) = updated.autoload {
+                            if lapp_settings.autoload() != autoload {
+                                lapp_settings.set_autoload(autoload);
+                                should_render = true;
+                            }
+                        }
+
                         if let Some(permission) = updated.allow_permission {
                             should_render = lapp_settings.permissions.allow(permission);
                         }
@@ -126,13 +134,13 @@ impl Component for Root {
                 },
             },
             Msg::SwitchLapp(name) => {
-                if let Some(lapp) = self.lapps.iter_mut().find(|lapp| lapp.name() == name) {
-                    lapp.switch_enabled();
+                if let Some(lapp_settings) = self.lapps.iter_mut().find(|lapp| lapp.name() == name) {
+                    lapp_settings.switch_enabled();
 
                     let uri = Lapp::main_uri("lapp/update");
                     if let Ok(body) = serde_json::to_string(
-                        &UpdateQuery::new(lapp.name().to_string())
-                            .enabled(lapp.enabled())
+                        &UpdateQuery::new(lapp_settings.name().to_string())
+                            .enabled(lapp_settings.enabled())
                             .into_request(),
                     )
                     .context("Serialize query error")
@@ -143,6 +151,27 @@ impl Component for Root {
                     false
                 } else {
                     console::error!(&format!("Unknown lapp name: {name}"));
+                    false
+                }
+            },
+            Msg::SwitchAutoload(lapp_name) => {
+                if let Some(lapp_settings) = self.lapps.iter_mut().find(|lapp| lapp.name() == lapp_name) {
+                    lapp_settings.switch_autoload();
+
+                    let uri = Lapp::main_uri("lapp/update");
+                    if let Ok(body) = serde_json::to_string(
+                        &UpdateQuery::new(lapp_settings.name().to_string())
+                            .autoload(lapp_settings.autoload())
+                            .into_request(),
+                    )
+                    .context("Serialize query error")
+                    .msg_error_map(ctx.link())
+                    {
+                        Self::send_post_json(ctx, uri, body);
+                    }
+                    false
+                } else {
+                    console::error!(&format!("Unknown lapp name: {lapp_name}"));
                     false
                 }
             },
@@ -289,8 +318,17 @@ impl Root {
         let lapp_name = lapp_settings.name().to_string();
 
         let enable_switch = Switch::new()
-            .on_click(ctx.link().callback(move |_| Msg::SwitchLapp(lapp_name.clone())))
+            .on_click(ctx.link().callback({
+                let lapp_name = lapp_name.clone();
+                move |_| Msg::SwitchLapp(lapp_name.clone())
+            }))
             .turn(lapp_settings.enabled());
+
+        let autoload_switch = Switch::new()
+            .id(format!("{lapp_name}--autoload"))
+            .label("Autoload")
+            .on_click(ctx.link().callback(move |_| Msg::SwitchAutoload(lapp_name.clone())))
+            .turn(lapp_settings.autoload());
 
         let permissions = ChipSet::new()
             .id(format!("{}--permissions", lapp_settings.name()))
@@ -326,9 +364,17 @@ impl Root {
                 </div>
                 <div class = "lapps-table-row">
                     <div class = "lapps-table-col">
+                        <div class = "mdc-form-field mdc-form-field--align-end">
+                            { autoload_switch }
+                        </div>
+                    </div>
+                </div>
+                <div class = "lapps-table-row">
+                    <div class = "lapps-table-col">
                         { permissions }
                     </div>
                 </div>
+                <br />
             </>
         }
     }
