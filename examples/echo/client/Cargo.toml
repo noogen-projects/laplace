@@ -12,6 +12,7 @@ repository = "https://github.com/noogen-projects/laplace"
 description = "The Echo lapp example"
 
 [dependencies]
+laplace_yew = { path = "../../../laplace_yew" }
 wasm-web-helpers = "0.2"
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlInputElement"] }
 yew = { workspace = true }

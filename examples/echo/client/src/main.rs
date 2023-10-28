@@ -1,20 +1,32 @@
 #![recursion_limit = "256"]
 
+use laplace_yew::error::{Errors, ErrorsMsg};
 use wasm_web_helpers::error::Result;
 use wasm_web_helpers::fetch::{fetch_success_text, Request, Response};
 use wasm_web_helpers::spawn_local;
 use web_sys::HtmlInputElement;
+use yew::html::Scope;
 use yew::{html, Component, Context, Html};
 use yew_mdc_widgets::{auto_init, console, dom, Button, List, ListItem, MdcWidget, TextField, TopAppBar};
 
+type ErrorsLink = Scope<Errors<Root>>;
+
 struct Root {
     responses: Vec<String>,
+    errors_link: Option<ErrorsLink>,
 }
 
 enum Msg {
     Submit,
     Fetch(String),
     Error(String),
+    SetErrorsLink(ErrorsLink),
+}
+
+impl From<ErrorsLink> for Msg {
+    fn from(link: ErrorsLink) -> Self {
+        Self::SetErrorsLink(link)
+    }
 }
 
 impl Component for Root {
@@ -22,7 +34,10 @@ impl Component for Root {
     type Properties = ();
 
     fn create(_ctx: &Context<Self>) -> Self {
-        Self { responses: Vec::new() }
+        Self {
+            responses: Vec::new(),
+            errors_link: None,
+        }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -49,6 +64,13 @@ impl Component for Root {
             },
             Msg::Error(error) => {
                 console::error!(&error);
+                if let Some(link) = self.errors_link.as_ref() {
+                    link.callback(move |_| ErrorsMsg::Spawn(error.clone())).emit(());
+                }
+                false
+            },
+            Msg::SetErrorsLink(link) => {
+                self.errors_link = Some(link);
                 false
             },
         }
@@ -85,6 +107,7 @@ impl Component for Root {
                             { list }
                         </div>
                     </div>
+                    <Errors<Root> />
                 </div>
             </>
         }

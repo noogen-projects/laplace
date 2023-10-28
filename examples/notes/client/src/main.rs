@@ -3,6 +3,7 @@
 use std::ops::Deref;
 
 use anyhow::{anyhow, Error};
+use laplace_yew::error::{Errors, ErrorsMsg};
 use laplace_yew::RawHtml;
 use lew::SimpleEditor;
 use notes_common::{Note, NoteContent, Response};
@@ -10,13 +11,15 @@ use pulldown_cmark::{html as cmark_html, Options, Parser};
 use wasm_web_helpers::error::Result;
 use wasm_web_helpers::fetch::{JsonFetcher, Response as WebResponse};
 use web_sys::{Element, HtmlElement, HtmlInputElement, HtmlTextAreaElement};
+use yew::html::Scope;
 use yew::{html, Callback, Component, Context, Html, InputEvent};
 use yew_mdc_widgets::dom::existing::JsObjectAccess;
-use yew_mdc_widgets::dom::{self};
 use yew_mdc_widgets::{
-    auto_init, console, Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, ListItem, MdcWidget, Menu,
-    TextField, TopAppBar,
+    auto_init, console, dom, Button, Card, CardContent, CustomEvent, Dialog, Fab, IconButton, ListItem, MdcWidget,
+    Menu, TextField, TopAppBar,
 };
+
+type ErrorsLink = Scope<Errors<Root>>;
 
 struct FullNote {
     note: Note,
@@ -68,6 +71,7 @@ struct Root {
     notes: Vec<FullNote>,
     current_note_index: Option<usize>,
     current_mode: Option<Mode>,
+    errors_link: Option<ErrorsLink>,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -89,11 +93,18 @@ enum Msg {
     DeleteNote(String),
     Fetch(Response),
     Error(Error),
+    SetErrorsLink(ErrorsLink),
 }
 
 impl From<Error> for Msg {
     fn from(err: Error) -> Self {
         Self::Error(err)
+    }
+}
+
+impl From<ErrorsLink> for Msg {
+    fn from(link: ErrorsLink) -> Self {
+        Self::SetErrorsLink(link)
     }
 }
 
@@ -111,6 +122,7 @@ impl Component for Root {
             notes: Vec::new(),
             current_note_index: None,
             current_mode: None,
+            errors_link: None,
         }
     }
 
@@ -265,9 +277,17 @@ impl Component for Root {
                 ctx.link().send_message(Msg::Error(anyhow!("{}", err)));
                 false
             },
-            Msg::Error(err) => {
-                console::error!(&format!("{err}"));
+            Msg::Error(error) => {
+                let error = error.to_string();
+                console::error!(&error);
+                if let Some(link) = self.errors_link.as_ref() {
+                    link.callback(move |_| ErrorsMsg::Spawn(error.clone())).emit(());
+                }
                 true
+            },
+            Msg::SetErrorsLink(link) => {
+                self.errors_link = Some(link);
+                false
             },
         }
     }
@@ -356,6 +376,7 @@ impl Component for Root {
                         { add_note_button }
                     </div>
                 </div>
+                <Errors<Root> />
             </div>
         }
     }

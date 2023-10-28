@@ -2,6 +2,12 @@ use anyhow::{Error, Result};
 use yew::html::Scope;
 use yew::Component;
 
+#[cfg(feature = "mdc")]
+pub use self::mdc::*;
+
+#[cfg(feature = "mdc")]
+pub mod mdc;
+
 pub trait MsgError {
     type Map;
 

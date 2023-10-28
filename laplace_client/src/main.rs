@@ -5,10 +5,11 @@ use std::convert::TryFrom;
 use anyhow::{anyhow, Context as _, Error};
 use laplace_common::api::{Response as CommonLappResponse, UpdateQuery};
 use laplace_common::lapp::{Lapp as CommonLapp, LappSettings, Permission};
-use laplace_yew::error::MsgError;
+use laplace_yew::error::{Errors, ErrorsMsg, MsgError};
 use wasm_web_helpers::error::Result;
 use wasm_web_helpers::fetch::{JsonFetcher, Response};
 use web_sys::{FormData, HtmlInputElement};
+use yew::html::Scope;
 use yew::{self, classes, html, Callback, Component, Context, Html};
 use yew_mdc_widgets::dom::existing::JsObjectAccess;
 use yew_mdc_widgets::dom::{self, JsValue};
@@ -23,11 +24,13 @@ use self::i18n::label::*;
 
 mod i18n;
 
+type ErrorsLink = Scope<Errors<Root>>;
 type Lapp = CommonLapp<String>;
 type LappResponse = CommonLappResponse<'static, Cow<'static, LappSettings>>;
 
 struct Root {
     lapps: Vec<LappSettings>,
+    errors_link: Option<ErrorsLink>,
 }
 
 #[derive(Debug)]
@@ -69,11 +72,18 @@ enum Msg {
     UpdatePermission(PermissionUpdate),
     AddLar,
     Error(Error),
+    SetErrorsLink(ErrorsLink),
 }
 
 impl From<Error> for Msg {
     fn from(err: Error) -> Self {
         Self::Error(err)
+    }
+}
+
+impl From<ErrorsLink> for Msg {
+    fn from(link: ErrorsLink) -> Self {
+        Self::SetErrorsLink(link)
     }
 }
 
@@ -83,7 +93,10 @@ impl Component for Root {
 
     fn create(ctx: &Context<Self>) -> Self {
         Self::send_get(ctx, Lapp::main_uri("lapps"));
-        Self { lapps: vec![] }
+        Self {
+            lapps: vec![],
+            errors_link: None,
+        }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -194,9 +207,17 @@ impl Component for Root {
                 false
             },
             Msg::AddLar => false,
-            Msg::Error(err) => {
-                console::error!(&format!("{err}"));
+            Msg::Error(error) => {
+                let error = error.to_string();
+                console::error!(&error);
+                if let Some(link) = self.errors_link.as_ref() {
+                    link.callback(move |_| ErrorsMsg::Spawn(error.clone())).emit(());
+                }
                 true
+            },
+            Msg::SetErrorsLink(link) => {
+                self.errors_link = Some(link);
+                false
             },
         }
     }
@@ -294,6 +315,7 @@ impl Component for Root {
                         </div>
                     </div>
                 </div>
+                <Errors<Root> />
             </>
         }
     }

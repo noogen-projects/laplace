@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use axum::extract::State;
 use axum::http::{header, Request, StatusCode};
 use axum::middleware::Next;
@@ -8,7 +10,7 @@ use cookie::Cookie;
 use crate::lapps::{Lapp, LappsProvider};
 use crate::web_api::{err_into_json_response, ResultResponse};
 
-pub async fn check_access<B>(
+pub async fn check_access<B: Debug>(
     State((lapps_provider, laplace_access_token)): State<(LappsProvider, &'static str)>,
     request: Request<B>,
     next: Next<B>,
@@ -52,6 +54,7 @@ pub async fn check_access<B>(
                     if access_token == lapp_settings.application.access_token.as_deref().unwrap_or_default() {
                         Ok(next.run(request).await)
                     } else {
+                        log::debug!("{request:?}");
                         log::warn!(
                             "Access denied for lapp \"{}\" with access token \"{}\"",
                             lapp_name,

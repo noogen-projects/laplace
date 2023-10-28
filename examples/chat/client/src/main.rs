@@ -4,6 +4,7 @@ use std::cell::RefCell;
 
 use anyhow::{anyhow, Context as _, Error};
 use chat_common::{Peer, WsMessage, WsResponse};
+use laplace_yew::error::{Errors, ErrorsMsg};
 use laplace_yew::{MsgError, RawHtml};
 use libp2p_identity::{Keypair, PeerId};
 use pulldown_cmark::{html as cmark_html, Options, Parser};
@@ -23,6 +24,8 @@ use yew_mdc_widgets::{
 use self::addresses::Addresses;
 
 mod addresses;
+
+type ErrorsLink = Scope<Errors<Root>>;
 
 #[allow(clippy::large_enum_variant)]
 enum State {
@@ -70,6 +73,7 @@ struct Channel {
 
 struct Root {
     addresses_link: Option<Scope<Addresses>>,
+    errors_link: Option<ErrorsLink>,
     state: State,
 }
 
@@ -90,6 +94,7 @@ enum Msg {
     SwitchChannel(usize),
     Ws(WsAction),
     Error(Error),
+    SetErrorsLink(ErrorsLink),
     None,
 }
 
@@ -105,6 +110,12 @@ impl From<Error> for Msg {
     }
 }
 
+impl From<ErrorsLink> for Msg {
+    fn from(link: ErrorsLink) -> Self {
+        Self::SetErrorsLink(link)
+    }
+}
+
 impl Component for Root {
     type Message = Msg;
     type Properties = ();
@@ -112,6 +123,7 @@ impl Component for Root {
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             addresses_link: None,
+            errors_link: None,
             state: State::SignIn,
         }
     }
@@ -365,9 +377,17 @@ impl Component for Root {
                     false
                 },
             },
-            Msg::Error(err) => {
-                console::error!(&err.to_string());
+            Msg::Error(error) => {
+                let error = error.to_string();
+                console::error!(&error);
+                if let Some(link) = self.errors_link.as_ref() {
+                    link.callback(move |_| ErrorsMsg::Spawn(error.clone())).emit(());
+                }
                 true
+            },
+            Msg::SetErrorsLink(link) => {
+                self.errors_link = Some(link);
+                false
             },
             Msg::None => false,
         }
@@ -457,6 +477,7 @@ impl Component for Root {
                         { content }
                     </div>
                 </div>
+                <Errors<Root> />
             </>
         }
     }
