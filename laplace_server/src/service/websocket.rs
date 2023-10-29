@@ -116,10 +116,10 @@ impl WebSocketService {
 
         match msg {
             Message::Text(text) => {
-                log::info!("Receive WS message: {text}");
+                log::debug!("Receive WS message: {text}");
                 if let Err(err) = self
                     .lapp_service_sender
-                    .send(LappServiceMessage::WebSocket(WsMessage::Text(text)))
+                    .send(LappServiceMessage::Websocket(WsMessage::Text(text)))
                 {
                     log::error!("Error occurs when send to lapp service: {err:?}");
                 }

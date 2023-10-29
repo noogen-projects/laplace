@@ -128,7 +128,7 @@ async fn process_ws_start(
     let ws_service_sender = ctx.actor_sender::<WsServiceMessage>(ws_service_addr.clone());
 
     lapp_service_sender
-        .send(LappServiceMessage::NewWebSocket(ws_service_sender))
+        .send(LappServiceMessage::NewWebsocket(ws_service_sender))
         .map_err(|err| {
             log::error!("Error occurs when send to lapp service: {err:?}, lapp: {lapp_name}");
             ServerError::LappServiceSendError(lapp_name.into())
@@ -193,7 +193,7 @@ fn process_gossipsub_start(
     )?;
 
     lapp_service_sender
-        .send(LappServiceMessage::NewGossipSub(gossipsub_service_sender))
+        .send(LappServiceMessage::NewGossipsub(gossipsub_service_sender))
         .map_err(|err| {
             log::error!("Error occurs when send to lapp service: {err:?}");
             ServerError::LappServiceSendError(lapp_name)

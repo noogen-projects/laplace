@@ -12,15 +12,24 @@ pub extern "C" fn route_ws(msg: WasmSlice) -> WasmSlice {
 
     let routes = match response {
         WsResponse::Success(WsMessage::Text { peer_id, msg }) => {
-            vec![Route::GossipSub(gossipsub::Message::Text { peer_id, msg })]
+            vec![Route::Gossipsub(gossipsub::MessageOut {
+                id: "".to_string(),
+                msg: gossipsub::Message::Text { peer_id, msg },
+            })]
         },
-        WsResponse::Success(WsMessage::AddPeer(peer_id)) => vec![Route::GossipSub(gossipsub::Message::Dial(peer_id))],
+        WsResponse::Success(WsMessage::AddPeer(peer_id)) => vec![Route::Gossipsub(gossipsub::MessageOut {
+            id: "".to_string(),
+            msg: gossipsub::Message::Dial(peer_id),
+        })],
         WsResponse::Success(WsMessage::AddAddress(address)) => {
-            vec![Route::GossipSub(gossipsub::Message::AddAddress(address))]
+            vec![Route::Gossipsub(gossipsub::MessageOut {
+                id: "".to_string(),
+                msg: gossipsub::Message::AddAddress(address),
+            })]
         },
         response => {
             let message = serde_json::to_string(&response).unwrap_or_else(WsResponse::make_error_json_string);
-            vec![Route::WebSocket(websocket::Message::Text(message))]
+            vec![Route::Websocket(websocket::Message::Text(message))]
         },
     };
     WasmSlice::from(borsh::to_vec(&routes).expect("Routes should be serializable"))
@@ -32,7 +41,7 @@ pub extern "C" fn route_gossipsub(msg: WasmSlice) -> WasmSlice {
         .map(WsResponse::Success)
         .unwrap_or_else(WsResponse::Error);
     let message = serde_json::to_string(&response).unwrap_or_else(WsResponse::make_error_json_string);
-    let routes = vec![Route::WebSocket(websocket::Message::Text(message))];
+    let routes = vec![Route::Websocket(websocket::Message::Text(message))];
     WasmSlice::from(borsh::to_vec(&routes).expect("Routes should be serializable"))
 }
 
@@ -49,10 +58,14 @@ fn do_ws(msg: Vec<u8>) -> Result<WsMessage, String> {
 }
 
 fn do_gossipsub(msg: Vec<u8>) -> Result<WsMessage, String> {
-    let msg: gossipsub::Message = BorshDeserialize::deserialize(&mut msg.as_slice()).map_err(|err| err.to_string())?;
+    let msg: gossipsub::MessageIn =
+        BorshDeserialize::deserialize(&mut msg.as_slice()).map_err(|err| err.to_string())?;
     match msg {
-        gossipsub::Message::Text { peer_id, msg } => Ok(WsMessage::Text { peer_id, msg }),
-        gossipsub::Message::Dial(peer_id) => Ok(WsMessage::AddPeer(peer_id)),
-        gossipsub::Message::AddAddress(address) => Ok(WsMessage::AddAddress(address)),
+        gossipsub::MessageIn::Text { peer_id, msg } => Ok(WsMessage::Text { peer_id, msg }),
+        gossipsub::MessageIn::Response { id: _, result: Ok(()) } => Ok(WsMessage::Empty),
+        gossipsub::MessageIn::Response {
+            id: _,
+            result: Err(err),
+        } => Err(err.message),
     }
 }

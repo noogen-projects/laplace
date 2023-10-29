@@ -28,13 +28,13 @@ pub enum LappServiceMessage {
 
     Http(HttpMessage),
 
-    // WebSocket
-    NewWebSocket(Sender<WsServiceMessage>),
-    WebSocket(WsMessage),
+    // Websocket
+    NewWebsocket(Sender<WsServiceMessage>),
+    Websocket(WsMessage),
 
-    // GossipSub
-    NewGossipSub(Sender<GossipsubServiceMessage>),
-    GossipSub(GossipsubServiceMessage),
+    // Gossipsub
+    NewGossipsub(Sender<GossipsubServiceMessage>),
+    Gossipsub(gossipsub::MessageIn),
 }
 
 impl Message for LappServiceMessage {
@@ -97,11 +97,11 @@ impl LappService {
                             match msg {
                                 LappServiceMessage::Http(msg) => self.handle_http(msg).await,
 
-                                LappServiceMessage::NewWebSocket(sender) => self.handle_new_websocket(sender),
-                                LappServiceMessage::WebSocket(msg) => self.handle_websocket(msg).await,
+                                LappServiceMessage::NewWebsocket(sender) => self.handle_new_websocket(sender),
+                                LappServiceMessage::Websocket(msg) => self.handle_websocket(msg).await,
 
-                                LappServiceMessage::NewGossipSub(sender) => self.handle_new_gossipsub(sender),
-                                LappServiceMessage::GossipSub(msg) => self.handle_gossipsub(msg).await,
+                                LappServiceMessage::NewGossipsub(sender) => self.handle_new_gossipsub(sender),
+                                LappServiceMessage::Gossipsub(msg) => self.handle_gossipsub(msg).await,
 
                                 LappServiceMessage::Stop => break,
                             }
@@ -158,7 +158,7 @@ impl LappService {
         self.gossipsub_sender.replace(sender);
     }
 
-    async fn handle_gossipsub(&mut self, GossipsubServiceMessage(msg): GossipsubServiceMessage) {
+    async fn handle_gossipsub(&mut self, msg: gossipsub::MessageIn) {
         let Some(instance) = self.lapp.instance_mut() else {
             log::warn!("Handle gossipsub: instance not found for lapp {}", self.lapp.name());
             return;
@@ -180,7 +180,7 @@ impl LappService {
         }
     }
 
-    pub fn send_gossipsub(&self, msg: gossipsub::Message) {
+    pub fn send_gossipsub(&self, msg: gossipsub::MessageOut) {
         if let Some(sender) = &self.gossipsub_sender {
             if let Err(err) = sender.send(GossipsubServiceMessage(msg)) {
                 log::error!("Gossipsub send error: {err:?}");
@@ -191,13 +191,13 @@ impl LappService {
     }
 
     fn process_routes(&self, routes: Vec<Route>) {
-        log::info!("Routes: {routes:?}");
+        log::debug!("Routes: {routes:?}");
 
         for route in routes {
             match route {
                 Route::Http(msg) => log::error!("Unexpected HTTP route: {msg:?}"),
-                Route::WebSocket(msg) => self.send_websocket(msg),
-                Route::GossipSub(msg) => self.send_gossipsub(msg),
+                Route::Websocket(msg) => self.send_websocket(msg),
+                Route::Gossipsub(msg) => self.send_gossipsub(msg),
             }
         }
     }

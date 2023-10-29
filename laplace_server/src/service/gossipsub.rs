@@ -1,25 +1,26 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::io;
 use std::str::FromStr;
 use std::time::Duration;
 
-pub use laplace_wasm::route::gossipsub::Message;
+pub use laplace_wasm::route::gossipsub::{Message, MessageIn, MessageOut};
 use libp2p::futures::StreamExt;
 use libp2p::gossipsub::{self, IdentTopic as Topic, MessageAuthenticity, MessageId, ValidationMode};
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{mdns, noise, tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder};
-use thiserror::Error;
 use truba::{Context, Sender, UnboundedMpscChannel};
 
+pub use crate::service::gossipsub::error::{Error, GossipsubResult};
 use crate::service::lapp::LappServiceMessage;
 use crate::service::Addr;
 
+pub mod error;
+
 #[derive(Debug)]
-pub struct GossipsubServiceMessage(pub Message);
+pub struct GossipsubServiceMessage(pub MessageOut);
 
 impl truba::Message for GossipsubServiceMessage {
     type Channel = UnboundedMpscChannel<Self>;
@@ -54,7 +55,7 @@ impl GossipsubService {
         dial_ports: Vec<u16>,
         topic_name: impl Into<String>,
         lapp_service_sender: Sender<LappServiceMessage>,
-    ) -> Result<(), Error> {
+    ) -> GossipsubResult {
         let message_id_fn = |message: &gossipsub::Message| {
             let mut hasher = DefaultHasher::new();
             message.data.hash(&mut hasher);
@@ -92,7 +93,7 @@ impl GossipsubService {
 
         swarm.listen_on(address)?;
 
-        let mut receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
+        let mut service_message_receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
         let mut service = Self {
             swarm,
             dial_ports,
@@ -115,8 +116,12 @@ impl GossipsubService {
                 } => log::debug!("Local node incoming connection {local_addr}, {send_back_addr}"),
                 _ => {}
             },
-            Some(msg) = receiver.recv() => if let Err(err) = service.handle_p2p(msg) {
-                log::error!("P2P error for topic \"{}\": {err:?}", service.topic);
+            Some(GossipsubServiceMessage(MessageOut { id, msg })) = service_message_receiver.recv() => {
+                let result = service.handle_p2p(msg);
+                if let Err(err) = &result {
+                    log::error!("P2P error for topic \"{}\": {err:?}", service.topic);
+                }
+                service.send_to_lapp(MessageIn::Response { id, result: result.map_err(Into::into) });
             },
         });
 
@@ -146,6 +151,12 @@ impl GossipsubService {
         }
     }
 
+    fn send_to_lapp(&self, msg: MessageIn) {
+        if let Err(err) = self.lapp_service_sender.send(LappServiceMessage::Gossipsub(msg)) {
+            log::error!("Error occurs when send to lapp service: {err:?}");
+        }
+    }
+
     fn handle_gossipsub(&mut self, event: gossipsub::Event) {
         if let gossipsub::Event::Message {
             propagation_source: peer_id,
@@ -154,26 +165,21 @@ impl GossipsubService {
         } = event
         {
             let text = String::from_utf8_lossy(&message.data); // todo: catch error
-            log::info!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
+            log::debug!("Got message: {text} with id: {message_id} from peer: {peer_id:?}");
             if message.topic == self.topic.hash() {
-                if let Err(err) = self
-                    .lapp_service_sender
-                    .send(LappServiceMessage::GossipSub(GossipsubServiceMessage(Message::Text {
-                        peer_id: peer_id.to_base58(),
-                        msg: text.to_string(),
-                    })))
-                {
-                    log::error!("Error occurs when send to lapp service: {err:?}");
-                }
+                self.send_to_lapp(MessageIn::Text {
+                    peer_id: peer_id.to_base58(),
+                    msg: text.to_string(),
+                });
             }
         }
     }
 
-    fn handle_p2p(&mut self, GossipsubServiceMessage(msg): GossipsubServiceMessage) -> Result<(), Error> {
+    fn handle_p2p(&mut self, msg: Message) -> GossipsubResult {
         match msg {
             Message::Text { msg, .. } => {
                 let topic = self.topic.clone();
-                log::info!("Publish message: {msg}");
+                log::debug!("Publish message: {msg}");
                 self.swarm
                     .behaviour_mut()
                     .gossipsub
@@ -182,7 +188,7 @@ impl GossipsubService {
                     .map_err(Error::GossipsubPublishError)
             },
             Message::Dial(peer_id) => {
-                log::info!("Dial peer: {peer_id}");
+                log::debug!("Dial peer: {peer_id}");
                 PeerId::from_str(&peer_id)
                     .map_err(|err| Error::ParsePeerIdError(err.to_string()))
                     .and_then(|peer_id| {
@@ -195,7 +201,7 @@ impl GossipsubService {
                             for port in self.dial_ports.clone() {
                                 address.pop();
                                 address.push(Protocol::Tcp(port));
-                                log::info!("Dial address: {address}");
+                                log::debug!("Dial address: {address}");
                                 self.swarm.dial(address.clone()).map_err(Error::DialError)?;
                             }
                             Ok(())
@@ -205,7 +211,7 @@ impl GossipsubService {
                     })
             },
             Message::AddAddress(address) => {
-                log::info!("Add address: {address}");
+                log::debug!("Add address: {address}");
                 Multiaddr::from_str(&address)
                     .map_err(Error::WrongMultiaddr)
                     .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
@@ -214,49 +220,10 @@ impl GossipsubService {
     }
 }
 
-pub fn decode_keypair(bytes: &mut [u8]) -> Result<Keypair, Error> {
+pub fn decode_keypair(bytes: &mut [u8]) -> GossipsubResult<Keypair> {
     Ok(Keypair::from_protobuf_encoding(bytes)?)
 }
 
-pub fn decode_peer_id(bytes: &[u8]) -> Result<PeerId, Error> {
+pub fn decode_peer_id(bytes: &[u8]) -> GossipsubResult<PeerId> {
     PeerId::from_bytes(bytes).map_err(|err| Error::ParsePeerIdError(err.to_string()))
-}
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Noise error: {0}")]
-    NoiseError(#[from] libp2p::noise::Error),
-
-    #[error("Hash error: {0}")]
-    HashError(#[from] libp2p::multihash::Error),
-
-    #[error("Fail identity decode: {0}")]
-    IdentityDecodeError(#[from] libp2p::identity::DecodingError),
-
-    #[error("Wrong multiaddr: {0}")]
-    WrongMultiaddr(#[from] libp2p::multiaddr::Error),
-
-    #[error("Dial error: {0}")]
-    DialError(#[from] libp2p::swarm::DialError),
-
-    #[error("I/O error: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("Wrong behaviour: {0}")]
-    WrongBehaviour(String),
-
-    #[error("Gossipsub uninitialize: {0}")]
-    GossipsubUninit(String),
-
-    #[error("Gossipsub subscription error: {0:?}")]
-    GossipsubSubscribtionError(libp2p::gossipsub::SubscriptionError),
-
-    #[error("Gossipsub publish error: {0:?}")]
-    GossipsubPublishError(libp2p::gossipsub::PublishError),
-
-    #[error("Parse peer ID error: {0}")]
-    ParsePeerIdError(String),
-
-    #[error("Transport error: {0}")]
-    TransportError(#[from] libp2p::TransportError<io::Error>),
 }

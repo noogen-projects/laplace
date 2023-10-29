@@ -14,6 +14,7 @@ pub enum WsMessage {
     AddAddress(String),
     UpdateName(String),
     Text { peer_id: String, msg: String },
+    Empty,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

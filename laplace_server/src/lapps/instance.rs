@@ -65,7 +65,7 @@ impl LappInstance {
         Ok(BorshDeserialize::try_from_slice(&bytes)?)
     }
 
-    pub async fn route_gossipsub(&mut self, msg: &gossipsub::Message) -> LappInstanceResult<Vec<Route>> {
+    pub async fn route_gossipsub(&mut self, msg: &gossipsub::MessageIn) -> LappInstanceResult<Vec<Route>> {
         let route_gossipsub = self
             .instance
             .get_typed_func::<u64, u64>(&mut self.store, "route_gossipsub")?;
