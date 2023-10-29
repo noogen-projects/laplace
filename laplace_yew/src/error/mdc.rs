@@ -72,8 +72,12 @@ where
         let messages = self
             .errors
             .iter()
-            .map(|(error, count)| {
-                let message = format!("({count}) {error}");
+            .map(|(error, &count)| {
+                let message = if count > 1 {
+                    format!("({count}) {error}")
+                } else {
+                    error.clone()
+                };
                 html! { <div>{ message }</div> }
             })
             .collect::<Html>();
@@ -83,7 +87,11 @@ where
             .label(messages)
             .dismiss(
                 IconButton::new()
-                    .icon("close")
+                    .item(html! {
+                        <svg xmlns = "http://www.w3.org/2000/svg" height = "24" viewBox = "0 -960 960 960" width = "24">
+                            <path d = "m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
+                        </svg>
+                    })
                     .on_click(ctx.link().callback(move |_| ErrorsMsg::Close)),
             )
             .into()
