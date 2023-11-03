@@ -13,8 +13,8 @@ use truba::{Context, Message, Sender, UnboundedMpscChannel};
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::{Lapp, LappInstanceError};
 use crate::service::gossipsub::GossipsubServiceMessage;
-use crate::service::websocket::{WsMessage, WsServiceMessage};
-use crate::service::{gossipsub, Addr};
+use crate::service::websocket::WsServiceMessage;
+use crate::service::{gossipsub, websocket, Addr};
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -28,9 +28,9 @@ pub enum LappServiceMessage {
 
     Http(HttpMessage),
 
-    // Websocket
-    NewWebsocket(Sender<WsServiceMessage>),
-    Websocket(WsMessage),
+    // WebSocket
+    NewWebSocket(Sender<WsServiceMessage>),
+    WebSocket(websocket::MessageIn),
 
     // Gossipsub
     NewGossipsub(Sender<GossipsubServiceMessage>),
@@ -97,8 +97,8 @@ impl LappService {
                             match msg {
                                 LappServiceMessage::Http(msg) => self.handle_http(msg).await,
 
-                                LappServiceMessage::NewWebsocket(sender) => self.handle_new_websocket(sender),
-                                LappServiceMessage::Websocket(msg) => self.handle_websocket(msg).await,
+                                LappServiceMessage::NewWebSocket(sender) => self.handle_new_websocket(sender),
+                                LappServiceMessage::WebSocket(msg) => self.handle_websocket(msg).await,
 
                                 LappServiceMessage::NewGossipsub(sender) => self.handle_new_gossipsub(sender),
                                 LappServiceMessage::Gossipsub(msg) => self.handle_gossipsub(msg).await,
@@ -143,7 +143,7 @@ impl LappService {
         self.websocket_sender.replace(sender);
     }
 
-    async fn handle_websocket(&mut self, msg: WsMessage) {
+    async fn handle_websocket(&mut self, msg: websocket::MessageIn) {
         let Some(instance) = self.lapp.instance_mut() else {
             log::warn!("Handle websocket: instance not found for lapp {}", self.lapp.name());
             return;
@@ -169,7 +169,7 @@ impl LappService {
         }
     }
 
-    fn send_websocket(&self, msg: WsMessage) {
+    fn send_websocket(&self, msg: websocket::MessageOut) {
         let websocket_sender = self.websocket_sender.clone();
         if let Some(sender) = websocket_sender {
             if let Err(err) = sender.send(WsServiceMessage(msg)) {
@@ -196,7 +196,7 @@ impl LappService {
         for route in routes {
             match route {
                 Route::Http(msg) => log::error!("Unexpected HTTP route: {msg:?}"),
-                Route::Websocket(msg) => self.send_websocket(msg),
+                Route::WebSocket(msg) => self.send_websocket(msg),
                 Route::Gossipsub(msg) => self.send_gossipsub(msg),
             }
         }

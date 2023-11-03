@@ -9,21 +9,20 @@ pub struct Peer {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum WsMessage {
+pub enum ChatWsMessage {
     AddPeer(String),
     AddAddress(String),
     UpdateName(String),
     Text { peer_id: String, msg: String },
-    Empty,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum WsResponse {
-    Success(WsMessage),
+pub enum ChatWsResponse {
+    Success(ChatWsMessage),
     Error(String),
 }
 
-impl WsResponse {
+impl ChatWsResponse {
     pub fn make_error_json_string<E: fmt::Debug>(err: E) -> String {
         format!(r#"{{"Error":"{err:?}"}}"#)
     }

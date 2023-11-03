@@ -9,11 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Response routing to wasm from services, split wasm messages into In/Out
 - Lapp setting `application.autoload` to configure the lapp to load at Laplace startup or in lazy mode on request from lapp client part
 - Lapp setting `application.data_dir` to configure data dir of lapp, "data" by default (the relative path will be inside the lapp directory)
 - Display of errors in the client UI
 - Make commands for checking and testing
 - This changelog file
+
+### Fixed
+
+- It became possible to restart gossipsub service for lapp
+- Fix WS close send error
+- Improve services communication
 
 ### Changed
 

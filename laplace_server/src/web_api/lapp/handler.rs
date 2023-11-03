@@ -128,7 +128,7 @@ async fn process_ws_start(
     let ws_service_sender = ctx.actor_sender::<WsServiceMessage>(ws_service_addr.clone());
 
     lapp_service_sender
-        .send(LappServiceMessage::NewWebsocket(ws_service_sender))
+        .send(LappServiceMessage::NewWebSocket(ws_service_sender))
         .map_err(|err| {
             log::error!("Error occurs when send to lapp service: {err:?}, lapp: {lapp_name}");
             ServerError::LappServiceSendError(lapp_name.into())
@@ -176,13 +176,11 @@ fn process_gossipsub_start(
     let address = settings.addr.parse().map_err(gossipsub::Error::from)?;
     let dial_ports = settings.dial_ports.clone();
 
-    let gossipsub_service_addr = Addr::Lapp(lapp_name.clone());
-    let gossipsub_service_sender = ctx.actor_sender::<GossipsubServiceMessage>(gossipsub_service_addr.clone());
     log::info!("Start Gossipsub of lapp \"{lapp_name}\" for peer {peer_id}");
-
+    let gossipsub_service_addr = Addr::Lapp(lapp_name.clone());
     GossipsubService::run(
-        ctx,
-        gossipsub_service_addr,
+        ctx.clone(),
+        gossipsub_service_addr.clone(),
         keypair,
         peer_id,
         &[],
@@ -190,7 +188,12 @@ fn process_gossipsub_start(
         dial_ports,
         "test-net",
         lapp_service_sender.clone(),
-    )?;
+    )
+    .map_err(|err| {
+        log::error!("Error occurs when run gossipsub service: {err:?}");
+        err
+    })?;
+    let gossipsub_service_sender = ctx.actor_sender::<GossipsubServiceMessage>(gossipsub_service_addr);
 
     lapp_service_sender
         .send(LappServiceMessage::NewGossipsub(gossipsub_service_sender))

@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::ops::ControlFlow;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -93,7 +94,7 @@ impl GossipsubService {
 
         swarm.listen_on(address)?;
 
-        let mut service_message_receiver = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
+        let mut service_message_in = ctx.actor_receiver::<GossipsubServiceMessage>(actor_id);
         let mut service = Self {
             swarm,
             dial_ports,
@@ -108,20 +109,27 @@ impl GossipsubService {
                 SwarmEvent::Behaviour(GossipsubServiceBehaviourEvent::Gossipsub(event)) => service.handle_gossipsub(event),
                 SwarmEvent::NewListenAddr { address, .. } => {
                     log::info!("Local node is listening on {address}");
-                }
+                },
                 SwarmEvent::IncomingConnection {
                     connection_id: _,
                     local_addr,
                     send_back_addr,
                 } => log::debug!("Local node incoming connection {local_addr}, {send_back_addr}"),
-                _ => {}
+                _ => {},
             },
-            Some(GossipsubServiceMessage(MessageOut { id, msg })) = service_message_receiver.recv() => {
+            Some(GossipsubServiceMessage(MessageOut { id, msg })) = service_message_in.recv() => {
                 let result = service.handle_p2p(msg);
-                if let Err(err) = &result {
-                    log::error!("P2P error for topic \"{}\": {err:?}", service.topic);
-                }
-                service.send_to_lapp(MessageIn::Response { id, result: result.map_err(Into::into) });
+                let is_break = match &result {
+                    Ok(ControlFlow::Break(_)) => true,
+                    Err(err) => {
+                        log::error!("P2P error for topic \"{}\": {err:?}", service.topic);
+                        false
+                    }
+                    _ => false,
+                };
+                service.send_to_lapp(MessageIn::Response { id, result: result.map(drop).map_err(Into::into) });
+
+                if is_break { break }
             },
         });
 
@@ -151,12 +159,6 @@ impl GossipsubService {
         }
     }
 
-    fn send_to_lapp(&self, msg: MessageIn) {
-        if let Err(err) = self.lapp_service_sender.send(LappServiceMessage::Gossipsub(msg)) {
-            log::error!("Error occurs when send to lapp service: {err:?}");
-        }
-    }
-
     fn handle_gossipsub(&mut self, event: gossipsub::Event) {
         if let gossipsub::Event::Message {
             propagation_source: peer_id,
@@ -175,7 +177,7 @@ impl GossipsubService {
         }
     }
 
-    fn handle_p2p(&mut self, msg: Message) -> GossipsubResult {
+    fn handle_p2p(&mut self, msg: Message) -> GossipsubResult<ControlFlow<()>> {
         match msg {
             Message::Text { msg, .. } => {
                 let topic = self.topic.clone();
@@ -185,6 +187,7 @@ impl GossipsubService {
                     .gossipsub
                     .publish(topic, msg)
                     .map(drop)
+                    .map(ControlFlow::Continue)
                     .map_err(Error::GossipsubPublishError)
             },
             Message::Dial(peer_id) => {
@@ -204,7 +207,7 @@ impl GossipsubService {
                                 log::debug!("Dial address: {address}");
                                 self.swarm.dial(address.clone()).map_err(Error::DialError)?;
                             }
-                            Ok(())
+                            Ok(ControlFlow::Continue(()))
                         } else {
                             Err(Error::DialError(libp2p::swarm::DialError::NoAddresses))
                         }
@@ -215,7 +218,18 @@ impl GossipsubService {
                 Multiaddr::from_str(&address)
                     .map_err(Error::WrongMultiaddr)
                     .and_then(|address| self.swarm.dial(address).map_err(Error::DialError))
+                    .map(ControlFlow::Continue)
             },
+            Message::Close => {
+                log::debug!("Closing gossipsub service");
+                Ok(ControlFlow::Break(()))
+            },
+        }
+    }
+
+    fn send_to_lapp(&self, msg: MessageIn) {
+        if let Err(err) = self.lapp_service_sender.send(LappServiceMessage::Gossipsub(msg)) {
+            log::error!("Error occurs when send to lapp service: {err:?}");
         }
     }
 }

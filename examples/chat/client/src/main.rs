@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use anyhow::{anyhow, Context as _, Error};
-use chat_common::{Peer, WsMessage, WsResponse};
+use chat_common::{ChatWsMessage, ChatWsResponse, Peer};
 use laplace_yew::error::{Errors, ErrorsMsg};
 use laplace_yew::{MsgError, RawHtml};
 use libp2p_identity::{Keypair, PeerId};
@@ -79,7 +79,7 @@ struct Root {
 
 enum WsAction {
     SendData(String),
-    ReceiveData(WsResponse),
+    ReceiveData(ChatWsResponse),
 }
 
 enum Msg {
@@ -303,7 +303,7 @@ impl Component for Root {
                     });
                     state
                         .ws
-                        .send(to_websocket_message(&WsMessage::AddPeer(peer_id)))
+                        .send(to_websocket_message(&ChatWsMessage::AddPeer(peer_id)))
                         .context("Send AddPeer message error")
                         .msg_error(ctx.link());
                     true
@@ -315,7 +315,7 @@ impl Component for Root {
                 if let State::Chat(state) = &mut self.state {
                     state
                         .ws
-                        .send(to_websocket_message(&WsMessage::AddAddress(address)))
+                        .send(to_websocket_message(&ChatWsMessage::AddAddress(address)))
                         .context("Send AddAddress message error")
                         .msg_error(ctx.link());
                 }
@@ -340,7 +340,7 @@ impl Component for Root {
                             });
                             state
                                 .ws
-                                .send(to_websocket_message(&WsMessage::Text {
+                                .send(to_websocket_message(&ChatWsMessage::Text {
                                     peer_id: channel.correspondent_id.clone(),
                                     msg: request,
                                 }))
@@ -352,7 +352,7 @@ impl Component for Root {
                 },
                 WsAction::ReceiveData(response) => {
                     match response {
-                        WsResponse::Success(WsMessage::Text { peer_id, msg }) => {
+                        ChatWsResponse::Success(ChatWsMessage::Text { peer_id, msg }) => {
                             if let State::Chat(state) = &mut self.state {
                                 if let Some(channel) = state
                                     .channels
@@ -367,7 +367,7 @@ impl Component for Root {
                                 }
                             }
                         },
-                        WsResponse::Success(WsMessage::AddAddress(address)) => {
+                        ChatWsResponse::Success(ChatWsMessage::AddAddress(address)) => {
                             if let Some(link) = &self.addresses_link {
                                 link.send_message(addresses::Msg::Add(address));
                             }
@@ -720,7 +720,7 @@ pub fn remove_class_from_exist_html_element(selector: &str, class: &str) {
     remove_class_from_html_element(select_exist_html_element(selector), class);
 }
 
-fn to_websocket_message(msg: &WsMessage) -> websocket::Message {
+fn to_websocket_message(msg: &ChatWsMessage) -> websocket::Message {
     websocket::Message::Text(serde_json::to_string(msg).expect("Can't serialize message"))
 }
 

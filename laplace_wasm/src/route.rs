@@ -8,6 +8,6 @@ pub mod websocket;
 #[derive(Debug, From, BorshSerialize, BorshDeserialize)]
 pub enum Route {
     Http(http::Message),
-    Websocket(websocket::Message),
+    WebSocket(websocket::MessageOut),
     Gossipsub(gossipsub::MessageOut),
 }

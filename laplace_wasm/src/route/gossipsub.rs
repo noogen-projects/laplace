@@ -17,6 +17,7 @@ pub enum Message {
     Dial(String),
     AddAddress(String),
     Text { peer_id: String, msg: String },
+    Close,
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]

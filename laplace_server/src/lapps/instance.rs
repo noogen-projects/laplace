@@ -55,7 +55,7 @@ impl LappInstance {
         Ok(BorshDeserialize::deserialize(&mut bytes.as_slice())?)
     }
 
-    pub async fn route_ws(&mut self, msg: &websocket::Message) -> LappInstanceResult<Vec<Route>> {
+    pub async fn route_ws(&mut self, msg: &websocket::MessageIn) -> LappInstanceResult<Vec<Route>> {
         let route_ws_fn = self.instance.get_typed_func::<u64, u64>(&mut self.store, "route_ws")?;
         let arg = self.bytes_to_wasm_slice(&borsh::to_vec(&msg)?).await?;
 
