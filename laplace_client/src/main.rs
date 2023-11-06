@@ -16,8 +16,8 @@ use yew_mdc_widgets::dom::{self, JsValue};
 use yew_mdc_widgets::wasm_bindgen::prelude::{wasm_bindgen, JsError};
 use yew_mdc_widgets::wasm_bindgen::{self};
 use yew_mdc_widgets::{
-    auto_init, console, Button, Chip, ChipSet, CustomEvent, Dialog, Drawer, Element, IconButton, List, ListItem,
-    MdcWidget, Switch, TopAppBar,
+    auto_init, console, Button, Checkbox, Chip, ChipSet, CustomEvent, Dialog, Drawer, Element, IconButton, List,
+    ListItem, MdcWidget, Switch, TopAppBar,
 };
 
 use self::i18n::label::*;
@@ -346,11 +346,11 @@ impl Root {
             }))
             .turn(lapp_settings.enabled());
 
-        let autoload_switch = Switch::new()
+        let autoload_checkbox = Checkbox::new()
             .id(format!("{lapp_name}--autoload"))
             .label("Autoload")
             .on_click(ctx.link().callback(move |_| Msg::SwitchAutoload(lapp_name.clone())))
-            .turn(lapp_settings.autoload());
+            .checked(lapp_settings.autoload());
 
         let permissions = ChipSet::new()
             .id(format!("{}--permissions", lapp_settings.name()))
@@ -387,7 +387,7 @@ impl Root {
                 <div class = "lapps-table-row">
                     <div class = "lapps-table-col">
                         <div class = "mdc-form-field mdc-form-field--align-end">
-                            { autoload_switch }
+                            { autoload_checkbox }
                         </div>
                     </div>
                 </div>
