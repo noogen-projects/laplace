@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use anyhow::{anyhow, Context as _, Error};
-use chat_common::{ChatWsMessage, ChatWsResponse, Peer};
+use chat_common::{ChatWsMessage, ChatWsRequest, ChatWsResponse, Peer};
 use laplace_yew::error::{Errors, ErrorsMsg};
 use laplace_yew::{MsgError, RawHtml};
 use libp2p_identity::{Keypair, PeerId};
@@ -303,8 +303,8 @@ impl Component for Root {
                     });
                     state
                         .ws
-                        .send(to_websocket_message(&ChatWsMessage::AddPeer(peer_id)))
-                        .context("Send AddPeer message error")
+                        .send(to_websocket_message(&ChatWsRequest::AddPeer(peer_id)))
+                        .context("Send AddPeer request error")
                         .msg_error(ctx.link());
                     true
                 } else {
@@ -315,8 +315,8 @@ impl Component for Root {
                 if let State::Chat(state) = &mut self.state {
                     state
                         .ws
-                        .send(to_websocket_message(&ChatWsMessage::AddAddress(address)))
-                        .context("Send AddAddress message error")
+                        .send(to_websocket_message(&ChatWsRequest::AddAddress(address)))
+                        .context("Send AddAddress request error")
                         .msg_error(ctx.link());
                 }
                 false
@@ -340,11 +340,11 @@ impl Component for Root {
                             });
                             state
                                 .ws
-                                .send(to_websocket_message(&ChatWsMessage::Text {
+                                .send(to_websocket_message(&ChatWsRequest::SendMessage(ChatWsMessage {
                                     peer_id: channel.correspondent_id.clone(),
                                     msg: request,
-                                }))
-                                .context("Send Text message error")
+                                })))
+                                .context("Send message error")
                                 .msg_error(ctx.link());
                         }
                     }
@@ -352,7 +352,37 @@ impl Component for Root {
                 },
                 WsAction::ReceiveData(response) => {
                     match response {
-                        ChatWsResponse::Success(ChatWsMessage::Text { peer_id, msg }) => {
+                        ChatWsResponse::AddPeerResult(peer_id, result) => {
+                            if let State::Chat(state) = &mut self.state {
+                                if let Err(err) = result {
+                                    if let Some(idx) = state
+                                        .channels
+                                        .iter()
+                                        .position(|channel| channel.correspondent_id == peer_id)
+                                    {
+                                        state.channels.remove(idx);
+                                    }
+                                    self.spawn_error(format!("Add peer: {peer_id}. {err}"));
+                                    return true;
+                                }
+                            }
+                        },
+                        ChatWsResponse::AddAddressResult(address, result) => {
+                            if let Err(err) = result {
+                                ctx.link()
+                                    .send_message(Msg::Error(anyhow!("Add address error: {address}, {err}")));
+                            } else if let Some(link) = &self.addresses_link {
+                                link.send_message(addresses::Msg::Add(address));
+                            }
+                        },
+                        ChatWsResponse::SendMessageResult(peer_id, result) => {
+                            if let Err(err) = result {
+                                ctx.link().send_message(Msg::Error(anyhow!(
+                                    "Error when sending message to peer {peer_id}: {err}"
+                                )));
+                            }
+                        },
+                        ChatWsResponse::ReceiveMessage(ChatWsMessage { peer_id, msg }) => {
                             if let State::Chat(state) = &mut self.state {
                                 if let Some(channel) = state
                                     .channels
@@ -367,22 +397,13 @@ impl Component for Root {
                                 }
                             }
                         },
-                        ChatWsResponse::Success(ChatWsMessage::AddAddress(address)) => {
-                            if let Some(link) = &self.addresses_link {
-                                link.send_message(addresses::Msg::Add(address));
-                            }
-                        },
-                        msg => ctx.link().send_message(Msg::Error(anyhow!("{:?}", msg))),
+                        ChatWsResponse::InternalError(err) => ctx.link().send_message(Msg::Error(anyhow!("{err}"))),
                     }
                     false
                 },
             },
             Msg::Error(error) => {
-                let error = error.to_string();
-                console::error!(&error);
-                if let Some(link) = self.errors_link.as_ref() {
-                    link.callback(move |_| ErrorsMsg::Spawn(error.clone())).emit(());
-                }
+                self.spawn_error(error.to_string());
                 true
             },
             Msg::SetErrorsLink(link) => {
@@ -488,6 +509,14 @@ impl Component for Root {
 }
 
 impl Root {
+    fn spawn_error(&self, error: impl Into<String> + AsRef<str>) {
+        console::error!(error.as_ref());
+        if let Some(link) = self.errors_link.as_ref() {
+            let error = error.into();
+            link.callback(move |_| ErrorsMsg::Spawn(error.clone())).emit(());
+        }
+    }
+
     fn view_sign_in(&self, ctx: &Context<Self>) -> Html {
         let generate_keypair_button = Button::new().id("generate-key-button").label("Generate").on_click(|_| {
             let keypair = Keypair::generate_ed25519();
@@ -720,8 +749,8 @@ pub fn remove_class_from_exist_html_element(selector: &str, class: &str) {
     remove_class_from_html_element(select_exist_html_element(selector), class);
 }
 
-fn to_websocket_message(msg: &ChatWsMessage) -> websocket::Message {
-    websocket::Message::Text(serde_json::to_string(msg).expect("Can't serialize message"))
+fn to_websocket_message(request: &ChatWsRequest) -> websocket::Message {
+    websocket::Message::Text(serde_json::to_string(request).expect("Can't serialize request"))
 }
 
 fn main() {
