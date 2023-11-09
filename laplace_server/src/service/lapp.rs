@@ -134,8 +134,11 @@ impl LappService {
         let HttpMessage { request, response_out } = msg;
 
         let result = self.lapp.process_http(*request).await;
-        if let Err(err) = response_out.send(result) {
+        if let Err(err) = &result {
             log::error!("Cannot process HTTP for lapp '{}': {err:?}", self.lapp.name());
+        }
+        if let Err(result) = response_out.send(result) {
+            log::error!("Cannot send HTTP result for lapp '{}': {result:?}", self.lapp.name());
         }
     }
 
