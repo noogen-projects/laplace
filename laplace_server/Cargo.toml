@@ -12,24 +12,25 @@ description = "The server of the local-first web-application platform"
 
 [dependencies]
 anyhow = "1.0"
-axum = { version = "0.6", features = ["ws", "multipart"] }
-axum-server = { version = "0.5", features = ["tls-rustls"] }
-axum_typed_multipart = "0.10"
+axum = { version = "0.6", features = ["ws", "multipart"] } # updating after release reqwest 0.12
+axum-server = { version = "0.5", features = ["tls-rustls"] } # depend on axum
+axum_typed_multipart = "0.10" # depend on axum
 borsh = { workspace = true }
 bs58 = "0.5"
-cap-std = "2.0"
+cap-std = "2.0" # depend on wasmtime
 clap = { version = "4.4", features = ["derive"] }
-config = "0.13"
+config = "0.14"
 const_format = "0.2"
 cookie = "0.18"
 derive_more = "0.99"
-flexi_logger = "0.27"
+flexi_logger = "0.28"
 futures = "0.3"
-hyper = "0.14"
+humantime-serde = "1.1"
+hyper = "0.14" # updating after release reqwest 0.12
 laplace_common = { path = "../laplace_common" }
 laplace_wasm = { path = "../laplace_wasm" }
 lazy_static = "1.4"
-libp2p = { version = "0.52", features = [
+libp2p = { version = "0.53", features = [
     "dns",
     "gossipsub",
     "macros",
@@ -41,12 +42,15 @@ libp2p = { version = "0.52", features = [
     "yamux",
 ] }
 log = "0.4"
-rcgen = "0.11"
-reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls"] }
+rcgen = "0.12"
+reqwest = { version = "0.11", default-features = false, features = [
+    "blocking",
+    "rustls-tls",
+] }
 ring = "0.17"
-rusqlite = { version = "0.29", features = ["bundled"] }
-rustls = "0.21"
-rustls-pemfile = "1.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+rustls = "0.21" # depend on axum
+rustls-pemfile = "2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3.8"
@@ -54,8 +58,9 @@ thiserror = "1.0"
 tokio = { workspace = true }
 toml = "0.8"
 tower = "0.4"
-tower-http = { version = "0.4", features = ["fs", "set-header", "normalize-path", "compression-gzip"] }
+tower-http = { version = "0.4", features = ["fs", "set-header", "normalize-path", "compression-gzip"] } # depend on axum
 truba = "0.1"
-wasmtime = { git = "https://github.com/bytecodealliance/wasmtime.git" }
-wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime.git", features = ["tokio"] }
+wasi-common = "18.0"
+wasmtime = "18.0"
+wasmtime-wasi = "18.0"
 zip = "0.6"

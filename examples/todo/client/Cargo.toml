@@ -15,7 +15,7 @@ description = "The Todo lapp example"
 anyhow = "1.0"
 gloo-console = "0.3"
 laplace_yew = { path = "../../../laplace_yew" }
-strum = { version = "0.25", features = ["derive"] }
+strum = { workspace = true }
 todo_common = { path = "../common" }
 wasm-dom = "1.0"
 wasm-web-helpers = "0.2"

@@ -11,9 +11,10 @@ use laplace_wasm::http::{Request, Response};
 use reqwest::Client;
 use rusqlite::Connection;
 use serde::{Serialize, Serializer};
+use wasmtime::component::ResourceTable;
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi::preview2::preview1::add_to_linker_async;
-use wasmtime_wasi::preview2::{DirPerms, FilePerms, Table, WasiCtxBuilder};
+use wasmtime_wasi::preview2::{DirPerms, FilePerms, WasiCtxBuilder};
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::settings::{FileSettings, LappSettings, LappSettingsResult};
@@ -223,7 +224,7 @@ impl Lapp {
         }
 
         let wasi = wasi.build();
-        let table = Table::new();
+        let table = ResourceTable::new();
         let ctx = Ctx::new(wasi, table);
         let mut store = Store::new(&ENGINE, ctx);
 

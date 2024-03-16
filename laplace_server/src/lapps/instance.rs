@@ -6,9 +6,10 @@ use borsh::BorshDeserialize;
 use laplace_wasm::route::{gossipsub, websocket, Route};
 use laplace_wasm::{http, WasmSlice};
 use thiserror::Error;
+use wasmtime::component::ResourceTable;
 use wasmtime::{Instance, Store};
 use wasmtime_wasi::preview2::preview1::{WasiPreview1Adapter, WasiPreview1View};
-use wasmtime_wasi::preview2::{Table, WasiCtx, WasiView};
+use wasmtime_wasi::preview2::{WasiCtx, WasiView};
 
 use crate::lapps::wasm_interop::database::DatabaseCtx;
 use crate::lapps::wasm_interop::http::HttpCtx;
@@ -128,7 +129,7 @@ impl Deref for LappInstance {
 
 pub struct Ctx {
     pub wasi: WasiCtx,
-    pub table: Table,
+    pub table: ResourceTable,
     pub adapter: WasiPreview1Adapter,
     pub memory_data: Option<MemoryManagementHostData>,
     pub database: Option<DatabaseCtx>,
@@ -136,7 +137,7 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new(wasi: WasiCtx, table: Table) -> Self {
+    pub fn new(wasi: WasiCtx, table: ResourceTable) -> Self {
         Self {
             wasi,
             table,
@@ -153,19 +154,11 @@ impl Ctx {
 }
 
 impl WasiView for Ctx {
-    fn table(&self) -> &Table {
-        &self.table
-    }
-
-    fn table_mut(&mut self) -> &mut Table {
+    fn table(&mut self) -> &mut ResourceTable {
         &mut self.table
     }
 
-    fn ctx(&self) -> &WasiCtx {
-        &self.wasi
-    }
-
-    fn ctx_mut(&mut self) -> &mut WasiCtx {
+    fn ctx(&mut self) -> &mut WasiCtx {
         &mut self.wasi
     }
 }

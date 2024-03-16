@@ -2,9 +2,9 @@ use std::fs;
 use std::io::{BufReader, Write};
 use std::path::Path;
 
-use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
+use rcgen::{CertificateParams, DistinguishedName, DnType};
 use ring::rand;
-use rustls::PrivateKey;
+use rustls::{Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 
 use crate::error::{AppError, AppResult};
@@ -33,7 +33,7 @@ pub fn prepare_certificates(
     certificate_path: &Path,
     private_key_path: &Path,
     host: impl Into<String>,
-) -> AppResult<(Vec<rustls::Certificate>, PrivateKey)> {
+) -> AppResult<(Vec<Certificate>, PrivateKey)> {
     if !certificate_path.exists() && !private_key_path.exists() {
         log::info!("Generate SSL certificate");
         let certificate = generate_self_signed_certificate(vec![host.into()])?;
@@ -50,22 +50,22 @@ pub fn prepare_certificates(
     }
 
     log::info!("Bind SSL");
-    let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?))?
-        .into_iter()
-        .map(rustls::Certificate)
-        .collect();
+    let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?))
+        .map(|certificate| certificate.map(|der| rustls::Certificate(der.as_ref().into())))
+        .collect::<Result<Vec<_>, _>>()?;
 
     let private_key = PrivateKey(
-        pkcs8_private_keys(&mut BufReader::new(fs::File::open(private_key_path)?))?
-            .into_iter()
+        pkcs8_private_keys(&mut BufReader::new(fs::File::open(private_key_path)?))
             .next()
-            .ok_or(AppError::MissingPrivateKey)?,
+            .ok_or(AppError::MissingPrivateKey)??
+            .secret_pkcs8_der()
+            .into(),
     );
 
     Ok((certificates, private_key))
 }
 
-pub fn generate_self_signed_certificate(subject_alt_names: impl Into<Vec<String>>) -> AppResult<Certificate> {
+pub fn generate_self_signed_certificate(subject_alt_names: impl Into<Vec<String>>) -> AppResult<rcgen::Certificate> {
     let mut distinguished_name = DistinguishedName::new();
     distinguished_name.push(DnType::CommonName, "Laplace self signed cert");
     distinguished_name.push(DnType::OrganizationName, "Laplace community");
@@ -73,5 +73,5 @@ pub fn generate_self_signed_certificate(subject_alt_names: impl Into<Vec<String>
     let mut params = CertificateParams::new(subject_alt_names);
     params.distinguished_name = distinguished_name;
 
-    Certificate::from_params(params).map_err(Into::into)
+    rcgen::Certificate::from_params(params).map_err(Into::into)
 }

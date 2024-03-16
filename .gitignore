@@ -4,6 +4,8 @@
 
 **/*.rs.bk
 
+TODO.*
+
 **/.idea
 **/*.iml
 **/.vscode

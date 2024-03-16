@@ -67,7 +67,7 @@ impl GossipsubService {
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id_fn)
             .build()
-            .map_err(|err| Error::GossipsubUninit(err.into()))?;
+            .map_err(|err| Error::GossipsubUninit(err.to_string()))?;
 
         let behaviour = GossipsubServiceBehaviour {
             gossipsub: gossipsub::Behaviour::new(MessageAuthenticity::Signed(keypair.clone()), gossipsub_config)

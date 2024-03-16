@@ -6,7 +6,7 @@ use axum::extract::ws;
 use axum::extract::ws::WebSocket;
 use derive_more::From;
 use futures::stream::{SplitSink, SplitStream};
-use futures::{SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, TryStreamExt};
 pub use laplace_wasm::route::websocket::{Message, MessageIn, MessageOut};
 use tokio::time;
 use truba::{Context, Sender, UnboundedMpscChannel};

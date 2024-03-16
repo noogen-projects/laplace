@@ -1,12 +1,11 @@
-use axum::body::{Body, Bytes, Full};
+use axum::body::Body;
 use axum::extract::{Path, State, WebSocketUpgrade};
-use axum::http::Request;
+use axum::http::{Request, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use laplace_common::api::Peer;
 use laplace_common::lapp::settings::GossipsubSettings;
 use laplace_wasm::http;
-use reqwest::StatusCode;
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 use truba::{Context, Sender};
@@ -88,14 +87,14 @@ async fn process_http(
     lapps_provider: LappsProvider,
     lapp_name: String,
     request: Request<Body>,
-) -> ServerResult<Response<Full<Bytes>>> {
+) -> ServerResult<Response<Body>> {
     let request = convert::to_wasm_http_request(request).await?;
     let process_http_fut = lapps_provider.read_manager().await.process_http(lapp_name, request);
     let response: http::Response = process_http_fut.await?;
 
     Response::builder()
         .status(response.status)
-        .body(Full::from(response.body))
+        .body(Body::from(response.body))
         .map_err(Into::into)
 }
 

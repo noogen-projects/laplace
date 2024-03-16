@@ -133,7 +133,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             .serve(router.into_make_service())
             .await?
     } else {
-        axum::Server::bind(&http_server_addr)
+        axum_server::Server::bind(http_server_addr)
             .serve(router.into_make_service())
             .await?
     };

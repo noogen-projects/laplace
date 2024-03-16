@@ -16,7 +16,7 @@ anyhow = "1.0"
 laplace_yew = { path = "../../../laplace_yew" }
 lew = { git = "https://github.com/noogen-projects/lew" }
 notes_common = { path = "../common" }
-pulldown-cmark = "0.9"
+pulldown-cmark = "0.10"
 wasm-web-helpers = "0.2"
 web-sys = { version = "0.3", features = [
     "Window",

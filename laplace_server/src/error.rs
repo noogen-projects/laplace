@@ -3,7 +3,6 @@ use std::net::AddrParseError;
 
 use flexi_logger::FlexiLoggerError;
 use laplace_common::lapp::Permission;
-use rcgen::RcgenError;
 use rusqlite::Error as SqlError;
 use thiserror::Error;
 
@@ -30,7 +29,7 @@ pub enum AppError {
     TlsError(#[from] rustls::Error),
 
     #[error("Certificate generation error: {0:?}")]
-    RcgenError(#[from] RcgenError),
+    RcgenError(#[from] rcgen::Error),
 
     #[error("Missing private key")]
     MissingPrivateKey,
