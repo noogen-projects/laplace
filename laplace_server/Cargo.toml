@@ -1,6 +1,6 @@
 [package]
 name = "laplace_server"
-version = "0.1.5"
+version = "0.1.6"
 authors = [
     "Alexander Mescheryakov <freecoder.xx@gmail.com>",
     "Noogen Team <info.noogen@gmail.com>",
