@@ -12,9 +12,9 @@ description = "The server of the local-first web-application platform"
 
 [dependencies]
 anyhow = "1.0"
-axum = { version = "0.6", features = ["ws", "multipart"] } # updating after release reqwest 0.12
-axum-server = { version = "0.5", features = ["tls-rustls"] } # depend on axum
-axum_typed_multipart = "0.10" # depend on axum
+axum = { version = "0.7", features = ["ws", "multipart"] }
+axum-server = { version = "0.6", features = ["tls-rustls"] }
+axum_typed_multipart = "0.11"
 borsh = { workspace = true }
 bs58 = "0.5"
 cap-std = "2.0" # depend on wasmtime
@@ -25,8 +25,9 @@ cookie = "0.18"
 derive_more = "0.99"
 flexi_logger = "0.28"
 futures = "0.3"
+http-body-util = "0.1"
 humantime-serde = "1.1"
-hyper = "0.14" # updating after release reqwest 0.12
+hyper = "1.3"
 laplace_common = { path = "../laplace_common" }
 laplace_wasm = { path = "../laplace_wasm" }
 lazy_static = "1.4"
@@ -42,14 +43,14 @@ libp2p = { version = "0.53", features = [
     "yamux",
 ] }
 log = "0.4"
-rcgen = "0.12"
-reqwest = { version = "0.11", default-features = false, features = [
+rcgen = "0.13"
+reqwest = { version = "0.12", default-features = false, features = [
     "blocking",
     "rustls-tls",
 ] }
 ring = "0.17"
 rusqlite = { version = "0.31", features = ["bundled"] }
-rustls = "0.21" # depend on axum
+rustls = "0.21" # depend on axum-server
 rustls-pemfile = "2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -58,7 +59,7 @@ thiserror = "1.0"
 tokio = { workspace = true }
 toml = "0.8"
 tower = "0.4"
-tower-http = { version = "0.4", features = ["fs", "set-header", "normalize-path", "compression-gzip"] } # depend on axum
+tower-http = { version = "0.5", features = ["fs", "set-header", "normalize-path", "compression-gzip"] } # depend on axum
 truba = "0.1"
 wasi-common = "18.0"
 wasmtime = "18.0"

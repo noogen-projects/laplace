@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{BufReader, Write};
 use std::path::Path;
 
-use rcgen::{CertificateParams, DistinguishedName, DnType};
+use rcgen::{CertificateParams, CertifiedKey, DistinguishedName, DnType, KeyPair};
 use ring::rand;
 use rustls::{Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
@@ -36,7 +36,7 @@ pub fn prepare_certificates(
 ) -> AppResult<(Vec<Certificate>, PrivateKey)> {
     if !certificate_path.exists() && !private_key_path.exists() {
         log::info!("Generate SSL certificate");
-        let certificate = generate_self_signed_certificate(vec![host.into()])?;
+        let CertifiedKey { cert, key_pair } = generate_self_signed_certificate(vec![host.into()])?;
 
         if let Some(parent) = private_key_path.parent() {
             fs::create_dir_all(parent)?;
@@ -45,8 +45,8 @@ pub fn prepare_certificates(
             fs::create_dir_all(parent)?;
         }
 
-        fs::File::create(private_key_path)?.write_all(certificate.serialize_private_key_pem().as_bytes())?;
-        fs::File::create(certificate_path)?.write_all(certificate.serialize_pem()?.as_bytes())?;
+        fs::File::create(private_key_path)?.write_all(key_pair.serialize_pem().as_bytes())?;
+        fs::File::create(certificate_path)?.write_all(cert.pem().as_bytes())?;
     }
 
     log::info!("Bind SSL");
@@ -65,13 +65,18 @@ pub fn prepare_certificates(
     Ok((certificates, private_key))
 }
 
-pub fn generate_self_signed_certificate(subject_alt_names: impl Into<Vec<String>>) -> AppResult<rcgen::Certificate> {
+pub fn generate_self_signed_certificate(
+    subject_alt_names: impl Into<Vec<String>>,
+) -> Result<CertifiedKey, rcgen::Error> {
     let mut distinguished_name = DistinguishedName::new();
     distinguished_name.push(DnType::CommonName, "Laplace self signed cert");
     distinguished_name.push(DnType::OrganizationName, "Laplace community");
 
-    let mut params = CertificateParams::new(subject_alt_names);
+    let mut params = CertificateParams::new(subject_alt_names)?;
     params.distinguished_name = distinguished_name;
 
-    rcgen::Certificate::from_params(params).map_err(Into::into)
+    let key_pair = KeyPair::generate()?;
+    let cert = params.self_signed(&key_pair)?;
+
+    Ok(CertifiedKey { cert, key_pair })
 }

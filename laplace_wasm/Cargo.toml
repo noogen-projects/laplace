@@ -14,6 +14,6 @@ description = "The WASM utilities of the local-firs web-application platform"
 [dependencies]
 borsh = { workspace = true }
 derive_more = "0.99"
-http = "0.2" # updating after release reqwest 0.12
+http = "1.1"
 laplace_wasm_macro = { path = "../laplace_wasm_macro" }
 thiserror = "1.0"

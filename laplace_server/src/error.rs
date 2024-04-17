@@ -48,6 +48,9 @@ pub enum ServerError {
     #[error("Web error: {0}")]
     WebError(#[from] hyper::Error),
 
+    #[error("Web server error: {0}")]
+    WebServerError(#[from] axum::Error),
+
     #[error("Http error: {0}")]
     HttpError(#[from] axum::http::Error),
 

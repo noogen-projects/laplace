@@ -1,5 +1,4 @@
-use std::fmt::Debug;
-
+use axum::body::Body;
 use axum::extract::State;
 use axum::http::{header, Request, StatusCode};
 use axum::middleware::Next;
@@ -10,10 +9,10 @@ use cookie::Cookie;
 use crate::lapps::{Lapp, LappsProvider};
 use crate::web_api::{err_into_json_response, ResultResponse};
 
-pub async fn check_access<B: Debug>(
+pub async fn check_access(
     State((lapps_provider, laplace_access_token)): State<(LappsProvider, &'static str)>,
-    request: Request<B>,
-    next: Next<B>,
+    request: Request<Body>,
+    next: Next,
 ) -> ResultResponse<Response> {
     let request = match query_access_token_redirect(request) {
         Ok(response) => return Ok(response),
@@ -72,7 +71,7 @@ pub async fn check_access<B: Debug>(
     }
 }
 
-pub fn query_access_token_redirect<B>(request: Request<B>) -> Result<Response, Request<B>> {
+pub fn query_access_token_redirect(request: Request<Body>) -> Result<Response, Request<Body>> {
     let uri = request.uri().clone();
     let query = uri.query().unwrap_or_default();
 
