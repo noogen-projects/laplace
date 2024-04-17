@@ -13,8 +13,8 @@ use rusqlite::Connection;
 use serde::{Serialize, Serializer};
 use wasmtime::component::ResourceTable;
 use wasmtime::{Config, Engine, Linker, Module, Store};
-use wasmtime_wasi::preview2::preview1::add_to_linker_async;
-use wasmtime_wasi::preview2::{DirPerms, FilePerms, WasiCtxBuilder};
+use wasmtime_wasi::preview1::add_to_linker_async;
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
 
 use crate::error::{ServerError, ServerResult};
 use crate::lapps::settings::{FileSettings, LappSettings, LappSettingsResult};
@@ -180,7 +180,7 @@ impl Lapp {
         let module = Module::new(&ENGINE, wasm_bytes)?;
 
         let mut linker = Linker::new(&ENGINE);
-        add_to_linker_async(&mut linker)?;
+        add_to_linker_async(&mut linker, |ctx| ctx)?;
 
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);

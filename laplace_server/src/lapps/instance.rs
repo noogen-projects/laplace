@@ -8,8 +8,8 @@ use laplace_wasm::{http, WasmSlice};
 use thiserror::Error;
 use wasmtime::component::ResourceTable;
 use wasmtime::{Instance, Store};
-use wasmtime_wasi::preview2::preview1::{WasiPreview1Adapter, WasiPreview1View};
-use wasmtime_wasi::preview2::{WasiCtx, WasiView};
+use wasmtime_wasi::preview1::{WasiPreview1Adapter, WasiPreview1View};
+use wasmtime_wasi::{WasiCtx, WasiView};
 
 use crate::lapps::wasm_interop::database::DatabaseCtx;
 use crate::lapps::wasm_interop::http::HttpCtx;

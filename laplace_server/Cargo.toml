@@ -17,7 +17,7 @@ axum-server = { version = "0.6", features = ["tls-rustls"] }
 axum_typed_multipart = "0.11"
 borsh = { workspace = true }
 bs58 = "0.5"
-cap-std = "2.0" # depend on wasmtime
+cap-std = "3.0" # depend on wasmtime
 clap = { version = "4.4", features = ["derive"] }
 config = "0.14"
 const_format = "0.2"
@@ -61,7 +61,7 @@ toml = "0.8"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["fs", "set-header", "normalize-path", "compression-gzip"] } # depend on axum
 truba = "0.1"
-wasi-common = "18.0"
-wasmtime = "18.0"
-wasmtime-wasi = "18.0"
+wasi-common = "19.0"
+wasmtime = "19.0"
+wasmtime-wasi = "19.0"
 zip = "0.6"
