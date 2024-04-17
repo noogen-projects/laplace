@@ -29,8 +29,8 @@ exclude = [
 lto = true
 
 [workspace.dependencies]
-borsh = { version = "1.1", features = ["derive"] }
+borsh = { version = "1.4", features = ["derive"] }
 strum = { version = "0.26", features = ["derive"] }
-tokio = { version = "1.32", features = ["full"] }
+tokio = { version = "1.37", features = ["full"] }
 yew = { version = "0.21", features = ["csr"] }
 yew-mdc-widgets = { git = "https://github.com/noogen-projects/yew-mdc-widgets" }
