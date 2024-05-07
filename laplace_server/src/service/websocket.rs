@@ -1,25 +1,16 @@
-use std::io;
 use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
 
 use axum::extract::ws;
 use axum::extract::ws::WebSocket;
-use derive_more::From;
 use futures::stream::{SplitSink, SplitStream};
-use futures::{SinkExt, StreamExt, TryStreamExt};
+use futures::{SinkExt, StreamExt};
 pub use laplace_wasm::route::websocket::{Message, MessageIn, MessageOut};
 use tokio::time;
 use truba::{Context, Sender, UnboundedMpscChannel};
 
-use crate::lapps::LappInstanceError;
 use crate::service::lapp::LappServiceMessage;
 use crate::service::Addr;
-
-#[derive(Debug, From)]
-enum WsError {
-    Instance(LappInstanceError),
-    Io(io::Error),
-}
 
 #[derive(Debug)]
 pub struct WsServiceMessage(pub MessageOut);

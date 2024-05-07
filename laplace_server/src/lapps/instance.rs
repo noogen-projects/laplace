@@ -8,7 +8,7 @@ use laplace_wasm::{http, WasmSlice};
 use thiserror::Error;
 use wasmtime::component::ResourceTable;
 use wasmtime::{Instance, Store};
-use wasmtime_wasi::preview1::{WasiPreview1Adapter, WasiPreview1View};
+use wasmtime_wasi::preview1::WasiP1Ctx;
 use wasmtime_wasi::{WasiCtx, WasiView};
 
 use crate::lapps::wasm_interop::database::DatabaseCtx;
@@ -128,20 +128,18 @@ impl Deref for LappInstance {
 }
 
 pub struct Ctx {
-    pub wasi: WasiCtx,
+    pub wasi: WasiP1Ctx,
     pub table: ResourceTable,
-    pub adapter: WasiPreview1Adapter,
     pub memory_data: Option<MemoryManagementHostData>,
     pub database: Option<DatabaseCtx>,
     pub http: Option<HttpCtx>,
 }
 
 impl Ctx {
-    pub fn new(wasi: WasiCtx, table: ResourceTable) -> Self {
+    pub fn new(wasi: WasiP1Ctx, table: ResourceTable) -> Self {
         Self {
             wasi,
             table,
-            adapter: WasiPreview1Adapter::new(),
             memory_data: None,
             database: None,
             http: None,
@@ -159,16 +157,6 @@ impl WasiView for Ctx {
     }
 
     fn ctx(&mut self) -> &mut WasiCtx {
-        &mut self.wasi
-    }
-}
-
-impl WasiPreview1View for Ctx {
-    fn adapter(&self) -> &WasiPreview1Adapter {
-        &self.adapter
-    }
-
-    fn adapter_mut(&mut self) -> &mut WasiPreview1Adapter {
-        &mut self.adapter
+        self.wasi.ctx()
     }
 }

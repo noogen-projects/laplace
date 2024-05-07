@@ -3,7 +3,6 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use borsh::BorshDeserialize;
-use cap_std::fs::Dir;
 use derive_more::{Deref, DerefMut};
 pub use laplace_common::api::{UpdateQuery, UpdateRequest as LappUpdateRequest};
 pub use laplace_common::lapp::access::*;
@@ -179,8 +178,8 @@ impl Lapp {
         let wasm_bytes = fs::read(self.server_module_file())?;
         let module = Module::new(&ENGINE, wasm_bytes)?;
 
-        let mut linker = Linker::new(&ENGINE);
-        add_to_linker_async(&mut linker, |ctx| ctx)?;
+        let mut linker = Linker::<Ctx>::new(&ENGINE);
+        add_to_linker_async(&mut linker, |ctx| &mut ctx.wasi)?;
 
         let is_allow_read = self.is_allowed_permission(Permission::FileRead);
         let is_allow_write = self.is_allowed_permission(Permission::FileWrite);
@@ -206,7 +205,6 @@ impl Lapp {
             .required()
             .any(|permission| permission == Permission::FileRead || permission == Permission::FileWrite)
         {
-            let preopened_dir = Dir::open_ambient_dir(&data_dir_path, cap_std::ambient_authority())?;
             let mut perms = DirPerms::empty();
             let mut file_perms = FilePerms::empty();
 
@@ -220,10 +218,10 @@ impl Lapp {
                 file_perms |= FilePerms::WRITE;
             }
 
-            wasi.preopened_dir(preopened_dir, perms, file_perms, "/");
+            wasi.preopened_dir(data_dir_path, "/", perms, file_perms)?;
         }
 
-        let wasi = wasi.build();
+        let wasi = wasi.build_p1();
         let table = ResourceTable::new();
         let ctx = Ctx::new(wasi, table);
         let mut store = Store::new(&ENGINE, ctx);
