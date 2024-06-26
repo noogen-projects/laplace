@@ -231,18 +231,18 @@ impl Lapp {
             let connection = Connection::open(database_path)?;
 
             store.data_mut().database = Some(DatabaseCtx::new(connection));
-            linker.func_wrap1_async("env", "db_execute", database::execute)?;
-            linker.func_wrap1_async("env", "db_query", database::query)?;
-            linker.func_wrap1_async("env", "db_query_row", database::query_row)?;
+            linker.func_wrap_async("env", "db_execute", database::execute)?;
+            linker.func_wrap_async("env", "db_query", database::query)?;
+            linker.func_wrap_async("env", "db_query_row", database::query_row)?;
         }
 
         if is_allow_http {
             store.data_mut().http = Some(HttpCtx::new(http_client, self.lapp.settings().network().http().clone()));
-            linker.func_wrap1_async("env", "invoke_http", http::invoke_http)?;
+            linker.func_wrap_async("env", "invoke_http", http::invoke_http)?;
         }
 
         if is_allow_sleep {
-            linker.func_wrap1_async("env", "invoke_sleep", sleep::invoke_sleep)?;
+            linker.func_wrap_async("env", "invoke_sleep", sleep::invoke_sleep)?;
         }
 
         let instance = linker.instantiate_async(&mut store, &module).await?;

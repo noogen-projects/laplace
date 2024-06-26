@@ -22,7 +22,7 @@ impl HttpCtx {
     }
 }
 
-pub fn invoke_http(caller: Caller<Ctx>, request_slice: u64) -> BoxedSendFuture<u64> {
+pub fn invoke_http(caller: Caller<Ctx>, (request_slice,): (u64,)) -> BoxedSendFuture<u64> {
     Box::new(invoke_http_async(caller, request_slice))
 }
 

@@ -22,15 +22,15 @@ impl DatabaseCtx {
     }
 }
 
-pub fn execute(caller: Caller<Ctx>, sql_query_slice: u64) -> BoxedSendFuture<u64> {
+pub fn execute(caller: Caller<Ctx>, (sql_query_slice,): (u64,)) -> BoxedSendFuture<u64> {
     Box::new(run(caller, sql_query_slice, do_execute))
 }
 
-pub fn query(caller: Caller<Ctx>, sql_query_slice: u64) -> BoxedSendFuture<u64> {
+pub fn query(caller: Caller<Ctx>, (sql_query_slice,): (u64,)) -> BoxedSendFuture<u64> {
     Box::new(run(caller, sql_query_slice, do_query))
 }
 
-pub fn query_row(caller: Caller<Ctx>, sql_query_slice: u64) -> BoxedSendFuture<u64> {
+pub fn query_row(caller: Caller<Ctx>, (sql_query_slice,): (u64,)) -> BoxedSendFuture<u64> {
     Box::new(run(caller, sql_query_slice, do_query_row))
 }
 
