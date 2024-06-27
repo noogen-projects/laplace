@@ -19,7 +19,7 @@ pub struct HttpSettings {
 impl Default for HttpSettings {
     fn default() -> Self {
         Self {
-            host: "localhost".into(),
+            host: "127.0.0.1".into(),
             port: 8080,
             web_root: PathBuf::new(),
             access_token: None,
