@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use super::Permission;
+use super::{Lapp, Permission};
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -414,5 +414,9 @@ impl LappSettings {
 
     pub fn into_lapp_requests(self) -> Vec<LappRequestsSettings> {
         self.lapp_requests.unwrap_or_default()
+    }
+
+    pub fn is_lapp_startup_active(&self) -> bool {
+        !Lapp::<String>::is_main(self.name()) && self.autoload() && self.enabled()
     }
 }

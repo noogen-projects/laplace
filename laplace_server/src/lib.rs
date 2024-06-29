@@ -72,21 +72,36 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             )
         });
 
+    let root_url = format!(
+        "{schema}://{host}:{port}",
+        schema = if settings.ssl.enabled { "https" } else { "http" },
+        host = settings.http.host,
+        port = settings.http.port,
+    );
     if settings.http.print_url {
         let access_query = (!laplace_access_token.is_empty())
             .then(|| format!("?access_token={laplace_access_token}"))
             .unwrap_or_default();
 
-        log::info!(
-            "Laplace URL: {schema}://{host}:{port}/{access_query}",
-            schema = if settings.ssl.enabled { "https" } else { "http" },
-            host = settings.http.host,
-            port = settings.http.port,
-        );
+        log::info!("Laplace URL: {root_url}/{access_query}",);
     }
 
     log::info!("Load lapps");
     lapps_provider.read_manager().await.autoload_lapps().await;
+
+    if settings.http.print_url {
+        for (lapp_name, lapp_settings) in lapps_provider.read_manager().await.lapp_settings_iter() {
+            if lapp_settings.is_lapp_startup_active() {
+                let access_query = lapp_settings
+                    .application
+                    .access_token
+                    .as_ref()
+                    .map(|access_token| format!("?access_token={access_token}"))
+                    .unwrap_or_default();
+                log::info!("Lapp '{lapp_name}' URL: {root_url}/{lapp_name}{access_query}");
+            }
+        }
+    }
 
     log::info!("Create HTTP server");
     let static_dir = web_root.join(Lapp::static_dir_name());

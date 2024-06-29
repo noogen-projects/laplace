@@ -87,7 +87,7 @@ impl LappsManager {
 
     pub async fn autoload_lapps(&self) {
         for (name, settings) in &self.lapp_settings {
-            if !Lapp::is_main(name) && settings.enabled() && settings.autoload() {
+            if settings.is_lapp_startup_active() {
                 log::info!("Autoload lapp '{name}'");
 
                 self.load_lapp_service(name, settings.clone())

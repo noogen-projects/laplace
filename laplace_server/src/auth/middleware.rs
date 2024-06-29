@@ -54,11 +54,7 @@ pub async fn check_access(
                         Ok(next.run(request).await)
                     } else {
                         log::debug!("{request:?}");
-                        log::warn!(
-                            "Access denied for lapp \"{}\" with access token \"{}\"",
-                            lapp_name,
-                            access_token
-                        );
+                        log::warn!("Access denied for lapp \"{lapp_name}\" with access token \"{access_token}\"");
 
                         let mut response = Response::default();
                         *response.status_mut() = StatusCode::FORBIDDEN;
