@@ -37,7 +37,7 @@ To build Laplace and all examples, run:
 cargo make all
 ```
 
-Or for a debug build, run:
+Or for a debug build, use the following command:
 
 ```shell
 cargo make -p debug all
@@ -59,7 +59,7 @@ cargo make -p debug run
 
 Then visit [http://localhost:8080](http://localhost:8080). If you are running for the first time or the previous link
 did not work, then visit [http://localhost:8080/?access_token=24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR](http://localhost:8080/?access_token=24tpHRcbGKGYFGMYq66G3hfH8GQEYGTysXqiJyaCy9eR).
-You can change the default port, access token and other settings by editing `config.toml` file.
+You can change the default port, access token and other settings by editing `Laplace.toml` config file.
 
 ## Development notes
 
@@ -81,12 +81,6 @@ To check and perform formatting, use the following commands:
 cargo make checkfmt
 cargo make fmt
 ```
-
-To enable autoformatting for IntelliJ IDEA with the Rust plugin:
-
-1. Open the `File -> Settings -> Languages & Frameworks -> Rust -> Rustfmt`
-2. Check in the "Run rustfmt on Save" and "Use rustfmt instead of the built-in formatter"
-3. Set the `+nightly` in the "Additional arguments" field
 
 To run clippy, use the following command:
 
