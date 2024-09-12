@@ -30,6 +30,7 @@ lto = true
 
 [workspace.dependencies]
 borsh = { version = "1.5", features = ["derive"] }
+derive_more = { version = "1.0", features = ["from", "display", "deref", "deref_mut"] }
 strum = { version = "0.26", features = ["derive"] }
 tokio = { version = "1.38", features = ["full"] }
 yew = { version = "0.21", features = ["csr"] }

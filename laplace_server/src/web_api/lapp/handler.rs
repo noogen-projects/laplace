@@ -6,7 +6,7 @@ use axum::Json;
 use laplace_common::api::Peer;
 use laplace_common::lapp::settings::GossipsubSettings;
 use laplace_wasm::http;
-use tower::ServiceExt;
+use tower::util::ServiceExt;
 use tower_http::services::ServeFile;
 use truba::{Context, Sender};
 

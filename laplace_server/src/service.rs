@@ -10,7 +10,7 @@ pub mod websocket;
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq, Display)]
 pub enum Addr {
-    #[display(fmt = "Lapp({})", _0)]
+    #[display("Lapp({})", _0)]
     Lapp(String),
 }
 

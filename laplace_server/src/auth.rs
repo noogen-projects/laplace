@@ -4,7 +4,7 @@ use std::path::Path;
 
 use rcgen::{CertificateParams, CertifiedKey, DistinguishedName, DnType, KeyPair};
 use ring::rand;
-use rustls::{Certificate, PrivateKey};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 
 use crate::error::{AppError, AppResult};
@@ -33,7 +33,7 @@ pub fn prepare_certificates(
     certificate_path: &Path,
     private_key_path: &Path,
     host: impl Into<String>,
-) -> AppResult<(Vec<Certificate>, PrivateKey)> {
+) -> AppResult<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
     if !certificate_path.exists() && !private_key_path.exists() {
         log::info!("Generate SSL certificate");
         let CertifiedKey { cert, key_pair } = generate_self_signed_certificate(vec![host.into()])?;
@@ -50,19 +50,13 @@ pub fn prepare_certificates(
     }
 
     log::info!("Bind SSL");
-    let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?))
-        .map(|certificate| certificate.map(|der| rustls::Certificate(der.as_ref().into())))
-        .collect::<Result<Vec<_>, _>>()?;
+    let certificates = certs(&mut BufReader::new(fs::File::open(certificate_path)?)).collect::<Result<Vec<_>, _>>()?;
 
-    let private_key = PrivateKey(
-        pkcs8_private_keys(&mut BufReader::new(fs::File::open(private_key_path)?))
-            .next()
-            .ok_or(AppError::MissingPrivateKey)??
-            .secret_pkcs8_der()
-            .into(),
-    );
+    let private_key = pkcs8_private_keys(&mut BufReader::new(fs::File::open(private_key_path)?))
+        .next()
+        .ok_or(AppError::MissingPrivateKey)??;
 
-    Ok((certificates, private_key))
+    Ok((certificates, PrivateKeyDer::Pkcs8(private_key)))
 }
 
 pub fn generate_self_signed_certificate(

@@ -1,5 +1,4 @@
 use std::fs;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use borsh::BorshDeserialize;

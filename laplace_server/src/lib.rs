@@ -1,17 +1,19 @@
+use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::{HeaderName, HeaderValue};
 use axum::response::Redirect;
 use axum::routing::get;
-use axum::{middleware, Router};
+use axum::{middleware, Router, ServiceExt};
 use axum_server::tls_rustls::RustlsConfig;
 use const_format::concatcp;
-use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
+use flexi_logger::{style, Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, Logger, LoggerHandle, Naming};
+use log::Record;
 use rustls::ServerConfig;
-use tower::ServiceBuilder;
+use tower::{Layer, ServiceBuilder};
 use tower_http::compression::CompressionLayer;
 use tower_http::normalize_path::NormalizePathLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -52,10 +54,38 @@ pub fn init_logger(settings: &LoggerSettings) -> AppResult<LoggerHandle> {
             Duplicate::None
         })
         .use_utc()
-        .format(flexi_logger::colored_detailed_format)
+        .format(custom_colored_detailed_format)
         .start()?;
 
     Ok(handle)
+}
+
+fn custom_colored_detailed_format(
+    writer: &mut dyn io::Write,
+    now: &mut DeferredNow,
+    record: &Record,
+) -> Result<(), io::Error> {
+    let level = record.level();
+    let start_idx = record
+        .file()
+        .and_then(|path| {
+            path.rfind("/src")
+                .and_then(|src_idx| path[..src_idx].rfind('/'))
+                .map(|start_idx| start_idx + 1)
+        })
+        .unwrap_or(0);
+    let path = record.file().map(|path| &path[start_idx..]).unwrap_or("<unnamed>");
+
+    write!(
+        writer,
+        "[{}] {} [{}] {}:{}: {}",
+        style(level).paint(now.format("%Y-%m-%d %H:%M:%S%.6f").to_string()),
+        style(level).paint(level.as_str()),
+        record.module_path().unwrap_or("<unnamed>"),
+        path,
+        record.line().unwrap_or(0),
+        style(level).paint(record.args().to_string()),
+    )
 }
 
 pub async fn run(settings: Settings) -> AppResult<()> {
@@ -120,7 +150,6 @@ pub async fn run(settings: Settings) -> AppResult<()> {
         ))
         .layer(
             ServiceBuilder::new()
-                .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(DefaultBodyLimit::max(upload_file_limit))
                 .layer(CompressionLayer::new())
                 .layer(SetResponseHeaderLayer::if_not_present(
@@ -129,6 +158,7 @@ pub async fn run(settings: Settings) -> AppResult<()> {
                 )),
         )
         .with_state(lapps_provider);
+    let service = ServiceExt::<Request>::into_make_service(NormalizePathLayer::trim_trailing_slash().layer(router));
 
     log::info!("Run HTTP server");
     let http_server_addr = SocketAddr::new(IpAddr::from_str(&settings.http.host)?, settings.http.port);
@@ -139,18 +169,18 @@ pub async fn run(settings: Settings) -> AppResult<()> {
             &settings.http.host,
         )?;
 
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("Failed to install default provider");
         let config = ServerConfig::builder()
-            .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(certificates, private_key)?;
 
         axum_server::bind_rustls(http_server_addr, RustlsConfig::from_config(Arc::new(config)))
-            .serve(router.into_make_service())
+            .serve(service)
             .await?
     } else {
-        axum_server::Server::bind(http_server_addr)
-            .serve(router.into_make_service())
-            .await?
+        axum_server::Server::bind(http_server_addr).serve(service).await?
     };
 
     log::info!("Shutdown the context");
