@@ -160,8 +160,8 @@ script_runner = "@duckscript"
 script = '''
 rm -r target/mobile/assets
 mkdir target/mobile/assets
-cp lapps target/mobile/assets/
-cp static target/mobile/assets/
+cp lapps target/mobile/assets
+cp static target/mobile/assets
 '''
 dependencies = ["choose_profile", "laplace_client"]
 
@@ -253,7 +253,8 @@ args = ["test", "-p", "laplace_yew", "--all-features", "--all-targets"]
 [tasks.integration_test]
 command = "cargo"
 toolchain = "stable"
-args = ["test", "-p", "tests", "--all-features"]
+args = ["test", "-p", "tests", "--all-features", "${ADDITIONAL}"]
+dependencies = ["laplace_server"]
 
 [tasks.test]
 dependencies = [
