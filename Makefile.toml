@@ -70,7 +70,7 @@ dependencies = ["wasm_build_prepare"]
 env = { RUSTFLAGS = "${RUSTFLAGS} -C lto=no -Z wasi-exec-model=reactor" }
 toolchain = "nightly"
 command = "cargo"
-args = ["build", "-p", "${APP}_server", "--target", "wasm32-wasi", "${ADDITIONAL}"]
+args = ["build", "-p", "${APP}_server", "--target", "wasm32-wasip1", "${ADDITIONAL}"]
 dependencies = ["wasm_build_prepare"]
 
 
@@ -100,7 +100,7 @@ dependencies = ["choose_profile", "copy_config"]
 script_runner = "@duckscript"
 script = '''
 rm lapps/${APP}/${APP}_server.wasm
-cp target/wasm32-wasi/${MODE}/${APP}_server.wasm lapps/${APP}/${APP}_server.wasm
+cp target/wasm32-wasip1/${MODE}/${APP}_server.wasm lapps/${APP}/${APP}_server.wasm
 '''
 dependencies = ["choose_profile", "copy_config"]
 
