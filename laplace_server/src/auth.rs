@@ -18,8 +18,7 @@ pub fn prepare_access_token(maybe_access_token: Option<String>) -> AppResult<&'s
         generate_token()?
     };
 
-    // todo: use `String::leak` when its stabilized
-    Ok(Box::leak(access_token.into_boxed_str()))
+    Ok(access_token.leak())
 }
 
 pub fn generate_token() -> AppResult<String> {
