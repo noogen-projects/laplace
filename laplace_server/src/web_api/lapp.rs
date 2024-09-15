@@ -13,7 +13,8 @@ pub fn router() -> Router<LappsProvider> {
             concatcp!("/:lapp_name/", Lapp::static_dir_name(), "/*file_path"),
             get(handler::static_file),
         )
-        .route("/:lapp_name/ws", get(handler::ws_start))
-        .route("/:lapp_name/p2p", post(handler::gossipsub_start))
-        .route("/:lapp_name/*tail", any(handler::http))
+        .route("/:lapp_name/api/ws", get(handler::ws_start))
+        .route("/:lapp_name/api/p2p", post(handler::gossipsub_start))
+        .route("/:lapp_name/api/*tail", any(handler::http))
+        .route("/:lapp_name/*tail", get(handler::index))
 }

@@ -159,7 +159,7 @@ impl Component for Root {
                         peer_id,
                     }));
 
-                    JsonFetcher::send_post_json("/chat/p2p", body, {
+                    JsonFetcher::send_post_json("/chat/api/p2p", body, {
                         let callback = ctx.link().callback(
                             move |response_result: WebResult<(Response, WebResult<MissingBody>)>| {
                                 response_result
@@ -182,7 +182,7 @@ impl Component for Root {
                 let protocol = location.protocol().expect("Location protocol expected");
                 let host = location.host().expect("Location host expected");
 
-                let url = format!("{}//{host}/chat/ws", protocol.replace("http", "ws"));
+                let url = format!("{}//{host}/chat/api/ws", protocol.replace("http", "ws"));
                 let send_callback = ctx.link().batch_callback(|send_result: Result<(), WebSocketError>| {
                     send_result.err().map(|err| Msg::Error(anyhow!("{}", err)))
                 });

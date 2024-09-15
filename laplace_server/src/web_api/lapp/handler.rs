@@ -19,8 +19,16 @@ use crate::service::websocket::{WebSocketService, WsServiceMessage};
 use crate::service::Addr;
 
 pub async fn index_file(
-    State(lapps_provider): State<LappsProvider>,
+    lapps_provider: State<LappsProvider>,
     Path(lapp_name): Path<String>,
+    request: Request<Body>,
+) -> impl IntoResponse {
+    index(lapps_provider, Path((lapp_name, String::new())), request).await
+}
+
+pub async fn index(
+    State(lapps_provider): State<LappsProvider>,
+    Path((lapp_name, _tail)): Path<(String, String)>,
     request: Request<Body>,
 ) -> impl IntoResponse {
     lapps_provider

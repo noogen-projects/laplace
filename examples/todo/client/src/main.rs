@@ -10,6 +10,8 @@ use wasm_web_helpers::fetch::{JsonFetcher, Response as WebResponse};
 use web_sys::HtmlInputElement;
 use yew::{classes, html, Callback, Component, Context, Html, InputEvent, KeyboardEvent, NodeRef, ToHtml};
 
+static SERVER_API_URL: &str = "/todo/api";
+
 #[derive(EnumIter, Display, Clone, Copy, PartialEq)]
 enum Filter {
     All,
@@ -130,7 +132,7 @@ impl Component for Root {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        JsonFetcher::send_get("/todo/list", {
+        JsonFetcher::send_get(format!("{SERVER_API_URL}/list"), {
             let callback = callback(ctx);
             move |response_result| callback.emit(response_result)
         });
@@ -147,7 +149,7 @@ impl Component for Root {
                 let description = self.state.value.trim();
                 if !description.is_empty() {
                     JsonFetcher::send_post(
-                        "/todo/add",
+                        format!("{SERVER_API_URL}/add"),
                         format!(r#"{{"description":"{description}","completed":false}}"#),
                         {
                             let callback = callback(ctx);
@@ -189,7 +191,7 @@ impl Component for Root {
             Msg::Save(idx) => {
                 let task = &self.state.list[idx];
                 JsonFetcher::send_post(
-                    format!("/todo/update/{}", idx + 1),
+                    format!("{SERVER_API_URL}/update/{}", idx + 1),
                     format!(
                         r#"{{"description":"{}","completed":{}}}"#,
                         task.description, task.completed
@@ -203,7 +205,7 @@ impl Component for Root {
             },
             Msg::Remove(idx) => {
                 let idx = self.state.remove(idx);
-                JsonFetcher::send_post(format!("/todo/delete/{}", idx + 1), "", {
+                JsonFetcher::send_post(format!("{SERVER_API_URL}/delete/{}", idx + 1), "", {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
                 });
@@ -236,7 +238,7 @@ impl Component for Root {
                 false
             },
             Msg::ClearCompleted => {
-                JsonFetcher::send_post("/todo/clear_completed", "", {
+                JsonFetcher::send_post(format!("{SERVER_API_URL}/clear_completed"), "", {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
                 });
@@ -319,8 +321,7 @@ impl Root {
     fn view_filter(&self, ctx: &Context<Self>, filter: Filter) -> Html {
         html! {
             <li>
-                <a class = { if self.state.filter == filter { "selected" } else { "not-selected" } }
-                        href = { filter.to_string() }
+                <a class = { if self.state.filter == filter { "selected" } else { "not-selected" } } style = "cursor: pointer"
                         onclick = { ctx.link().callback(move |_| Msg::SetFilter(filter)) }>
                     { filter }
                 </a>

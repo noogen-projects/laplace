@@ -45,7 +45,7 @@ impl Component for Root {
             Msg::Submit => {
                 let uri = dom::existing::select_element::<HtmlInputElement>("#uri > input").value();
                 if !uri.is_empty() {
-                    let request = Request::get(&format!("/echo/{uri}"));
+                    let request = Request::get(&format!("/echo/api/{uri}"));
                     let callback = ctx.link().callback(|result: Result<(Response, Result<String>)>| {
                         match result.and_then(|(_, body)| body) {
                             Ok(body) => Msg::Fetch(body),

@@ -21,6 +21,8 @@ use yew_mdc_widgets::{
 
 type ErrorsLink = Scope<Errors<Root>>;
 
+static SERVER_API_URL: &str = "/notes/api";
+
 struct FullNote {
     note: Note,
     is_modified: bool,
@@ -113,7 +115,7 @@ impl Component for Root {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        JsonFetcher::send_get("/notes/list", {
+        JsonFetcher::send_get(format!("{SERVER_API_URL}/list"), {
             let callback = callback(ctx);
             move |response_result| callback.emit(response_result)
         });
@@ -129,7 +131,7 @@ impl Component for Root {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::GetInitialNote(name) => {
-                JsonFetcher::send_get(format!("/notes/note/{name}"), {
+                JsonFetcher::send_get(format!("{SERVER_API_URL}/note/{name}"), {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
                 });
@@ -195,7 +197,7 @@ impl Component for Root {
             Msg::SaveChanges => {
                 if let Some(note) = self.current_note_index.map(|index| &self.notes[index]) {
                     if let Some(content) = note.content.content() {
-                        let uri = format!("/notes/note/{}", note.name);
+                        let uri = format!("{SERVER_API_URL}/note/{}", note.name);
                         let body = content.to_string();
                         JsonFetcher::send_post(uri, body, {
                             let callback = callback(ctx);
@@ -238,7 +240,7 @@ impl Component for Root {
                 false
             },
             Msg::RenameNote(name, new_name) => {
-                let uri = format!("/notes/rename/{name}");
+                let uri = format!("{SERVER_API_URL}/rename/{name}");
                 JsonFetcher::send_post(uri, new_name, {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
@@ -246,7 +248,7 @@ impl Component for Root {
                 false
             },
             Msg::DeleteNote(name) => {
-                let uri = format!("/notes/delete/{name}");
+                let uri = format!("{SERVER_API_URL}/delete/{name}");
                 JsonFetcher::send_post(uri, "", {
                     let callback = callback(ctx);
                     move |response_result| callback.emit(response_result)
