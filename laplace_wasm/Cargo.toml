@@ -16,4 +16,4 @@ borsh = { workspace = true }
 derive_more = { workspace = true }
 http = "1.1"
 laplace_wasm_macro = { path = "../laplace_wasm_macro" }
-thiserror = "1.0"
+thiserror = { workspace = true }

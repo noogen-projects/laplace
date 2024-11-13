@@ -51,7 +51,7 @@ enum NotesRequest {
 impl NotesRequest {
     fn parse(uri: Uri, body: Option<Vec<u8>>) -> Result<Self, String> {
         let path = uri.path();
-        let chunks: Vec<_> = path.split(|c| c == '/').collect();
+        let chunks: Vec<_> = path.split('/').collect();
 
         match &chunks[..] {
             [.., "list"] => Ok(Self::GetNotes),

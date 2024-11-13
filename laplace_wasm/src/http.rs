@@ -38,7 +38,7 @@ pub enum InvokeError {
     #[error("HTTP host \"{0}\" not allowed")]
     ForbiddenHost(String),
 
-    #[error("HTTP request error: {}, {1}", display_code(.0))]
+    #[error("HTTP request error: {code}, {1}", code = display_code(.0))]
     FailRequest(Option<u16>, String),
 }
 

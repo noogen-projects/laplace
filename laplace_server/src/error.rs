@@ -87,7 +87,7 @@ pub enum ServerError {
     #[error("Unknown lapp name")]
     UnknownLappName,
 
-    #[error("Permission '{}' denied for lapp '{0}'", .1.as_str())]
+    #[error("Permission '{perm}' denied for lapp '{0}'", perm = .1.as_str())]
     LappPermissionDenied(String, Permission),
 
     #[error("Lapp config operation error: {0}")]
